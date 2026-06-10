@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..schemas import AnnotationRead, ScanCreate, ScanRead, SliceRead
+from ..schemas import AnnotationRead, ScanCreate, ScanExportRead, ScanRead, ScanStatsRead, SliceDicomMetadataRead, SliceRead
 from ..services import annotation_service, scan_service
 
 
@@ -45,6 +45,13 @@ def get_scan_slice(scan_id: UUID, slice_index: int, db: Session = Depends(get_db
     return SliceRead(scan_id=scan_id, slice_index=slice_index, image_base64=image_base64)
 
 
+@router.get("/{scan_id}/slice/{slice_index}/metadata", response_model=SliceDicomMetadataRead)
+def get_scan_slice_metadata(scan_id: UUID, slice_index: int, db: Session = Depends(get_db)) -> SliceDicomMetadataRead:
+    """Return simulated DICOM metadata for one slice."""
+
+    return scan_service.get_slice_dicom_metadata(db, scan_id, slice_index)
+
+
 @router.post("", response_model=ScanRead, status_code=201)
 def create_scan(payload: ScanCreate, db: Session = Depends(get_db)) -> ScanRead:
     """Create a fake scan record and placeholder file for local-storage practice."""
@@ -58,3 +65,17 @@ def get_scan_annotations(scan_id: UUID, db: Session = Depends(get_db)) -> list[A
 
     scan_service.get_scan_or_404(db, scan_id)
     return annotation_service.list_annotations(db, scan_id)
+
+
+@router.get("/{scan_id}/export", response_model=ScanExportRead)
+def export_scan_annotations(scan_id: UUID, db: Session = Depends(get_db)) -> ScanExportRead:
+    """Return approved annotations in a payload shape useful for ML training."""
+
+    return scan_service.export_scan_annotations(db, scan_id)
+
+
+@router.get("/{scan_id}/stats", response_model=ScanStatsRead)
+def get_scan_stats(scan_id: UUID, db: Session = Depends(get_db)) -> ScanStatsRead:
+    """Return annotation coverage and QA statistics for a scan."""
+
+    return scan_service.get_scan_annotation_stats(db, scan_id)

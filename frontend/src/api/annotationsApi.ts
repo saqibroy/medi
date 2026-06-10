@@ -4,7 +4,7 @@
  * and lands in PostgreSQL JSONB without losing its geometry structure.
  */
 
-import type { Annotation, AnnotationCreate } from "../types/annotation";
+import type { Annotation, AnnotationCreate, ReviewStatus } from "../types/annotation";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -29,6 +29,14 @@ export async function listAnnotations(scanId?: string): Promise<Annotation[]> {
 export async function createAnnotation(payload: AnnotationCreate): Promise<Annotation> {
   /** Persist a new annotation captured from the viewer canvas. */
   return request<Annotation>("/annotations", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function reviewAnnotation(annotationId: string, reviewer: string, status: ReviewStatus, notes?: string | null): Promise<Annotation> {
+  /** PATCH is used because QA changes only review fields, not the whole annotation. */
+  return request<Annotation>(`/annotations/${annotationId}/review`, {
+    method: "PATCH",
+    body: JSON.stringify({ reviewer, review_status: status, notes: notes ?? null }),
+  });
 }
 
 export async function deleteAnnotation(annotationId: string): Promise<void> {

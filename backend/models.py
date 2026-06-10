@@ -8,7 +8,7 @@ hold user-created labels tied to one scan and one slice.
 from datetime import datetime
 from uuid import UUID as PythonUUID, uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Uuid, func
+from sqlalchemy import JSON, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -42,6 +42,10 @@ class Annotation(Base):
     """A label and geometry drawn by a clinician on a specific scan slice."""
 
     __tablename__ = "annotations"
+    __table_args__ = (
+        CheckConstraint("confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)", name="ck_annotation_confidence_score_range"),
+        CheckConstraint("review_status IN ('pending', 'approved', 'rejected')", name="ck_annotation_review_status"),
+    )
 
     # Separate UUID lets annotations be shared, updated, or deleted directly.
     id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
@@ -57,6 +61,16 @@ class Annotation(Base):
     slice_index: Mapped[int] = mapped_column(Integer, nullable=False)
     # A real system would link to a user table; a string keeps this demo focused.
     created_by: Mapped[str] = mapped_column(String(120), nullable=False)
+    # Radiologist confidence helps ML teams weight uncertain labels differently.
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # QA status prevents unreviewed labels from flowing straight into training.
+    review_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    # Reviewer stays nullable because new annotations usually start unreviewed.
+    reviewer: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Timestamp records when a human review decision was made.
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Free text supports clinical nuance that a label alone cannot capture.
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Created and updated timestamps are essential for audit trails.
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

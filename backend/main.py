@@ -8,7 +8,7 @@ registration for scans and annotations.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import Base, engine
+from .database import Base, engine, ensure_learning_schema_upgrades
 from .routers import annotations, scans
 
 
@@ -21,6 +21,7 @@ def create_app() -> FastAPI:
     """
 
     Base.metadata.create_all(bind=engine)
+    ensure_learning_schema_upgrades()
 
     app = FastAPI(
         title="Medical Image Annotation Learning API",
@@ -30,7 +31,9 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        # Vite uses 5173 by default and moves to 5174 if the first dev server is
+        # already running, so both origins are allowed for local interview demos.
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

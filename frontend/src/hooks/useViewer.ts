@@ -8,6 +8,25 @@
 import { useEffect, useRef } from "react";
 import { RenderingEngine, Enums, init } from "@cornerstonejs/core";
 
+/**
+ * In a production DICOM viewer the image source would usually be an imageId,
+ * for example: wadouri:https://server/wado?studyUID=...&seriesUID=...&objectUID=...
+ * Cornerstone image loaders parse that string, fetch DICOM bytes, decode pixels,
+ * and hand the result to a STACK viewport for 2D slice navigation.
+ *
+ * Tool packages such as cornerstoneTools register interaction tools separately:
+ * a real app might register BoundingBoxTool for detection labels and LengthTool
+ * for measurements, then bind those tools to mouse buttons or keyboard modes.
+ *
+ * This hook still leaves canvas rendering to ViewerPanel so the learning repo
+ * stays readable. The important lifecycle detail is cleanup: RenderingEngine
+ * owns WebGL/canvas resources, so destroy() on unmount prevents GPU memory leaks
+ * when React remounts viewers or navigates between studies.
+ *
+ * STACK viewports show a sequence of 2D imageIds, one slice at a time. VOLUME
+ * viewports load a reconstructed 3D volume and can render orthogonal planes or
+ * 3D views, which is more powerful but also heavier to configure and cache.
+ */
 export function useViewer() {
   /** Return a DOM ref that ViewerPanel attaches to the viewport element. */
   const elementRef = useRef<HTMLDivElement | null>(null);

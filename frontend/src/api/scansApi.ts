@@ -5,6 +5,7 @@
  */
 
 import type { Scan, ScanCreate, SliceImage } from "../types/scan";
+import type { ExportResponse } from "../types/annotation";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -38,4 +39,9 @@ export async function getScanSlice(scanId: string, sliceIndex: number): Promise<
 export async function createScan(payload: ScanCreate): Promise<Scan> {
   /** Create fake scan metadata and storage entry. */
   return request<Scan>("/scans", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function exportScanForMl(scanId: string): Promise<ExportResponse> {
+  /** Load the approved annotation payload that an ML pipeline would consume. */
+  return request<ExportResponse>(`/scans/${scanId}/export`);
 }

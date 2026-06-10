@@ -6,8 +6,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { createAnnotation, deleteAnnotation, listAnnotations } from "../api/annotationsApi";
-import type { Annotation, AnnotationCreate } from "../types/annotation";
+import { createAnnotation, deleteAnnotation, listAnnotations, reviewAnnotation } from "../api/annotationsApi";
+import type { Annotation, AnnotationCreate, ReviewStatus } from "../types/annotation";
 
 export function useAnnotations(scanId?: string) {
   /** Load and mutate annotations for the selected scan. */
@@ -45,5 +45,11 @@ export function useAnnotations(scanId?: string) {
     setAnnotations((current) => current.filter((annotation) => annotation.id !== annotationId));
   }, []);
 
-  return { annotations, error, refresh, saveAnnotation, removeAnnotation };
+  const reviewExistingAnnotation = useCallback(async (annotationId: string, status: ReviewStatus) => {
+    /** Save QA decisions and replace the local row with the reviewed version. */
+    const reviewed = await reviewAnnotation(annotationId, "Dr. Patel", status, null);
+    setAnnotations((current) => current.map((annotation) => (annotation.id === reviewed.id ? reviewed : annotation)));
+  }, []);
+
+  return { annotations, error, refresh, saveAnnotation, removeAnnotation, reviewExistingAnnotation };
 }

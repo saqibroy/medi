@@ -8,6 +8,7 @@ import { useState } from "react";
 
 import { AnnotationList } from "./components/AnnotationList";
 import { AnnotationTools } from "./components/AnnotationTools";
+import { ExportPanel } from "./components/ExportPanel";
 import { ScanList } from "./components/ScanList";
 import { SliceNavigator } from "./components/SliceNavigator";
 import { ViewerPanel } from "./components/ViewerPanel";
@@ -18,7 +19,7 @@ import type { AnnotationType } from "./types/annotation";
 export default function App() {
   /** Own global page state and pass focused props down to child components. */
   const { scans, selectedScan, sliceIndex, sliceImage, error, selectScan, setSliceIndex } = useScan();
-  const { annotations, saveAnnotation, removeAnnotation } = useAnnotations(selectedScan?.id);
+  const { annotations, saveAnnotation, removeAnnotation, reviewExistingAnnotation } = useAnnotations(selectedScan?.id);
   const [label, setLabel] = useState("tumour");
   const [annotationType, setAnnotationType] = useState<AnnotationType>("bounding_box");
   const [createdBy, setCreatedBy] = useState("Dr. Interview");
@@ -48,7 +49,10 @@ export default function App() {
         />
         <SliceNavigator sliceIndex={sliceIndex} maxSliceIndex={Math.max((selectedScan?.num_slices ?? 1) - 1, 0)} onSliceChange={setSliceIndex} />
       </div>
-      <AnnotationList annotations={annotations} currentSlice={sliceIndex} onDelete={removeAnnotation} />
+      <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white">
+        <ExportPanel scanId={selectedScan?.id} />
+        <AnnotationList annotations={annotations} currentSlice={sliceIndex} onDelete={removeAnnotation} onReview={reviewExistingAnnotation} />
+      </aside>
     </div>
   );
 }

@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Modality = Literal["MRI", "CT", "PET", "Ultrasound", "XRAY"]
 AnnotationType = Literal["bounding_box", "polygon", "segmentation"]
+ReviewStatus = Literal["pending", "approved", "rejected"]
 
 
 class ScanBase(BaseModel):
@@ -52,6 +53,21 @@ class SliceRead(BaseModel):
     image_base64: str
 
 
+class SliceDicomMetadataRead(BaseModel):
+    """Teaching response that mimics key DICOM metadata for one image slice."""
+
+    scan_id: UUID
+    slice_index: int
+    PatientID: str
+    StudyDate: str
+    Modality: Modality
+    SliceThickness: float
+    PixelSpacing: list[float]
+    WindowCenter: int
+    WindowLevel: int
+    ImageOrientationPatient: list[float]
+
+
 class AnnotationBase(BaseModel):
     """Fields common to annotation creation, update, and responses."""
 
@@ -64,6 +80,11 @@ class AnnotationBase(BaseModel):
     )
     slice_index: int = Field(..., ge=0)
     created_by: str = Field(..., min_length=1, max_length=120)
+    confidence_score: float | None = Field(None, ge=0, le=1)
+    review_status: ReviewStatus = "pending"
+    reviewer: str | None = Field(None, min_length=1, max_length=120)
+    reviewed_at: datetime | None = None
+    notes: str | None = Field(None, max_length=500)
 
 
 class AnnotationCreate(AnnotationBase):
@@ -82,6 +103,24 @@ class AnnotationUpdate(BaseModel):
     coordinates: dict[str, Any] | None = None
     slice_index: int | None = Field(None, ge=0)
     created_by: str | None = Field(None, min_length=1, max_length=120)
+    confidence_score: float | None = Field(None, ge=0, le=1)
+    review_status: ReviewStatus | None = None
+    reviewer: str | None = Field(None, min_length=1, max_length=120)
+    reviewed_at: datetime | None = None
+    notes: str | None = Field(None, max_length=500)
+
+
+class AnnotationReviewUpdate(BaseModel):
+    """Partial review payload accepted by PATCH /annotations/{id}/review.
+
+    Review is separate from geometry editing because production annotation teams
+    often let one radiologist draw and another radiologist or QA reviewer decide
+    whether the label is trustworthy enough for downstream ML training.
+    """
+
+    reviewer: str = Field(..., min_length=1, max_length=120)
+    review_status: ReviewStatus
+    notes: str | None = Field(None, max_length=500)
 
 
 class AnnotationRead(AnnotationBase):
@@ -92,3 +131,41 @@ class AnnotationRead(AnnotationBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class ExportAnnotationRead(BaseModel):
+    """ML-ready annotation row included in a scan export."""
+
+    id: UUID
+    label: str
+    annotation_type: AnnotationType
+    coordinates: dict[str, Any]
+    slice_index: int
+    confidence_score: float | None
+    created_by: str
+    review_status: ReviewStatus
+
+
+class ScanExportRead(BaseModel):
+    """Response shape for approved annotations handed to ML pipelines."""
+
+    scan_id: UUID
+    scan_name: str
+    modality: Modality
+    num_slices: int
+    export_timestamp: datetime
+    annotations: list[ExportAnnotationRead]
+    total_annotations: int
+    approved_count: int
+    pending_count: int
+
+
+class ScanStatsRead(BaseModel):
+    """Aggregate annotation health metrics for one scan."""
+
+    total_annotations: int
+    annotations_by_label: dict[str, int]
+    annotations_by_type: dict[str, int]
+    annotations_by_status: dict[str, int]
+    slices_with_annotations: list[int]
+    radiologists_involved: list[str]
