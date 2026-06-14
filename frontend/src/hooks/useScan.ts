@@ -6,10 +6,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { getScanSlice, listScans } from "../api/scansApi";
+import { listProjectScans } from "../api/projectsApi";
+import { getScanSlice } from "../api/scansApi";
 import type { Scan, SliceImage } from "../types/scan";
 
-export function useScan() {
+export function useScan(projectId?: string, token?: string) {
   /** Load scans, track selection, and fetch the current slice image. */
   const [scans, setScans] = useState<Scan[]>([]);
   const [selectedScan, setSelectedScan] = useState<Scan | null>(null);
@@ -21,26 +22,38 @@ export function useScan() {
   useEffect(() => {
     /** Initial load populates the left panel and selects the first scan. */
     let isMounted = true;
+    if (!projectId || !token) {
+      setScans([]);
+      setSelectedScan(null);
+      setSliceImage(null);
+      setError(null);
+      return () => {
+        isMounted = false;
+      };
+    }
     setIsLoading(true);
-    listScans()
+    setError(null);
+    listProjectScans(projectId, token)
       .then((loadedScans) => {
         if (!isMounted) return;
         setScans(loadedScans);
         setSelectedScan(loadedScans[0] ?? null);
+        setSliceImage(null);
       })
       .catch((apiError: Error) => setError(apiError.message))
       .finally(() => setIsLoading(false));
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [projectId, token]);
 
   useEffect(() => {
     /** Every scan or slice change fetches a new image for the viewer. */
-    if (!selectedScan) return;
+    if (!selectedScan || !token) return;
     let isMounted = true;
     setIsLoading(true);
-    getScanSlice(selectedScan.id, sliceIndex)
+    setError(null);
+    getScanSlice(selectedScan.id, sliceIndex, token)
       .then((image) => {
         if (isMounted) setSliceImage(image);
       })
@@ -49,7 +62,7 @@ export function useScan() {
     return () => {
       isMounted = false;
     };
-  }, [selectedScan, sliceIndex]);
+  }, [selectedScan, sliceIndex, token]);
 
   const selectScan = useCallback((scan: Scan) => {
     /** Reset the slice when switching studies so the viewer starts at the front. */
@@ -57,5 +70,12 @@ export function useScan() {
     setSliceIndex(0);
   }, []);
 
-  return { scans, selectedScan, sliceIndex, sliceImage, isLoading, error, selectScan, setSliceIndex };
+  const addScan = useCallback((scan: Scan) => {
+    /** Add a newly created scan to the current project list and open it. */
+    setScans((current) => [scan, ...current.filter((existingScan) => existingScan.id !== scan.id)]);
+    setSelectedScan(scan);
+    setSliceIndex(0);
+  }, []);
+
+  return { scans, selectedScan, sliceIndex, sliceImage, isLoading, error, selectScan, addScan, setSliceIndex };
 }

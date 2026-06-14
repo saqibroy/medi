@@ -9,14 +9,19 @@ import type { Scan } from "../types/scan";
 interface ScanListProps {
   scans: Scan[];
   selectedScanId?: string;
+  isLoading: boolean;
+  hasProject: boolean;
   onSelectScan: (scan: Scan) => void;
 }
 
-export function ScanList({ scans, selectedScanId, onSelectScan }: ScanListProps) {
+export function ScanList({ scans, selectedScanId, isLoading, hasProject, onSelectScan }: ScanListProps) {
   /** Render one button per scan with modality and slice metadata. */
   return (
-    <aside className="h-full border-r border-slate-200 bg-white p-4">
+    <section className="p-4">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Scans</h2>
+      {isLoading ? <p className="text-xs text-slate-500">Loading scans...</p> : null}
+      {!isLoading && !hasProject ? <p className="text-xs text-slate-500">Select or create a project to load scans.</p> : null}
+      {!isLoading && hasProject && scans.length === 0 ? <p className="text-xs text-slate-500">No scans in this project yet.</p> : null}
       <div className="space-y-2">
         {scans.map((scan) => (
           <button
@@ -28,11 +33,11 @@ export function ScanList({ scans, selectedScanId, onSelectScan }: ScanListProps)
           >
             <span className="block font-medium text-slate-900">{scan.name}</span>
             <span className="mt-1 block text-xs text-slate-500">
-              {scan.modality} | {scan.num_slices} slices
+              {scan.modality} | {scan.num_slices} slices | {scan.source_format} | {scan.ingestion_status}
             </span>
           </button>
         ))}
       </div>
-    </aside>
+    </section>
   );
 }

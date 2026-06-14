@@ -10,24 +10,36 @@ from collections import Counter
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from PIL import Image, ImageDraw
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Annotation, Scan
+from ..models import Annotation, Project, Scan, User
 from ..schemas import ScanCreate
+from .imaging_service import ImagingIngestionError, build_initial_scan_profile, build_nifti_scan_profile, detect_source_format
 
 
 STORAGE_ROOT = Path(__file__).resolve().parents[1] / "data" / "sample_scan"
 
 
-def list_scans(db: Session) -> list[Scan]:
+def list_scans(db: Session, project_id: UUID | None = None, current_user: User | None = None) -> list[Scan]:
     """Return all scans ordered by creation time for the left navigation panel."""
 
-    return list(db.scalars(select(Scan).order_by(Scan.created_at.desc())))
+    statement = select(Scan).order_by(Scan.created_at.desc())
+    if current_user is not None:
+        statement = statement.outerjoin(Project, Scan.project_id == Project.id).where(
+            (Scan.project_id.is_(None)) | (Project.organization_id == current_user.organization_id)
+        )
+    if project_id is not None:
+        if current_user is not None:
+            project = db.get(Project, project_id)
+            if project is None or project.organization_id != current_user.organization_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        statement = statement.where(Scan.project_id == project_id)
+    return list(db.scalars(statement))
 
 
 def get_scan_or_404(db: Session, scan_id: UUID) -> Scan:
@@ -39,6 +51,17 @@ def get_scan_or_404(db: Session, scan_id: UUID) -> Scan:
     return scan
 
 
+def get_scan_for_user_or_404(db: Session, scan_id: UUID, current_user: User) -> Scan:
+    """Fetch one scan and ensure it belongs to the user's organization."""
+
+    scan = get_scan_or_404(db, scan_id)
+    if scan.project_id is not None:
+        project = db.get(Project, scan.project_id)
+        if project is None or project.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+    return scan
+
+
 def create_scan(db: Session, payload: ScanCreate) -> Scan:
     """Create fake scan metadata and a placeholder local file."""
 
@@ -46,12 +69,15 @@ def create_scan(db: Session, payload: ScanCreate) -> Scan:
     safe_name = payload.file_name.replace("/", "_")
     file_path = STORAGE_ROOT / safe_name
     file_path.write_text("fake volumetric scan data for interview learning\n")
+    scan_profile = build_initial_scan_profile("synthetic", payload.modality, payload.num_slices, str(file_path))
 
     scan = Scan(
         name=payload.name,
+        project_id=payload.project_id,
         file_path=str(file_path),
         modality=payload.modality,
         num_slices=payload.num_slices,
+        **scan_profile,
     )
     db.add(scan)
     db.commit()
@@ -59,16 +85,85 @@ def create_scan(db: Session, payload: ScanCreate) -> Scan:
     return scan
 
 
-def get_slice_image_base64(db: Session, scan_id: UUID, slice_index: int) -> str:
-    """Generate a PNG slice as base64 so React can render it without DICOM setup."""
+def create_scan_for_user(db: Session, payload: ScanCreate, current_user: User) -> Scan:
+    """Create a scan only inside a project visible to the signed-in user."""
 
-    scan = get_scan_or_404(db, scan_id)
-    if slice_index < 0 or slice_index >= scan.num_slices:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slice index out of range")
+    if payload.project_id is not None:
+        project = db.get(Project, payload.project_id)
+        if project is None or project.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    return create_scan(db, payload)
+
+
+def create_uploaded_scan_for_user(
+    db: Session,
+    project_id: UUID,
+    name: str,
+    modality: str,
+    num_slices: int,
+    original_filename: str,
+    content: bytes,
+    current_user: User,
+) -> Scan:
+    """Store an uploaded scan file and create project-scoped scan metadata."""
+
+    project = db.get(Project, project_id)
+    if project is None or project.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if num_slices < 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Number of slices must be at least 1")
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+
+    scan_id = uuid4()
+    safe_original_name = Path(original_filename or "uploaded-scan").name.replace("/", "_")
+    scan_storage_root = STORAGE_ROOT / str(project_id) / str(scan_id)
+    original_storage_root = scan_storage_root / "original"
+    preview_storage_root = scan_storage_root / "derived" / "preview"
+    original_storage_root.mkdir(parents=True, exist_ok=True)
+    file_path = original_storage_root / safe_original_name
+    file_path.write_bytes(content)
+    source_format = detect_source_format(safe_original_name, content)
+    try:
+        scan_profile = (
+            build_nifti_scan_profile(safe_original_name, content, modality, str(scan_storage_root), preview_storage_root)
+            if source_format == "nifti"
+            else build_initial_scan_profile(source_format, modality, num_slices, str(scan_storage_root))
+        )
+    except ImagingIngestionError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+
+    scan = Scan(
+        id=scan_id,
+        project_id=project_id,
+        name=name,
+        file_path=str(file_path),
+        modality=modality,
+        num_slices=scan_profile["depth"] or num_slices,
+        **scan_profile,
+    )
+    db.add(scan)
+    db.commit()
+    db.refresh(scan)
+    return scan
+
+
+def _read_derived_preview_base64(scan: Scan, slice_index: int) -> str | None:
+    """Return a derived preview PNG if ingestion generated one."""
+
+    if not scan.storage_key:
+        return None
+    preview_path = Path(scan.storage_key) / "derived" / "preview" / f"{slice_index:06d}.png"
+    if not preview_path.exists():
+        return None
+    return base64.b64encode(preview_path.read_bytes()).decode("ascii")
+
+
+def _generate_placeholder_slice_base64(scan: Scan, slice_index: int) -> str:
+    """Generate a fallback PNG slice for seeded and placeholder scans."""
 
     image = Image.new("L", (512, 512), color=18)
     draw = ImageDraw.Draw(image)
-    # The ellipse shifts with slice_index to mimic a changing anatomical volume.
     offset = int((slice_index / max(scan.num_slices - 1, 1)) * 120)
     draw.ellipse((120 + offset, 100, 390 - offset // 2, 410), fill=95)
     draw.ellipse((210, 190 + offset // 3, 315, 295 + offset // 3), fill=160)
@@ -77,6 +172,26 @@ def get_slice_image_base64(db: Session, scan_id: UUID, slice_index: int) -> str:
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def _get_slice_image_base64(scan: Scan, slice_index: int) -> str:
+    """Return a derived preview slice or generated fallback image."""
+
+    if slice_index < 0 or slice_index >= scan.num_slices:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slice index out of range")
+    return _read_derived_preview_base64(scan, slice_index) or _generate_placeholder_slice_base64(scan, slice_index)
+
+
+def get_slice_image_base64(db: Session, scan_id: UUID, slice_index: int) -> str:
+    """Return a PNG slice as base64 so React can render it."""
+
+    return _get_slice_image_base64(get_scan_or_404(db, scan_id), slice_index)
+
+
+def get_slice_image_base64_for_user(db: Session, scan_id: UUID, slice_index: int, current_user: User) -> str:
+    """Return a slice after checking scan access."""
+
+    return _get_slice_image_base64(get_scan_for_user_or_404(db, scan_id, current_user), slice_index)
 
 
 def get_slice_dicom_metadata(db: Session, scan_id: UUID, slice_index: int) -> dict:
@@ -110,6 +225,27 @@ def get_slice_dicom_metadata(db: Session, scan_id: UUID, slice_index: int) -> di
         "WindowCenter": 40 if scan.modality == "CT" else 600,
         "WindowLevel": 80 if scan.modality == "CT" else 1200,
         "ImageOrientationPatient": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+    }
+
+
+def get_scan_metadata(scan: Scan) -> dict:
+    """Return parsed scan metadata safe for product UI display."""
+
+    return {
+        "scan_id": scan.id,
+        "scan_name": scan.name,
+        "modality": scan.modality,
+        "source_format": scan.source_format,
+        "ingestion_status": scan.ingestion_status,
+        "ingestion_error": scan.ingestion_error,
+        "num_slices": scan.num_slices,
+        "width": scan.width,
+        "height": scan.height,
+        "depth": scan.depth,
+        "spacing": scan.spacing,
+        "window_center": scan.window_center,
+        "window_width": scan.window_width,
+        "metadata": scan.imaging_metadata,
     }
 
 

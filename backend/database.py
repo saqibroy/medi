@@ -8,7 +8,7 @@ database boundary instead of constructing database connections inside routers.
 from collections.abc import Generator
 from os import getenv
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -24,9 +24,8 @@ DATABASE_URL = getenv(
 class Base(DeclarativeBase):
     """Base class that all ORM models inherit from.
 
-    SQLAlchemy uses this registry to discover mapped tables when we call
-    Base.metadata.create_all(...) in this educational project or migrations in a
-    more realistic production setup.
+    SQLAlchemy uses this registry to discover mapped tables for Alembic
+    migrations and focused test database setup.
     """
 
 
@@ -47,7 +46,7 @@ SessionLocal = sessionmaker(
 )
 
 
-def get_db() -> Generator[Session, None, None]:
+async def get_db() -> Generator[Session, None, None]:
     """Yield one SQLAlchemy Session per request using FastAPI dependency injection.
 
     FastAPI sees this function in Depends(get_db), runs it before the endpoint,
@@ -62,32 +61,3 @@ def get_db() -> Generator[Session, None, None]:
         # Closing returns the connection to SQLAlchemy's pool. Without this,
         # busy APIs eventually exhaust available PostgreSQL connections.
         db.close()
-
-
-def ensure_learning_schema_upgrades() -> None:
-    """Add new demo columns to an existing local database when models evolve.
-
-    Production systems should use Alembic migrations for every schema change.
-    This interview learning repo intentionally keeps setup lightweight with
-    `create_all`, but `create_all` only creates missing tables; it does not alter
-    existing tables. These additive ALTER statements keep older local demo
-    databases usable after the annotation review fields are introduced.
-    """
-
-    inspector = inspect(engine)
-    if "annotations" not in inspector.get_table_names():
-        return
-
-    existing_columns = {column["name"] for column in inspector.get_columns("annotations")}
-    columns_to_add = {
-        "confidence_score": "FLOAT",
-        "review_status": "VARCHAR(20) NOT NULL DEFAULT 'pending'",
-        "reviewer": "VARCHAR(120)",
-        "reviewed_at": "DATETIME",
-        "notes": "VARCHAR(500)",
-    }
-
-    with engine.begin() as connection:
-        for column_name, column_sql in columns_to_add.items():
-            if column_name not in existing_columns:
-                connection.execute(text(f"ALTER TABLE annotations ADD COLUMN {column_name} {column_sql}"))

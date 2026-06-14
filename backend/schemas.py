@@ -15,6 +15,108 @@ from pydantic import BaseModel, ConfigDict, Field
 Modality = Literal["MRI", "CT", "PET", "Ultrasound", "XRAY"]
 AnnotationType = Literal["bounding_box", "polygon", "segmentation"]
 ReviewStatus = Literal["pending", "approved", "rejected"]
+UserRole = Literal["admin", "annotator", "reviewer"]
+SourceFormat = Literal["synthetic", "nifti", "dicom", "dicom_zip", "unknown"]
+IngestionStatus = Literal["pending", "processing", "ready", "failed"]
+
+
+class UserRead(BaseModel):
+    """Signed-in product user returned to the frontend."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID
+    email: str
+    full_name: str
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+
+
+class LoginRequest(BaseModel):
+    """Email and password accepted by POST /auth/login."""
+
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=1, max_length=255)
+
+
+class AuthTokenRead(BaseModel):
+    """Bearer token response used by the browser during Phase 1."""
+
+    access_token: str
+    token_type: str = "bearer"
+    user: UserRead
+
+
+class OrganizationRead(BaseModel):
+    """Customer workspace metadata."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    created_at: datetime
+
+
+class ProjectBase(BaseModel):
+    """Shared project fields."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=500)
+    modality: Modality
+
+
+class ProjectCreate(ProjectBase):
+    """Payload accepted by POST /projects."""
+
+
+class ProjectUpdate(BaseModel):
+    """Partial project update payload."""
+
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=500)
+    modality: Modality | None = None
+
+
+class ProjectRead(ProjectBase):
+    """Project response shown in the workspace selector."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID
+    created_at: datetime
+
+
+class LabelBase(BaseModel):
+    """Shared label fields for project taxonomies."""
+
+    name: str = Field(..., min_length=1, max_length=100)
+    color: str = Field("#14b8a6", min_length=4, max_length=20)
+    description: str | None = Field(None, max_length=500)
+
+
+class LabelCreate(LabelBase):
+    """Payload accepted by POST /projects/{project_id}/labels."""
+
+
+class LabelUpdate(BaseModel):
+    """Partial label update payload."""
+
+    name: str | None = Field(None, min_length=1, max_length=100)
+    color: str | None = Field(None, min_length=4, max_length=20)
+    description: str | None = Field(None, max_length=500)
+
+
+class LabelRead(LabelBase):
+    """Project label returned to React."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    created_at: datetime
 
 
 class ScanBase(BaseModel):
@@ -33,6 +135,7 @@ class ScanCreate(ScanBase):
     """
 
     file_name: str = Field("fake-volume.nii.gz", min_length=1, max_length=255)
+    project_id: UUID | None = None
 
 
 class ScanRead(ScanBase):
@@ -41,7 +144,19 @@ class ScanRead(ScanBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    project_id: UUID | None
     file_path: str
+    storage_key: str | None = None
+    source_format: SourceFormat = "synthetic"
+    ingestion_status: IngestionStatus = "ready"
+    ingestion_error: str | None = None
+    imaging_metadata: dict[str, Any] | None = None
+    width: int | None = None
+    height: int | None = None
+    depth: int | None = None
+    spacing: list[float] | None = None
+    window_center: float | None = None
+    window_width: float | None = None
     created_at: datetime
 
 
@@ -68,10 +183,31 @@ class SliceDicomMetadataRead(BaseModel):
     ImageOrientationPatient: list[float]
 
 
+class ScanMetadataRead(BaseModel):
+    """Parsed scan metadata safe to show in the UI."""
+
+    scan_id: UUID
+    scan_name: str
+    modality: Modality
+    source_format: SourceFormat
+    ingestion_status: IngestionStatus
+    ingestion_error: str | None = None
+    num_slices: int
+    width: int | None = None
+    height: int | None = None
+    depth: int | None = None
+    spacing: list[float] | None = None
+    window_center: float | None = None
+    window_width: float | None = None
+    metadata: dict[str, Any] | None = None
+
+
 class AnnotationBase(BaseModel):
     """Fields common to annotation creation, update, and responses."""
 
     scan_id: UUID
+    project_id: UUID | None = None
+    label_id: UUID | None = None
     label: str = Field(..., min_length=1, max_length=100)
     annotation_type: AnnotationType
     coordinates: dict[str, Any] = Field(
@@ -98,6 +234,8 @@ class AnnotationUpdate(BaseModel):
     drag operation or just the label after a user edits a form.
     """
 
+    project_id: UUID | None = None
+    label_id: UUID | None = None
     label: str | None = Field(None, min_length=1, max_length=100)
     annotation_type: AnnotationType | None = None
     coordinates: dict[str, Any] | None = None
@@ -129,6 +267,8 @@ class AnnotationRead(AnnotationBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    updated_by_user_id: UUID | None = None
+    reviewed_by_user_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -155,6 +295,18 @@ class ScanExportRead(BaseModel):
     num_slices: int
     export_timestamp: datetime
     annotations: list[ExportAnnotationRead]
+    total_annotations: int
+    approved_count: int
+    pending_count: int
+
+
+class ProjectExportRead(BaseModel):
+    """Project-level export that groups scan exports into one dataset payload."""
+
+    project_id: UUID
+    project_name: str
+    export_timestamp: datetime
+    scans: list[ScanExportRead]
     total_annotations: int
     approved_count: int
     pending_count: int

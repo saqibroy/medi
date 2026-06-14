@@ -5,24 +5,37 @@
  */
 
 import type { AnnotationType } from "../types/annotation";
+import type { Label } from "../types/project";
 
 interface AnnotationToolsProps {
-  label: string;
+  labels: Label[];
+  selectedLabelId: string;
   annotationType: AnnotationType;
   createdBy: string;
-  onLabelChange: (value: string) => void;
+  onLabelChange: (labelId: string) => void;
   onAnnotationTypeChange: (value: AnnotationType) => void;
-  onCreatedByChange: (value: string) => void;
 }
 
 export function AnnotationTools(props: AnnotationToolsProps) {
   /** Render compact controls used before saving a drawn bounding box. */
+  const selectedLabel = props.labels.find((label) => label.id === props.selectedLabelId);
+
   return (
     <section className="border-b border-slate-200 bg-white p-3">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <label className="text-xs font-medium text-slate-600">
           Label
-          <input className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm" value={props.label} onChange={(event) => props.onLabelChange(event.target.value)} />
+          <div className="mt-1 flex items-center gap-2">
+            <span className="h-4 w-4 rounded-sm border border-slate-200" style={{ backgroundColor: selectedLabel?.color ?? "#94a3b8" }} />
+            <select className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm" value={props.selectedLabelId} onChange={(event) => props.onLabelChange(event.target.value)}>
+              {props.labels.length === 0 ? <option value="">No labels</option> : null}
+              {props.labels.map((label) => (
+                <option key={label.id} value={label.id}>
+                  {label.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </label>
         <label className="text-xs font-medium text-slate-600">
           Type
@@ -33,8 +46,8 @@ export function AnnotationTools(props: AnnotationToolsProps) {
           </select>
         </label>
         <label className="text-xs font-medium text-slate-600">
-          Created by
-          <input className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm" value={props.createdBy} onChange={(event) => props.onCreatedByChange(event.target.value)} />
+          Annotator
+          <input className="mt-1 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-sm" value={props.createdBy} readOnly />
         </label>
       </div>
     </section>

@@ -4,54 +4,330 @@
  * the full flow from API data to viewer state to saved annotation overlays.
  */
 
-import { useState } from "react";
+import { FormEvent, Suspense, lazy, useEffect, useMemo, useState } from "react";
 
+import { getMe, login } from "./api/authApi";
+import { createProject, createProjectLabel, deleteProjectLabel, listProjectLabels, listProjects, updateProject, updateProjectLabel } from "./api/projectsApi";
+import { createScan, uploadScan } from "./api/scansApi";
 import { AnnotationList } from "./components/AnnotationList";
 import { AnnotationTools } from "./components/AnnotationTools";
 import { ExportPanel } from "./components/ExportPanel";
+import { LabelManager } from "./components/LabelManager";
+import { ProjectManager } from "./components/ProjectManager";
 import { ScanList } from "./components/ScanList";
+import { ScanManager } from "./components/ScanManager";
+import { ScanMetadataPanel } from "./components/ScanMetadataPanel";
 import { SliceNavigator } from "./components/SliceNavigator";
-import { ViewerPanel } from "./components/ViewerPanel";
+import { WindowLevelControls } from "./components/WindowLevelControls";
 import { useAnnotations } from "./hooks/useAnnotations";
 import { useScan } from "./hooks/useScan";
 import type { AnnotationType } from "./types/annotation";
+import type { Label, Project, ProjectPayload } from "./types/project";
+import type { ScanCreate, ScanUpload } from "./types/scan";
+import type { User } from "./types/user";
+
+const ViewerPanel = lazy(() => import("./components/ViewerPanel").then((module) => ({ default: module.ViewerPanel })));
+
+function ViewerFallback() {
+  return (
+    <main className="flex min-h-0 flex-1 flex-col bg-slate-950">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+        <p className="text-sm text-slate-300">Loading viewer...</p>
+      </div>
+    </main>
+  );
+}
 
 export default function App() {
   /** Own global page state and pass focused props down to child components. */
-  const { scans, selectedScan, sliceIndex, sliceImage, error, selectScan, setSliceIndex } = useScan();
-  const { annotations, saveAnnotation, removeAnnotation, reviewExistingAnnotation } = useAnnotations(selectedScan?.id);
-  const [label, setLabel] = useState("tumour");
+  const [token, setToken] = useState(() => window.localStorage.getItem("medi_token") ?? "");
+  const [user, setUser] = useState<User | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [labels, setLabels] = useState<Label[]>([]);
+  const [selectedLabelId, setSelectedLabelId] = useState("");
   const [annotationType, setAnnotationType] = useState<AnnotationType>("bounding_box");
-  const [createdBy, setCreatedBy] = useState("Dr. Interview");
+  const [loginEmail, setLoginEmail] = useState("admin@medi.local");
+  const [loginPassword, setLoginPassword] = useState("password");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [labelsError, setLabelsError] = useState<string | null>(null);
+  const [isProjectsLoading, setIsProjectsLoading] = useState(false);
+  const [isLabelsLoading, setIsLabelsLoading] = useState(false);
+  const [windowCenter, setWindowCenter] = useState(600);
+  const [windowWidth, setWindowWidth] = useState(1200);
+
+  const { scans, selectedScan, sliceIndex, sliceImage, isLoading: isScansLoading, error, selectScan, addScan, setSliceIndex } = useScan(selectedProject?.id, token || undefined);
+  const { annotations, saveAnnotation, removeAnnotation, reviewExistingAnnotation } = useAnnotations(selectedScan?.id, token, user?.full_name ?? "Reviewer");
+  const selectedLabel = useMemo(() => labels.find((label) => label.id === selectedLabelId) ?? labels[0] ?? null, [labels, selectedLabelId]);
+  const canManageWorkspace = user?.role === "admin";
+  const canAnnotate = user?.role === "admin" || user?.role === "annotator";
+  const canReview = user?.role === "admin" || user?.role === "reviewer";
+  const projectStats = useMemo(
+    () => ({
+      scans: scans.length,
+      labels: labels.length,
+      annotations: annotations.length,
+      approved: annotations.filter((annotation) => annotation.review_status === "approved").length,
+      pending: annotations.filter((annotation) => annotation.review_status === "pending").length,
+    }),
+    [annotations, labels.length, scans.length],
+  );
+  const viewerEmptyMessage = !selectedProject
+    ? "Create or select a project to begin."
+    : scans.length === 0
+      ? "Add a scan to this project to open the viewer."
+      : labels.length === 0
+        ? "Add at least one label before annotation begins."
+        : "Loading selected scan...";
+  const defaultWindowCenter = selectedScan?.window_center ?? 600;
+  const defaultWindowWidth = selectedScan?.window_width ?? 1200;
+
+  useEffect(() => {
+    if (!token) return;
+    getMe(token)
+      .then(setUser)
+      .catch(() => {
+        window.localStorage.removeItem("medi_token");
+        setToken("");
+      });
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || !user) return;
+    setIsProjectsLoading(true);
+    setProjectsError(null);
+    listProjects(token)
+      .then((loadedProjects) => {
+        setProjects(loadedProjects);
+        setSelectedProject((current) => current ?? loadedProjects[0] ?? null);
+      })
+      .catch((apiError: Error) => setProjectsError(apiError.message))
+      .finally(() => setIsProjectsLoading(false));
+  }, [token, user]);
+
+  useEffect(() => {
+    if (!token || !selectedProject) {
+      setLabels([]);
+      setLabelsError(null);
+      return;
+    }
+    setIsLabelsLoading(true);
+    setLabelsError(null);
+    listProjectLabels(selectedProject.id, token)
+      .then((loadedLabels) => {
+        setLabels(loadedLabels);
+        setSelectedLabelId(loadedLabels[0]?.id ?? "");
+      })
+      .catch((apiError: Error) => setLabelsError(apiError.message))
+      .finally(() => setIsLabelsLoading(false));
+  }, [token, selectedProject]);
+
+  useEffect(() => {
+    setWindowCenter(defaultWindowCenter);
+    setWindowWidth(defaultWindowWidth);
+  }, [defaultWindowCenter, defaultWindowWidth, selectedScan?.id]);
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setAuthError(null);
+    try {
+      const response = await login(loginEmail, loginPassword);
+      window.localStorage.setItem("medi_token", response.access_token);
+      setToken(response.access_token);
+      setUser(response.user);
+    } catch (apiError) {
+      setAuthError(apiError instanceof Error ? apiError.message : "Login failed");
+    }
+  }
+
+  function handleLogout(): void {
+    window.localStorage.removeItem("medi_token");
+    setToken("");
+    setUser(null);
+    setProjects([]);
+    setSelectedProject(null);
+    setLabels([]);
+    setProjectsError(null);
+    setLabelsError(null);
+  }
+
+  function handleSelectProject(projectId: string): void {
+    setSelectedProject(projects.find((project) => project.id === projectId) ?? null);
+  }
+
+  async function handleCreateProject(payload: ProjectPayload): Promise<void> {
+    if (!token) return;
+    const created = await createProject(token, payload);
+    setProjects((current) => [created, ...current]);
+    setSelectedProject(created);
+  }
+
+  async function handleUpdateProject(projectId: string, payload: ProjectPayload): Promise<void> {
+    if (!token) return;
+    const updated = await updateProject(projectId, token, payload);
+    setProjects((current) => current.map((project) => (project.id === updated.id ? updated : project)));
+    setSelectedProject((current) => (current?.id === updated.id ? updated : current));
+  }
+
+  async function handleCreateLabel(payload: { name: string; color: string; description: string | null }): Promise<void> {
+    if (!selectedProject || !token) return;
+    const created = await createProjectLabel(selectedProject.id, token, payload);
+    setLabels((current) => [...current, created].sort((left, right) => left.name.localeCompare(right.name)));
+    setSelectedLabelId(created.id);
+  }
+
+  async function handleUpdateLabel(labelId: string, payload: { name: string; color: string; description: string | null }): Promise<void> {
+    if (!token) return;
+    const updated = await updateProjectLabel(labelId, token, payload);
+    setLabels((current) => current.map((label) => (label.id === updated.id ? updated : label)).sort((left, right) => left.name.localeCompare(right.name)));
+  }
+
+  async function handleDeleteLabel(labelId: string): Promise<void> {
+    if (!token) return;
+    await deleteProjectLabel(labelId, token);
+    setLabels((current) => {
+      const remaining = current.filter((label) => label.id !== labelId);
+      if (selectedLabelId === labelId) {
+        setSelectedLabelId(remaining[0]?.id ?? "");
+      }
+      return remaining;
+    });
+  }
+
+  async function handleCreateScan(payload: ScanCreate): Promise<void> {
+    if (!token || !selectedProject) return;
+    const created = await createScan({ ...payload, project_id: selectedProject.id }, token);
+    addScan(created);
+  }
+
+  async function handleUploadScan(payload: ScanUpload): Promise<void> {
+    if (!token || !selectedProject) return;
+    const uploaded = await uploadScan({ ...payload, project_id: selectedProject.id }, token);
+    addScan(uploaded);
+  }
+
+  if (!user) {
+    return (
+      <main className="flex h-full items-center justify-center bg-slate-100 p-6">
+        <form className="w-full max-w-sm rounded-md border border-slate-200 bg-white p-5 shadow-sm" onSubmit={handleLogin}>
+          <h1 className="text-xl font-semibold text-slate-950">Medi</h1>
+          <p className="mt-1 text-sm text-slate-600">Medical imaging annotation workspace</p>
+          <label className="mt-5 block text-xs font-medium text-slate-600">
+            Email
+            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} />
+          </label>
+          <label className="mt-3 block text-xs font-medium text-slate-600">
+            Password
+            <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} />
+          </label>
+          {authError ? <p className="mt-3 text-sm text-red-700">{authError}</p> : null}
+          <button className="mt-5 w-full rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white" type="submit">
+            Sign in
+          </button>
+        </form>
+      </main>
+    );
+  }
 
   return (
     <div className="grid h-full grid-cols-[280px_1fr_320px] overflow-hidden">
-      <ScanList scans={scans} selectedScanId={selectedScan?.id} onSelectScan={selectScan} />
+      <aside className="h-full overflow-y-auto border-r border-slate-200 bg-white">
+        <div className="border-b border-slate-200 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-lg font-semibold text-slate-950">Medi</h1>
+              <p className="text-xs text-slate-500">{user.full_name}</p>
+            </div>
+            <button className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50" onClick={handleLogout}>
+              Sign out
+            </button>
+          </div>
+        </div>
+        <ProjectManager
+          projects={projects}
+          selectedProjectId={selectedProject?.id}
+          canManage={canManageWorkspace}
+          isLoading={isProjectsLoading}
+          error={projectsError}
+          onSelectProject={handleSelectProject}
+          onCreateProject={handleCreateProject}
+          onUpdateProject={handleUpdateProject}
+        />
+        <div className="border-b border-slate-200 p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Workspace</h2>
+          <div className="grid grid-cols-2 gap-2 text-center text-sm">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+              <p className="text-xs text-slate-500">Scans</p>
+              <p className="font-semibold text-slate-950">{projectStats.scans}</p>
+            </div>
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+              <p className="text-xs text-slate-500">Labels</p>
+              <p className="font-semibold text-slate-950">{projectStats.labels}</p>
+            </div>
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+              <p className="text-xs text-slate-500">Approved</p>
+              <p className="font-semibold text-emerald-700">{projectStats.approved}</p>
+            </div>
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
+              <p className="text-xs text-slate-500">Pending</p>
+              <p className="font-semibold text-amber-700">{projectStats.pending}</p>
+            </div>
+          </div>
+        </div>
+        <LabelManager
+          labels={labels}
+          selectedLabelId={selectedLabel?.id ?? ""}
+          canManage={canManageWorkspace}
+          isLoading={isLabelsLoading}
+          error={labelsError}
+          onSelectLabel={setSelectedLabelId}
+          onCreateLabel={handleCreateLabel}
+          onUpdateLabel={handleUpdateLabel}
+          onDeleteLabel={handleDeleteLabel}
+        />
+        <ScanManager projectId={selectedProject?.id} canCreate={canManageWorkspace} defaultModality={selectedProject?.modality} onCreateScan={handleCreateScan} onUploadScan={handleUploadScan} />
+        <ScanList scans={scans} selectedScanId={selectedScan?.id} isLoading={isScansLoading} hasProject={Boolean(selectedProject)} onSelectScan={selectScan} />
+      </aside>
       <div className="flex min-w-0 flex-col">
         <AnnotationTools
-          label={label}
+          labels={labels}
+          selectedLabelId={selectedLabel?.id ?? ""}
           annotationType={annotationType}
-          createdBy={createdBy}
-          onLabelChange={setLabel}
+          createdBy={user.full_name}
+          onLabelChange={setSelectedLabelId}
           onAnnotationTypeChange={setAnnotationType}
-          onCreatedByChange={setCreatedBy}
         />
         {error ? <div className="bg-red-50 p-2 text-sm text-red-700">{error}</div> : null}
-        <ViewerPanel
-          scan={selectedScan}
-          sliceImage={sliceImage}
-          sliceIndex={sliceIndex}
-          annotations={annotations}
-          label={label}
-          annotationType={annotationType}
-          createdBy={createdBy}
-          onSaveAnnotation={saveAnnotation}
-        />
+        {authError ? <div className="bg-red-50 p-2 text-sm text-red-700">{authError}</div> : null}
+        <Suspense fallback={<ViewerFallback />}>
+          <ViewerPanel
+            scan={selectedScan}
+            sliceImage={sliceImage}
+            sliceIndex={sliceIndex}
+            annotations={annotations}
+            label={selectedLabel?.name ?? "unlabeled"}
+            labelId={selectedLabel?.id}
+            projectId={selectedProject?.id}
+            annotationType={annotationType}
+            createdBy={user.full_name}
+            canAnnotate={canAnnotate}
+            windowCenter={windowCenter}
+            windowWidth={windowWidth}
+            emptyMessage={viewerEmptyMessage}
+            onSaveAnnotation={saveAnnotation}
+          />
+        </Suspense>
+        <WindowLevelControls center={windowCenter} width={windowWidth} onCenterChange={setWindowCenter} onWidthChange={setWindowWidth} onReset={() => {
+          setWindowCenter(defaultWindowCenter);
+          setWindowWidth(defaultWindowWidth);
+        }} />
         <SliceNavigator sliceIndex={sliceIndex} maxSliceIndex={Math.max((selectedScan?.num_slices ?? 1) - 1, 0)} onSliceChange={setSliceIndex} />
       </div>
       <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white">
-        <ExportPanel scanId={selectedScan?.id} />
-        <AnnotationList annotations={annotations} currentSlice={sliceIndex} onDelete={removeAnnotation} onReview={reviewExistingAnnotation} />
+        <ScanMetadataPanel scanId={selectedScan?.id} token={token} />
+        <ExportPanel projectId={selectedProject?.id} scanId={selectedScan?.id} token={token} />
+        <AnnotationList annotations={annotations} labels={labels} currentSlice={sliceIndex} canReview={canReview} canDelete={canManageWorkspace} onDelete={removeAnnotation} onReview={reviewExistingAnnotation} />
       </aside>
     </div>
   );

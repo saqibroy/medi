@@ -1,0 +1,172 @@
+# Medi Product Roadmap
+
+Medi should become a focused medical imaging annotation platform for AI,
+research, and education teams. The first commercial version should target
+de-identified datasets and non-diagnostic workflows, then expand toward
+enterprise healthcare readiness after the product proves demand.
+
+## Positioning
+
+Initial offer:
+
+> A lightweight medical image annotation and review workspace for AI teams
+> working with CT, MRI, X-ray, and other imaging datasets.
+
+Avoid early claims that the product diagnoses, recommends treatment, replaces
+radiologists, or provides clinical decision support. Those claims can trigger a
+much harder regulatory path and slow down early traction.
+
+## First Customers
+
+- Medical AI startups preparing supervised learning datasets.
+- University labs and imaging research groups.
+- Healthcare data science teams working with de-identified studies.
+- Education programs teaching medical image labeling workflows.
+- Small annotation teams that need review and export workflows without a large
+  enterprise platform.
+
+Hospitals and direct clinical deployments are later targets because procurement,
+security review, compliance, and integrations are much slower.
+
+## Phase 1: Product Foundation
+
+Goal: turn the current learning app into a credible product MVP.
+
+Status: in progress.
+
+Backend:
+
+- [x] Add Alembic migration scaffolding.
+- [x] Add users with secure password hashing.
+- [x] Add organizations or workspaces.
+- [x] Add projects scoped to an organization.
+- [x] Attach scans to projects.
+- [x] Add labels scoped to projects.
+- [x] Add auth endpoints for login and current user.
+- [x] Protect scan and annotation routes with bearer auth.
+- [x] Add project-level export endpoint.
+- [x] Add initial service tests for auth, projects, labels, and exports.
+- [x] Add richer role enforcement for admin, annotator, and reviewer actions.
+- [x] Replace compatibility schema upgrades with a fully migration-first flow.
+- [x] Add API-level route tests for critical auth and workspace flows.
+- [x] Add Docker Compose production-like local profile.
+- [x] Add CI checks for backend tests and frontend builds.
+
+Frontend:
+
+- [x] Reposition the app from learning demo to product workspace.
+- [x] Add login/session state.
+- [x] Add project selection as the main workflow entry point.
+- [x] Add label management UI.
+- [x] Replace hardcoded annotator names with the signed-in user.
+- [x] Add project and scan export controls.
+- [x] Add workspace stats and label color cues.
+- [x] Improve empty, loading, and error states across all panels.
+- [x] Add project creation/editing UI.
+- [x] Add project-scoped scan creation UI for placeholder scan records.
+- [x] Add scan file upload UI scoped to projects.
+- [x] Split heavy viewer dependencies from the initial app bundle.
+- [ ] Add real DICOM/NIfTI parsing and rendering.
+
+Business:
+
+- [x] Define a simple pricing model for research teams.
+- [x] Plan DICOM/NIfTI ingestion and rendering for Phase 2.
+- [x] Prepare demo data and a short product demo script.
+- [x] Keep all sample data clearly synthetic or de-identified.
+
+## Phase 2: Real Imaging Support
+
+Goal: support useful research datasets rather than generated placeholder slices.
+
+- Add upload pipeline for image series.
+- Add DICOM or NIfTI ingestion.
+- Parse metadata needed for display and dataset management.
+- Store files outside the application directory, preferably behind an object
+  storage abstraction.
+- Add window and level controls.
+- Add import validation and PHI warning checks where practical.
+- Add background processing for large studies.
+
+## Phase 3: Annotation Tools
+
+Goal: make the product efficient for real labeling work.
+
+- Editable bounding boxes.
+- Polygon drawing and editing.
+- Segmentation mask workflow.
+- Undo and redo.
+- Keyboard shortcuts.
+- Annotation version history.
+- Review statuses: pending, approved, rejected, needs changes.
+- Inter-annotator agreement metrics.
+- Exports for common ML formats such as JSON, CSV, COCO, YOLO, and segmentation
+  training formats.
+
+## Phase 4: Production Operations
+
+Goal: make the app deployable and supportable.
+
+- [x] Docker Compose for local production-like development.
+- [x] Migration-only schema startup for backend containers.
+- [x] CI for backend tests and frontend builds.
+- Production PostgreSQL configuration.
+- Object storage configuration.
+- Structured logging.
+- Error tracking.
+- Health checks.
+- Rate limiting.
+- Backups and restore documentation.
+- Admin tools for organizations, users, and projects.
+
+## Phase 5: Security And Compliance Baseline
+
+Goal: become credible with serious research and healthcare-adjacent teams.
+
+- HTTPS-only production deployment.
+- Secure session/token handling.
+- Encryption for stored files and database backups.
+- Audit logs for access and data changes.
+- Tenant isolation checks.
+- Principle-of-least-privilege roles.
+- Secure file upload limits and validation.
+- Data retention and deletion controls.
+- Privacy policy, terms, and security documentation.
+
+HIPAA readiness, Business Associate Agreements, SOC 2-style controls, and
+clinical regulatory strategy should come after the research MVP shows traction.
+
+## Recommended First Sprint
+
+Build a product-grade foundation without jumping into real DICOM complexity yet.
+
+1. [x] Add Alembic migrations.
+2. [x] Add user, organization, project, and label models.
+3. [x] Scope scans and annotations through projects.
+4. [x] Add auth endpoints.
+5. [x] Seed realistic product demo data.
+6. [x] Update the frontend to start from a project workspace.
+7. [x] Add backend smoke tests for the new domain model.
+8. [x] Add project export and label management UI.
+9. [x] Add project creation/editing UI.
+10. [x] Add project-scoped scan creation UI.
+11. [x] Add role enforcement.
+12. [x] Add API-level route tests.
+
+Definition of done:
+
+- [x] A user can log in.
+- [x] A user can select a project.
+- [x] A project contains scans, labels, annotations, review status, and export data.
+- [x] Demo data presents Medi as a product, not an interview-prep app.
+- [x] The backend has a repeatable schema migration path scaffold.
+- [x] The frontend builds successfully.
+- [x] Admins can create projects from the UI.
+- [x] Users can add placeholder scans to a selected project from the UI.
+- [x] Reviewer-only and admin-only actions are enforced.
+- [x] Route-level API tests cover the critical workflow.
+
+## Current Next Priorities
+
+1. Add DICOM single-file parser.
+2. Add zipped DICOM series parser.

@@ -18,8 +18,14 @@ interface ViewerPanelProps {
   sliceIndex: number;
   annotations: Annotation[];
   label: string;
+  labelId?: string;
+  projectId?: string;
   annotationType: AnnotationCreate["annotation_type"];
   createdBy: string;
+  canAnnotate: boolean;
+  windowCenter: number;
+  windowWidth: number;
+  emptyMessage: string;
   onSaveAnnotation: (payload: AnnotationCreate) => Promise<void>;
 }
 
@@ -37,6 +43,8 @@ export function ViewerPanel(props: ViewerPanelProps) {
     () => props.annotations.filter((annotation) => annotation.slice_index === props.sliceIndex),
     [props.annotations, props.sliceIndex],
   );
+  const contrast = Math.max(0.25, Math.min(4, 1200 / Math.max(props.windowWidth, 1)));
+  const brightness = Math.max(0.25, Math.min(2.5, props.windowCenter / 600));
 
   useEffect(() => {
     /** Draw the current slice and overlays whenever source data changes. */
@@ -47,7 +55,9 @@ export function ViewerPanel(props: ViewerPanelProps) {
     const image = new Image();
     image.onload = () => {
       context.clearRect(0, 0, canvas.width, canvas.height);
+      context.filter = `contrast(${contrast}) brightness(${brightness})`;
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      context.filter = "none";
       context.strokeStyle = "#14b8a6";
       context.lineWidth = 3;
       currentSliceAnnotations.forEach((annotation) => {
@@ -62,7 +72,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
       }
     };
     image.src = `data:image/png;base64,${props.sliceImage.image_base64}`;
-  }, [props.sliceImage, currentSliceAnnotations, draftBox]);
+  }, [brightness, contrast, props.sliceImage, currentSliceAnnotations, draftBox]);
 
   function canvasPoint(event: MouseEvent<HTMLCanvasElement>) {
     /** Convert browser coordinates into canvas coordinates used by annotation JSON. */
@@ -76,6 +86,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
 
   function handleMouseDown(event: MouseEvent<HTMLCanvasElement>): void {
     /** Start a new bounding box draft at the first mouse position. */
+    if (!props.canAnnotate) return;
     const point = canvasPoint(event);
     setDraftBox({ x: point.x, y: point.y, width: 0, height: 0, isDrawing: true });
   }
@@ -89,7 +100,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
 
   async function handleMouseUp(): Promise<void> {
     /** Normalize and save the completed draft box through the annotation API. */
-    if (!props.scan || !draftBox) return;
+    if (!props.scan || !props.canAnnotate || !draftBox) return;
     const coordinates = {
       x: Math.min(draftBox.x, draftBox.x + draftBox.width),
       y: Math.min(draftBox.y, draftBox.y + draftBox.height),
@@ -100,6 +111,8 @@ export function ViewerPanel(props: ViewerPanelProps) {
     if (coordinates.width < 4 || coordinates.height < 4) return;
     await props.onSaveAnnotation({
       scan_id: props.scan.id,
+      project_id: props.projectId ?? props.scan.project_id,
+      label_id: props.labelId ?? null,
       label: props.label,
       annotation_type: props.annotationType,
       coordinates,
@@ -117,13 +130,13 @@ export function ViewerPanel(props: ViewerPanelProps) {
             ref={canvasRef}
             width={512}
             height={512}
-            className="aspect-square max-h-full max-w-full cursor-crosshair rounded-md border border-slate-700 bg-black"
+            className={`aspect-square max-h-full max-w-full rounded-md border border-slate-700 bg-black ${props.canAnnotate ? "cursor-crosshair" : "cursor-not-allowed"}`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
           />
         ) : (
-          <p className="text-sm text-slate-300">Start the backend and seed data to load scans.</p>
+          <p className="max-w-sm text-center text-sm text-slate-300">{props.emptyMessage}</p>
         )}
       </div>
     </main>

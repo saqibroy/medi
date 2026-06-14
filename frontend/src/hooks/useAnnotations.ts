@@ -9,21 +9,21 @@ import { useCallback, useEffect, useState } from "react";
 import { createAnnotation, deleteAnnotation, listAnnotations, reviewAnnotation } from "../api/annotationsApi";
 import type { Annotation, AnnotationCreate, ReviewStatus } from "../types/annotation";
 
-export function useAnnotations(scanId?: string) {
+export function useAnnotations(scanId?: string, token?: string, reviewerName = "Reviewer") {
   /** Load and mutate annotations for the selected scan. */
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     /** Refresh keeps overlays aligned with database state after mutations. */
-    if (!scanId) {
+    if (!scanId || !token) {
       setAnnotations([]);
       return;
     }
-    listAnnotations(scanId)
+    listAnnotations(token, scanId)
       .then(setAnnotations)
       .catch((apiError: Error) => setError(apiError.message));
-  }, [scanId]);
+  }, [scanId, token]);
 
   useEffect(() => {
     /** Re-run when the user selects a different scan. */
@@ -33,23 +33,26 @@ export function useAnnotations(scanId?: string) {
   const saveAnnotation = useCallback(
     async (payload: AnnotationCreate) => {
       /** Persist one annotation and append the server-confirmed version. */
-      const saved = await createAnnotation(payload);
+      if (!token) return;
+      const saved = await createAnnotation(payload, token);
       setAnnotations((current) => [saved, ...current]);
     },
-    [],
+    [token],
   );
 
   const removeAnnotation = useCallback(async (annotationId: string) => {
     /** Delete in the backend first, then update UI state optimistically. */
-    await deleteAnnotation(annotationId);
+    if (!token) return;
+    await deleteAnnotation(annotationId, token);
     setAnnotations((current) => current.filter((annotation) => annotation.id !== annotationId));
-  }, []);
+  }, [token]);
 
   const reviewExistingAnnotation = useCallback(async (annotationId: string, status: ReviewStatus) => {
     /** Save QA decisions and replace the local row with the reviewed version. */
-    const reviewed = await reviewAnnotation(annotationId, "Dr. Patel", status, null);
+    if (!token) return;
+    const reviewed = await reviewAnnotation(annotationId, reviewerName, status, token, null);
     setAnnotations((current) => current.map((annotation) => (annotation.id === reviewed.id ? reviewed : annotation)));
-  }, []);
+  }, [reviewerName, token]);
 
   return { annotations, error, refresh, saveAnnotation, removeAnnotation, reviewExistingAnnotation };
 }

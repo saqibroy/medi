@@ -17,7 +17,9 @@ export interface BoundingBoxCoordinates {
 
 export interface Annotation {
   id: string;
+  project_id: string | null;
   scan_id: string;
+  label_id: string | null;
   label: string;
   annotation_type: AnnotationType;
   coordinates: Record<string, unknown>;
@@ -33,7 +35,9 @@ export interface Annotation {
 }
 
 export interface AnnotationCreate {
+  project_id?: string | null;
   scan_id: string;
+  label_id?: string | null;
   label: string;
   annotation_type: AnnotationType;
   coordinates: Record<string, unknown>;
