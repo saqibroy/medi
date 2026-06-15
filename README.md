@@ -41,6 +41,11 @@ Seeded demo users:
 - `annotator@medi.local` / `password`
 - `reviewer@medi.local` / `password`
 
+Seeded scans are synthetic placeholder records with `data_safety="synthetic"`;
+the repository does not ship patient imaging files. Uploaded DICOM/NIfTI files
+should be de-identified before import, and parser metadata flags likely
+PHI-bearing DICOM tags without returning raw patient identifiers.
+
 ## Run The Frontend
 
 ```bash
@@ -90,6 +95,9 @@ Start with `PRODUCT_ROADMAP.md`, then read:
 
 - `PHASE1_IMPLEMENTATION_PLAN.md` for the current MVP build sequence.
 - `PHASE2_IMAGING_PLAN.md` for the real DICOM/NIfTI ingestion plan.
+- `PHASE3_ANNOTATION_TOOLS_PLAN.md` for advanced annotation workflows.
+- `PRODUCTION_STORAGE_PLAN.md` for object storage and signed URL planning.
+- `BACKGROUND_INGESTION_PLAN.md` for large-study worker planning.
 - `BUSINESS_PRICING_MODEL.md` for the first research-team pricing strategy.
 - `PRODUCT_DEMO_SCRIPT.md` for the short buyer-facing demo flow.
 - `backend/routers/auth.py` for login/session endpoints.

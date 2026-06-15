@@ -278,8 +278,25 @@ CI verification:
 - Slice endpoint now serves derived preview PNGs for parsed uploads.
 - Scan metadata endpoint and UI panel added.
 - Basic window/level controls added for preview rendering.
+- Single-file DICOM parser added for synthetic Explicit VR Little Endian images.
+- Zipped DICOM series parser added for synthetic Explicit VR Little Endian series.
+- Upload UI now shows parser-specific ingestion errors and saving states.
+- DICOM parser limits and validation hardening added.
+- Upload extension and MIME hint allowlist added.
+- DICOM PHI warning checks added without exposing raw patient identifiers.
+- Slice endpoint now returns explicit errors for pending, failed, and out-of-range scans.
+- Organization scoping tests now cover uploaded scan routes and files.
+- Annotation coordinates now stay in parsed image pixel space with bounds checks.
+- Public scan API responses no longer expose local `file_path` or `storage_key` values.
+- Seeded sample scans now carry explicit synthetic/de-identification metadata.
+- Failed uploads now persist as failed scans and can be reprocessed by admins.
+- Production object storage and signed URL plan added.
+- Background ingestion worker plan added for large studies.
+- Phase 3 annotation tools checklist added.
+- Phase 3 selected annotation state added to the viewer and annotation list.
+- Bounding boxes can now be moved and resized from the viewer.
 
 ## Next Engineering Priorities
 
-1. Add DICOM single-file parser.
-2. Add zipped DICOM series parser.
+1. Add viewer delete action with role-aware controls.
+2. Add route tests for annotation delete permissions.

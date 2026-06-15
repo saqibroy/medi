@@ -6,6 +6,7 @@ fake slice images are generated for the learning viewer.
 """
 
 import base64
+import shutil
 from collections import Counter
 from datetime import datetime, timezone
 from io import BytesIO
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Annotation, Project, Scan, User
 from ..schemas import ScanCreate
-from .imaging_service import ImagingIngestionError, build_initial_scan_profile, build_nifti_scan_profile, detect_source_format
+from .imaging_service import ImagingIngestionError, build_dicom_scan_profile, build_dicom_zip_scan_profile, build_initial_scan_profile, build_nifti_scan_profile, detect_source_format, validate_upload_hint, validate_upload_size
 
 
 STORAGE_ROOT = Path(__file__).resolve().parents[1] / "data" / "sample_scan"
@@ -95,6 +96,54 @@ def create_scan_for_user(db: Session, payload: ScanCreate, current_user: User) -
     return create_scan(db, payload)
 
 
+def _build_failed_scan_profile(source_format: str, modality: str, num_slices: int, storage_key: str, error: ImagingIngestionError) -> dict:
+    """Return safe metadata for an upload that was stored but could not parse."""
+
+    return {
+        "storage_key": storage_key,
+        "source_format": source_format,
+        "ingestion_status": "failed",
+        "ingestion_error": str(error),
+        "imaging_metadata": {
+            "source_format": source_format,
+            "modality": modality,
+            "parser_status": "failed",
+            "parser_error": str(error),
+            "data_safety": "uploaded",
+            "deidentification_status": "user_supplied_deidentified_required",
+        },
+        "width": None,
+        "height": None,
+        "depth": num_slices,
+        "spacing": None,
+        "window_center": 40.0 if modality == "CT" else 600.0,
+        "window_width": 80.0 if modality == "CT" else 1200.0,
+    }
+
+
+def _build_uploaded_scan_profile(
+    filename: str,
+    content: bytes,
+    modality: str,
+    num_slices: int,
+    scan_storage_root: Path,
+    preview_storage_root: Path,
+) -> dict:
+    """Parse uploaded bytes into scan fields or return a failed profile."""
+
+    source_format = detect_source_format(filename, content)
+    try:
+        if source_format == "nifti":
+            return build_nifti_scan_profile(filename, content, modality, str(scan_storage_root), preview_storage_root)
+        if source_format == "dicom":
+            return build_dicom_scan_profile(content, modality, str(scan_storage_root), preview_storage_root)
+        if source_format == "dicom_zip":
+            return build_dicom_zip_scan_profile(content, modality, str(scan_storage_root), preview_storage_root)
+        return build_initial_scan_profile(source_format, modality, num_slices, str(scan_storage_root))
+    except ImagingIngestionError as error:
+        return _build_failed_scan_profile(source_format, modality, num_slices, str(scan_storage_root), error)
+
+
 def create_uploaded_scan_for_user(
     db: Session,
     project_id: UUID,
@@ -102,6 +151,7 @@ def create_uploaded_scan_for_user(
     modality: str,
     num_slices: int,
     original_filename: str,
+    content_type: str | None,
     content: bytes,
     current_user: User,
 ) -> Scan:
@@ -114,6 +164,12 @@ def create_uploaded_scan_for_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Number of slices must be at least 1")
     if not content:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+    try:
+        validate_upload_hint(original_filename, content_type)
+        validate_upload_size(content)
+    except ImagingIngestionError as error:
+        status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE if "size limit" in str(error) else status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
 
     scan_id = uuid4()
     safe_original_name = Path(original_filename or "uploaded-scan").name.replace("/", "_")
@@ -123,15 +179,7 @@ def create_uploaded_scan_for_user(
     original_storage_root.mkdir(parents=True, exist_ok=True)
     file_path = original_storage_root / safe_original_name
     file_path.write_bytes(content)
-    source_format = detect_source_format(safe_original_name, content)
-    try:
-        scan_profile = (
-            build_nifti_scan_profile(safe_original_name, content, modality, str(scan_storage_root), preview_storage_root)
-            if source_format == "nifti"
-            else build_initial_scan_profile(source_format, modality, num_slices, str(scan_storage_root))
-        )
-    except ImagingIngestionError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+    scan_profile = _build_uploaded_scan_profile(safe_original_name, content, modality, num_slices, scan_storage_root, preview_storage_root)
 
     scan = Scan(
         id=scan_id,
@@ -143,6 +191,29 @@ def create_uploaded_scan_for_user(
         **scan_profile,
     )
     db.add(scan)
+    db.commit()
+    db.refresh(scan)
+    return scan
+
+
+def reprocess_scan_for_user(db: Session, scan_id: UUID, current_user: User) -> Scan:
+    """Retry parsing a failed uploaded scan from its stored original bytes."""
+
+    scan = get_scan_for_user_or_404(db, scan_id, current_user)
+    if scan.ingestion_status != "failed":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only failed scans can be reprocessed")
+    original_path = Path(scan.file_path)
+    if not original_path.exists() or not scan.storage_key:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Original scan file is unavailable for reprocessing")
+
+    content = original_path.read_bytes()
+    preview_storage_root = Path(scan.storage_key) / "derived" / "preview"
+    if preview_storage_root.exists():
+        shutil.rmtree(preview_storage_root)
+    scan_profile = _build_uploaded_scan_profile(original_path.name, content, scan.modality, scan.num_slices, Path(scan.storage_key), preview_storage_root)
+    for field_name, value in scan_profile.items():
+        setattr(scan, field_name, value)
+    scan.num_slices = scan_profile["depth"] or scan.num_slices
     db.commit()
     db.refresh(scan)
     return scan
@@ -177,6 +248,10 @@ def _generate_placeholder_slice_base64(scan: Scan, slice_index: int) -> str:
 def _get_slice_image_base64(scan: Scan, slice_index: int) -> str:
     """Return a derived preview slice or generated fallback image."""
 
+    if scan.ingestion_status in {"pending", "processing"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan ingestion is not ready yet")
+    if scan.ingestion_status == "failed":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=scan.ingestion_error or "Scan ingestion failed")
     if slice_index < 0 or slice_index >= scan.num_slices:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slice index out of range")
     return _read_derived_preview_base64(scan, slice_index) or _generate_placeholder_slice_base64(scan, slice_index)

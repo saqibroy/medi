@@ -4,21 +4,19 @@ This plan upgrades Medi from placeholder slice generation to real research-file
 ingestion and rendering. Phase 2 should still target de-identified,
 non-diagnostic research workflows; it should not claim clinical decision support.
 
-Status: planned.
+Status: core implementation complete. Remaining storage and worker work is
+tracked in `PRODUCTION_STORAGE_PLAN.md` and `BACKGROUND_INGESTION_PLAN.md`.
 
 ## Current State
 
-- Uploaded scan files are stored under `backend/data/sample_scan`.
-- The upload form asks the user for `modality` and `num_slices`.
-- `GET /scans/{scan_id}/slice/{slice_index}` returns a simulated PNG generated
-  by Pillow, not pixels decoded from the uploaded file.
-- `GET /scans/{scan_id}/slice/{slice_index}/metadata` returns teaching metadata,
-  not parsed file metadata.
-- The frontend viewer renders a base64 PNG to canvas and overlays annotations.
-
-This is good for product workflow validation. It is not enough for real dataset
-work because slice count, spacing, orientation, windowing, and pixel values must
-come from the imaging file itself.
+- Uploaded scan files are stored under the configured scan storage root.
+- Uploads parse NIfTI, single DICOM, and zipped DICOM series for Phase 2.
+- Derived preview PNGs are generated from parsed imaging pixels.
+- `GET /scans/{scan_id}/slice/{slice_index}` returns derived previews for ready
+  scans and useful errors for pending, failed, and out-of-range requests.
+- `GET /scans/{scan_id}/metadata` returns safe parsed metadata.
+- The frontend viewer renders parsed previews to canvas and overlays
+  annotations in image pixel space.
 
 ## Phase 2 Goal
 
@@ -28,11 +26,11 @@ real image pixels inside the existing project workspace.
 
 ## Supported Inputs
 
-Start narrow:
+Implemented narrow support:
 
-- [ ] Single-file NIfTI: `.nii`, `.nii.gz`
-- [ ] Single DICOM file for smoke testing: `.dcm`
-- [ ] Zipped DICOM series: `.zip`
+- [x] Single-file NIfTI: `.nii`, `.nii.gz`
+- [x] Single DICOM file for smoke testing: `.dcm`
+- [x] Zipped DICOM series: `.zip`
 
 Defer until later:
 
@@ -77,6 +75,9 @@ Future S3-style object keys can mirror this layout:
 org/{organization_id}/project/{project_id}/scan/{scan_id}/...
 ```
 
+See `PRODUCTION_STORAGE_PLAN.md` for the object storage, signed URL, and
+migration plan.
+
 ## Data Model Additions
 
 Add these fields to `scans` with an Alembic migration:
@@ -98,52 +99,58 @@ Keep `num_slices` for API compatibility at first, but set it from parsed `depth`
 
 ## Ingestion Flow
 
-1. [ ] Admin uploads a file.
-2. [ ] Backend creates a scan with `ingestion_status="pending"`.
-3. [ ] Backend stores original bytes in the scan storage folder.
-4. [ ] Backend detects format from extension and file content.
-5. [ ] Backend validates file size, emptiness, supported format, and project
+1. [x] Admin uploads a file.
+2. [ ] Backend creates a scan with `ingestion_status="pending"` in worker mode.
+3. [x] Backend stores original bytes in the scan storage folder.
+4. [x] Backend detects format from extension and file content.
+5. [x] Backend validates file size, emptiness, supported format, and project
    access.
-6. [ ] Parser extracts metadata and volume dimensions.
-7. [ ] Preview generator normalizes each slice to 8-bit PNG.
-8. [ ] Scan is updated with parsed metadata, dimensions, `num_slices`, and
+6. [x] Parser extracts metadata and volume dimensions.
+7. [x] Preview generator normalizes each slice to 8-bit PNG.
+8. [x] Scan is updated with parsed metadata, dimensions, `num_slices`, and
    `ingestion_status="ready"`.
-9. [ ] On parser failure, scan becomes `ingestion_status="failed"` with a safe
+9. [x] On parser failure, scan becomes `ingestion_status="failed"` with a safe
    error message.
 
 Phase 2 can process synchronously for small demo files. Production should move
 steps 4-8 into a background worker so large studies do not block API requests.
+See `BACKGROUND_INGESTION_PLAN.md` for the worker queue, job model, retry, and
+deployment plan.
+
+The only unchecked ingestion-flow item above is intentionally deferred to the
+background worker implementation. The synchronous Phase 2 path returns `ready`
+or `failed` immediately after parsing.
 
 ## API Plan
 
 Update existing endpoints:
 
-- [ ] `POST /scans/upload`
+- [x] `POST /scans/upload`
   - Stop accepting user-supplied `num_slices` as truth.
   - Return scan with `ingestion_status`.
 
-- [ ] `GET /scans/{scan_id}`
+- [x] `GET /scans/{scan_id}`
   - Include parsed dimensions, metadata summary, and ingestion status.
 
-- [ ] `GET /scans/{scan_id}/slice/{slice_index}`
-  - If `ready`, return the derived preview PNG.
-  - If `pending` or `processing`, return `409 Conflict`.
-  - If `failed`, return `422 Unprocessable Entity`.
+- [x] `GET /scans/{scan_id}/slice/{slice_index}`
+  - [x] If `ready`, return the derived preview PNG.
+  - [x] If `pending` or `processing`, return `409 Conflict`.
+  - [x] If `failed`, return `422 Unprocessable Entity`.
 
 Add:
 
 - [x] `GET /scans/{scan_id}/metadata`
   - Return parsed file metadata safe for the UI.
 
-- [ ] `POST /scans/{scan_id}/reprocess`
+- [x] `POST /scans/{scan_id}/reprocess`
   - Admin-only retry after failed ingestion.
 
 ## Frontend Plan
 
 - [x] Upload UI stops asking for `num_slices`.
-- [ ] Scan list shows ingestion status.
-- [ ] Viewer empty state explains `processing` and `failed` scans.
-- [ ] Slice slider bounds come from parsed `num_slices`.
+- [x] Scan list shows ingestion status.
+- [x] Viewer empty state explains `processing` and `failed` scans.
+- [x] Slice slider bounds come from parsed `num_slices`.
 - [x] Viewer adds basic window/level controls for CT and MRI previews.
 - [x] Metadata panel shows spacing, dimensions, source format, and acquisition
   summary.
@@ -153,13 +160,13 @@ Cornerstone imageIds can come after the preview pipeline is trustworthy.
 
 ## Security And Privacy Checks
 
-- [ ] Enforce upload size limits.
-- [ ] Restrict accepted file extensions and MIME hints.
-- [ ] Never display raw patient names, accession numbers, or IDs.
-- [ ] Add a parser-side PHI warning when DICOM tags likely contain identifying
+- [x] Enforce upload size limits.
+- [x] Restrict accepted file extensions and MIME hints.
+- [x] Never display raw patient names, accession numbers, or IDs.
+- [x] Add a parser-side PHI warning when DICOM tags likely contain identifying
   fields.
-- [ ] Store sample files as synthetic or explicitly de-identified.
-- [ ] Keep original upload paths out of public API responses once object storage
+- [x] Store sample files as synthetic or explicitly de-identified.
+- [x] Keep original upload paths out of public API responses once object storage
   is introduced.
 
 ## Testing Plan
@@ -169,18 +176,20 @@ Backend tests:
 - [x] Synthetic NIfTI fixture generation creates a valid tiny `.nii.gz` volume.
 - [x] NIfTI parser extracts dimensions, spacing, and preview slices from the
   synthetic fixture.
-- [ ] DICOM parser extracts safe metadata from a synthetic fixture.
-- [ ] Upload rejects empty and unsupported files.
+- [x] DICOM parser extracts safe metadata from a synthetic fixture.
+- [x] Upload rejects empty and oversized files.
+- [x] Upload rejects unsupported files once the allowlist is enabled.
+- [x] DICOM parser warns about PHI-bearing tags without returning raw values.
 - [x] Slice endpoint returns derived preview pixels for ready scans.
-- [ ] Slice endpoint returns useful errors for pending, failed, and out-of-range
+- [x] Slice endpoint returns useful errors for pending, failed, and out-of-range
   scans.
-- [ ] Organization scoping still protects uploaded files.
+- [x] Organization scoping still protects uploaded files.
 
 Frontend tests/manual checks:
 
-- [ ] Upload form handles ready, processing, and failed states.
+- [x] Upload form handles ready, processing, and failed states.
 - [x] Viewer renders a derived preview slice.
-- [ ] Existing annotation creation still stores coordinates in image pixel space.
+- [x] Existing annotation creation still stores coordinates in image pixel space.
 
 ## First Implementation Sequence
 
@@ -190,16 +199,16 @@ Frontend tests/manual checks:
 4. [x] Implement NIfTI ingestion and preview PNG generation.
 5. [x] Update upload endpoint to parse `num_slices` from the file.
 6. [x] Serve derived preview PNGs from storage.
-7. [ ] Update frontend upload form and scan status UI.
-8. [ ] Add DICOM single-file parser.
-9. [ ] Add zipped DICOM series parser.
+7. [x] Update frontend upload form and scan status UI.
+8. [x] Add DICOM single-file parser.
+9. [x] Add zipped DICOM series parser.
 10. [x] Add basic window/level controls.
 
 ## Phase 2 Exit Criteria
 
-- [ ] A synthetic NIfTI upload becomes a ready scan without manual slice count.
-- [ ] A synthetic DICOM upload becomes a ready scan without manual slice count.
-- [ ] The viewer displays pixels derived from uploaded imaging files.
-- [ ] Annotations remain project-scoped and slice-indexed correctly.
-- [ ] Failed ingestion gives admins an actionable error.
-- [ ] Tests cover parser success, parser failure, and access control.
+- [x] A synthetic NIfTI upload becomes a ready scan without manual slice count.
+- [x] A synthetic DICOM upload becomes a ready scan without manual slice count.
+- [x] The viewer displays pixels derived from uploaded imaging files.
+- [x] Annotations remain project-scoped and slice-indexed correctly.
+- [x] Failed ingestion gives admins an actionable error.
+- [x] Tests cover parser success, parser failure, and access control.

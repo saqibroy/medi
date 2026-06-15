@@ -12,10 +12,8 @@ export interface Scan {
   id: string;
   project_id: string | null;
   name: string;
-  file_path: string;
   modality: Modality;
   num_slices: number;
-  storage_key: string | null;
   source_format: SourceFormat;
   ingestion_status: IngestionStatus;
   ingestion_error: string | null;

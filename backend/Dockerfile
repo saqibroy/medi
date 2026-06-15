@@ -8,6 +8,7 @@ WORKDIR /app
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
+COPY alembic.ini alembic.ini
 COPY backend backend
 
 EXPOSE 8000

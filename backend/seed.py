@@ -1,9 +1,9 @@
-"""Seed script that creates sample scans and annotations for local learning.
+"""Seed script that creates synthetic sample scans and annotations.
 
 Run `alembic upgrade head` first, then run this with `python3 -m backend.seed`
 after PostgreSQL is available. The script prints each object it creates so
 developers can see the shape of records that the frontend and ML consumers will
-receive.
+receive. The seeded scan records are synthetic placeholders, not patient data.
 """
 
 from collections import Counter
@@ -17,11 +17,12 @@ from .services.imaging_service import build_initial_scan_profile
 
 
 def seed() -> None:
-    """Create three scans and ten realistic annotations with review metadata.
+    """Create three synthetic scans and realistic annotations with review metadata.
 
     The sample data intentionally mixes labels, geometry types, confidence, and
     review states so developers can exercise QA, search, statistics, and ML
-    export endpoints without hand-entering records first.
+    export endpoints without hand-entering records first. No seeded scan points
+    to real patient imaging.
     """
 
     db = SessionLocal()

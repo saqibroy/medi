@@ -7,8 +7,10 @@ interface AnnotationListProps {
   annotations: Annotation[];
   labels: Label[];
   currentSlice: number;
+  selectedAnnotationId: string | null;
   canReview: boolean;
   canDelete: boolean;
+  onSelectAnnotation: (annotationId: string) => void;
   onDelete: (annotationId: string) => void;
   onReview: (annotationId: string, status: "approved" | "rejected") => void;
 }
@@ -19,7 +21,7 @@ const statusBadgeClass = {
   pending: "bg-amber-100 text-amber-700",
 };
 
-export function AnnotationList({ annotations, labels, currentSlice, canReview, canDelete, onDelete, onReview }: AnnotationListProps) {
+export function AnnotationList({ annotations, labels, currentSlice, selectedAnnotationId, canReview, canDelete, onSelectAnnotation, onDelete, onReview }: AnnotationListProps) {
   /** Surface saved labels and make current-slice annotations easy to spot. */
   const labelColorById = new Map(labels.map((label) => [label.id, label.color]));
 
@@ -29,7 +31,16 @@ export function AnnotationList({ annotations, labels, currentSlice, canReview, c
       {annotations.length === 0 ? <p className="text-xs text-slate-500">No annotations for the selected scan.</p> : null}
       <div className="space-y-2">
         {annotations.map((annotation) => (
-          <article key={annotation.id} className={`rounded-md border p-3 text-sm ${annotation.slice_index === currentSlice ? "border-teal-500 bg-teal-50" : "border-slate-200"}`}>
+          <article
+            key={annotation.id}
+            className={`cursor-pointer rounded-md border p-3 text-sm ${annotation.id === selectedAnnotationId ? "border-orange-500 bg-orange-50" : annotation.slice_index === currentSlice ? "border-teal-500 bg-teal-50" : "border-slate-200"}`}
+            onClick={() => onSelectAnnotation(annotation.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") onSelectAnnotation(annotation.id);
+            }}
+            role="button"
+            tabIndex={0}
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">

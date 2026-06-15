@@ -53,11 +53,16 @@ export function useScan(projectId?: string, token?: string) {
     let isMounted = true;
     setIsLoading(true);
     setError(null);
+    setSliceImage(null);
     getScanSlice(selectedScan.id, sliceIndex, token)
       .then((image) => {
         if (isMounted) setSliceImage(image);
       })
-      .catch((apiError: Error) => setError(apiError.message))
+      .catch((apiError: Error) => {
+        if (!isMounted) return;
+        setSliceImage(null);
+        setError(apiError.message);
+      })
       .finally(() => setIsLoading(false));
     return () => {
       isMounted = false;

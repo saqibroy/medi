@@ -32,7 +32,7 @@ security review, compliance, and integrations are much slower.
 
 Goal: turn the current learning app into a credible product MVP.
 
-Status: in progress.
+Status: complete.
 
 Backend:
 
@@ -66,7 +66,7 @@ Frontend:
 - [x] Add project-scoped scan creation UI for placeholder scan records.
 - [x] Add scan file upload UI scoped to projects.
 - [x] Split heavy viewer dependencies from the initial app bundle.
-- [ ] Add real DICOM/NIfTI parsing and rendering.
+- [x] Add real DICOM/NIfTI parsing and rendering.
 
 Business:
 
@@ -79,28 +79,28 @@ Business:
 
 Goal: support useful research datasets rather than generated placeholder slices.
 
-- Add upload pipeline for image series.
-- Add DICOM or NIfTI ingestion.
-- Parse metadata needed for display and dataset management.
-- Store files outside the application directory, preferably behind an object
+- [x] Add upload pipeline for image series.
+- [x] Add DICOM or NIfTI ingestion.
+- [x] Parse metadata needed for display and dataset management.
+- [ ] Store files outside the application directory, preferably behind an object
   storage abstraction.
-- Add window and level controls.
-- Add import validation and PHI warning checks where practical.
-- Add background processing for large studies.
+- [x] Add window and level controls.
+- [x] Add import validation and PHI warning checks where practical.
+- [ ] Add background processing for large studies.
 
 ## Phase 3: Annotation Tools
 
 Goal: make the product efficient for real labeling work.
 
-- Editable bounding boxes.
-- Polygon drawing and editing.
-- Segmentation mask workflow.
-- Undo and redo.
-- Keyboard shortcuts.
-- Annotation version history.
-- Review statuses: pending, approved, rejected, needs changes.
-- Inter-annotator agreement metrics.
-- Exports for common ML formats such as JSON, CSV, COCO, YOLO, and segmentation
+- [x] Editable bounding boxes.
+- [ ] Polygon drawing and editing.
+- [ ] Segmentation mask workflow.
+- [ ] Undo and redo.
+- [ ] Keyboard shortcuts.
+- [ ] Annotation version history.
+- [ ] Review statuses: pending, approved, rejected, needs changes.
+- [ ] Inter-annotator agreement metrics.
+- [ ] Exports for common ML formats such as JSON, CSV, COCO, YOLO, and segmentation
   training formats.
 
 ## Phase 4: Production Operations
@@ -168,5 +168,5 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Add DICOM single-file parser.
-2. Add zipped DICOM series parser.
+1. Add polygon drawing and rendering.
+2. Add polygon backend validation.

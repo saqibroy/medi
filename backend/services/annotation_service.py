@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Annotation, Label, Project, User
+from ..models import Annotation, Label, Project, Scan, User
 from ..schemas import AnnotationCreate, AnnotationReviewUpdate, AnnotationUpdate, AnnotationType, ReviewStatus
 from .scan_service import get_scan_or_404
 
@@ -41,6 +41,33 @@ def get_annotation_for_user_or_404(db: Session, annotation_id: UUID, current_use
     return annotation
 
 
+def _coordinate_number(coordinates: dict, field_name: str) -> float:
+    value = coordinates.get(field_name)
+    if not isinstance(value, (int, float)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bounding box coordinates must be numeric")
+    return float(value)
+
+
+def _validate_annotation_geometry(scan: Scan, annotation_type: str, coordinates: dict, slice_index: int) -> None:
+    """Keep annotation geometry in the selected scan's image pixel space."""
+
+    if slice_index >= scan.num_slices:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slice index out of range")
+    if annotation_type != "bounding_box":
+        return
+
+    x = _coordinate_number(coordinates, "x")
+    y = _coordinate_number(coordinates, "y")
+    width = _coordinate_number(coordinates, "width")
+    height = _coordinate_number(coordinates, "height")
+    if x < 0 or y < 0 or width <= 0 or height <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bounding box must have positive image-space dimensions")
+    if scan.width is not None and x + width > scan.width:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bounding box exceeds scan image width")
+    if scan.height is not None and y + height > scan.height:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bounding box exceeds scan image height")
+
+
 def list_annotations_for_user(db: Session, current_user: User, scan_id: UUID | None = None) -> list[Annotation]:
     """Return annotations visible to the signed-in user's organization."""
 
@@ -55,8 +82,7 @@ def create_annotation(db: Session, payload: AnnotationCreate) -> Annotation:
     """Validate the scan exists, then persist a new annotation row."""
 
     scan = get_scan_or_404(db, payload.scan_id)
-    if payload.slice_index >= scan.num_slices:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slice index out of range")
+    _validate_annotation_geometry(scan, payload.annotation_type, payload.coordinates, payload.slice_index)
     if payload.project_id is not None and scan.project_id is not None and payload.project_id != scan.project_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Annotation project does not match scan project")
     if payload.label_id is not None:
@@ -97,6 +123,13 @@ def update_annotation(db: Session, annotation_id: UUID, payload: AnnotationUpdat
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
         if annotation.project_id is not None and label.project_id != annotation.project_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Label does not belong to annotation project")
+    scan = get_scan_or_404(db, annotation.scan_id)
+    _validate_annotation_geometry(
+        scan,
+        updates.get("annotation_type", annotation.annotation_type),
+        updates.get("coordinates", annotation.coordinates),
+        updates.get("slice_index", annotation.slice_index),
+    )
     for field_name, value in updates.items():
         setattr(annotation, field_name, value)
 

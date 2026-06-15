@@ -56,9 +56,10 @@ export default function App() {
   const [isLabelsLoading, setIsLabelsLoading] = useState(false);
   const [windowCenter, setWindowCenter] = useState(600);
   const [windowWidth, setWindowWidth] = useState(1200);
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
 
   const { scans, selectedScan, sliceIndex, sliceImage, isLoading: isScansLoading, error, selectScan, addScan, setSliceIndex } = useScan(selectedProject?.id, token || undefined);
-  const { annotations, saveAnnotation, removeAnnotation, reviewExistingAnnotation } = useAnnotations(selectedScan?.id, token, user?.full_name ?? "Reviewer");
+  const { annotations, saveAnnotation, updateExistingAnnotation, removeAnnotation, reviewExistingAnnotation } = useAnnotations(selectedScan?.id, token, user?.full_name ?? "Reviewer");
   const selectedLabel = useMemo(() => labels.find((label) => label.id === selectedLabelId) ?? labels[0] ?? null, [labels, selectedLabelId]);
   const canManageWorkspace = user?.role === "admin";
   const canAnnotate = user?.role === "admin" || user?.role === "annotator";
@@ -79,7 +80,11 @@ export default function App() {
       ? "Add a scan to this project to open the viewer."
       : labels.length === 0
         ? "Add at least one label before annotation begins."
-        : "Loading selected scan...";
+        : selectedScan?.ingestion_status === "pending" || selectedScan?.ingestion_status === "processing"
+          ? "Scan ingestion is still processing."
+          : selectedScan?.ingestion_status === "failed"
+            ? selectedScan.ingestion_error ?? "Scan ingestion failed."
+            : "Loading selected scan...";
   const defaultWindowCenter = selectedScan?.window_center ?? 600;
   const defaultWindowWidth = selectedScan?.window_width ?? 1200;
 
@@ -126,7 +131,14 @@ export default function App() {
   useEffect(() => {
     setWindowCenter(defaultWindowCenter);
     setWindowWidth(defaultWindowWidth);
+    setSelectedAnnotationId(null);
   }, [defaultWindowCenter, defaultWindowWidth, selectedScan?.id]);
+
+  useEffect(() => {
+    if (!annotations.some((annotation) => annotation.id === selectedAnnotationId)) {
+      setSelectedAnnotationId(null);
+    }
+  }, [annotations, selectedAnnotationId]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -205,6 +217,13 @@ export default function App() {
     if (!token || !selectedProject) return;
     const uploaded = await uploadScan({ ...payload, project_id: selectedProject.id }, token);
     addScan(uploaded);
+  }
+
+  async function handleDeleteAnnotation(annotationId: string): Promise<void> {
+    await removeAnnotation(annotationId);
+    if (selectedAnnotationId === annotationId) {
+      setSelectedAnnotationId(null);
+    }
   }
 
   if (!user) {
@@ -312,10 +331,15 @@ export default function App() {
             annotationType={annotationType}
             createdBy={user.full_name}
             canAnnotate={canAnnotate}
+            canDeleteAnnotation={canManageWorkspace}
+            selectedAnnotationId={selectedAnnotationId}
             windowCenter={windowCenter}
             windowWidth={windowWidth}
             emptyMessage={viewerEmptyMessage}
+            onSelectAnnotation={setSelectedAnnotationId}
             onSaveAnnotation={saveAnnotation}
+            onUpdateAnnotation={updateExistingAnnotation}
+            onDeleteAnnotation={handleDeleteAnnotation}
           />
         </Suspense>
         <WindowLevelControls center={windowCenter} width={windowWidth} onCenterChange={setWindowCenter} onWidthChange={setWindowWidth} onReset={() => {
@@ -327,7 +351,7 @@ export default function App() {
       <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white">
         <ScanMetadataPanel scanId={selectedScan?.id} token={token} />
         <ExportPanel projectId={selectedProject?.id} scanId={selectedScan?.id} token={token} />
-        <AnnotationList annotations={annotations} labels={labels} currentSlice={sliceIndex} canReview={canReview} canDelete={canManageWorkspace} onDelete={removeAnnotation} onReview={reviewExistingAnnotation} />
+        <AnnotationList annotations={annotations} labels={labels} currentSlice={sliceIndex} selectedAnnotationId={selectedAnnotationId} canReview={canReview} canDelete={canManageWorkspace} onSelectAnnotation={setSelectedAnnotationId} onDelete={handleDeleteAnnotation} onReview={reviewExistingAnnotation} />
       </aside>
     </div>
   );

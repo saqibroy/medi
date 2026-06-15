@@ -50,6 +50,21 @@ export interface AnnotationCreate {
   notes?: string | null;
 }
 
+export interface AnnotationUpdate {
+  project_id?: string | null;
+  label_id?: string | null;
+  label?: string;
+  annotation_type?: AnnotationType;
+  coordinates?: Record<string, unknown> | BoundingBoxCoordinates;
+  slice_index?: number;
+  created_by?: string;
+  confidence_score?: number | null;
+  review_status?: ReviewStatus;
+  reviewer?: string | null;
+  reviewed_at?: string | null;
+  notes?: string | null;
+}
+
 export interface ExportAnnotation {
   id: string;
   label: string;

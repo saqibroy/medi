@@ -145,8 +145,6 @@ class ScanRead(ScanBase):
 
     id: UUID
     project_id: UUID | None
-    file_path: str
-    storage_key: str | None = None
     source_format: SourceFormat = "synthetic"
     ingestion_status: IngestionStatus = "ready"
     ingestion_error: str | None = None

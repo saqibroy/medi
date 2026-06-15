@@ -9,6 +9,21 @@ import type { ExportResponse } from "../types/annotation";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+async function responseError(response: Response): Promise<Error> {
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") {
+      return new Error(body.detail);
+    }
+    if (Array.isArray(body.detail)) {
+      return new Error(body.detail.map((item) => (typeof item?.msg === "string" ? item.msg : "Validation error")).join(", "));
+    }
+  } catch {
+    // Fall back to the HTTP status below when the body is not JSON.
+  }
+  return new Error(`API request failed: ${response.status} ${response.statusText}`);
+}
+
 async function request<T>(path: string, token: string, options?: RequestInit): Promise<T> {
   /** Fetch JSON and convert HTTP errors into useful exceptions for hooks. */
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -16,7 +31,7 @@ async function request<T>(path: string, token: string, options?: RequestInit): P
     ...options,
   });
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    throw await responseError(response);
   }
   return response.json() as Promise<T>;
 }
@@ -59,7 +74,7 @@ export async function uploadScan(payload: ScanUpload, token: string): Promise<Sc
     body: formData,
   });
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    throw await responseError(response);
   }
   return response.json() as Promise<Scan>;
 }

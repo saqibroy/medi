@@ -88,9 +88,17 @@ async def upload_scan(
         modality=modality,
         num_slices=num_slices,
         original_filename=file.filename or "uploaded-scan",
+        content_type=file.content_type,
         content=content,
         current_user=current_user,
     )
+
+
+@router.post("/{scan_id}/reprocess", response_model=ScanRead)
+async def reprocess_scan(scan_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_admin)) -> ScanRead:
+    """Retry parsing a failed uploaded scan from its stored original file."""
+
+    return scan_service.reprocess_scan_for_user(db, scan_id, current_user)
 
 
 @router.get("/{scan_id}/annotations", response_model=list[AnnotationRead])
