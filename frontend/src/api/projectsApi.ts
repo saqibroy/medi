@@ -42,6 +42,18 @@ export async function exportProjectForMl(projectId: string, token: string): Prom
   return request<ProjectExportResponse>(`/projects/${projectId}/export`, token);
 }
 
+export async function exportProjectAsCoco(projectId: string, token: string): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(`/projects/${projectId}/export/coco`, token);
+}
+
+export async function exportProjectAsCsv(projectId: string, token: string): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(`/projects/${projectId}/export/csv`, token);
+}
+
+export async function exportProjectAsYolo(projectId: string, token: string): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(`/projects/${projectId}/export/yolo`, token);
+}
+
 export async function createProjectLabel(projectId: string, token: string, payload: Pick<Label, "name" | "color" | "description">): Promise<Label> {
   return request<Label>(`/projects/${projectId}/labels`, token, { method: "POST", body: JSON.stringify(payload) });
 }

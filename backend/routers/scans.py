@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import AnnotationRead, Modality, ScanCreate, ScanExportRead, ScanMetadataRead, ScanRead, ScanStatsRead, SliceDicomMetadataRead, SliceRead
+from ..schemas import AnnotationRead, CocoExportRead, CsvExportRead, Modality, ScanCreate, ScanExportRead, ScanMetadataRead, ScanRead, ScanStatsRead, SliceDicomMetadataRead, SliceRead, YoloExportRead
 from ..security import get_current_user, require_admin
 from ..services import annotation_service, scan_service
 
@@ -115,6 +115,30 @@ async def export_scan_annotations(scan_id: UUID, db: Session = Depends(get_db), 
 
     scan_service.get_scan_for_user_or_404(db, scan_id, current_user)
     return scan_service.export_scan_annotations(db, scan_id)
+
+
+@router.get("/{scan_id}/export/coco", response_model=CocoExportRead)
+async def export_scan_coco(scan_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> CocoExportRead:
+    """Return approved scan bounding boxes in COCO format."""
+
+    scan_service.get_scan_for_user_or_404(db, scan_id, current_user)
+    return scan_service.export_scan_coco(db, scan_id)
+
+
+@router.get("/{scan_id}/export/csv", response_model=CsvExportRead)
+async def export_scan_csv(scan_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> CsvExportRead:
+    """Return scan annotations as spreadsheet-friendly CSV."""
+
+    scan_service.get_scan_for_user_or_404(db, scan_id, current_user)
+    return scan_service.export_scan_csv(db, scan_id)
+
+
+@router.get("/{scan_id}/export/yolo", response_model=YoloExportRead)
+async def export_scan_yolo(scan_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> YoloExportRead:
+    """Return approved scan bounding boxes in YOLO format."""
+
+    scan_service.get_scan_for_user_or_404(db, scan_id, current_user)
+    return scan_service.export_scan_yolo(db, scan_id)
 
 
 @router.get("/{scan_id}/stats", response_model=ScanStatsRead)

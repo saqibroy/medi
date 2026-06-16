@@ -6,13 +6,22 @@
  */
 
 export type AnnotationType = "bounding_box" | "polygon" | "segmentation";
-export type ReviewStatus = "pending" | "approved" | "rejected";
+export type ReviewStatus = "pending" | "approved" | "rejected" | "needs_changes";
 
 export interface BoundingBoxCoordinates {
   x: number;
   y: number;
   width: number;
   height: number;
+}
+
+export interface PolygonPoint {
+  x: number;
+  y: number;
+}
+
+export interface PolygonCoordinates {
+  points: PolygonPoint[];
 }
 
 export interface Annotation {

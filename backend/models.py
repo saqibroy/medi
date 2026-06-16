@@ -123,7 +123,7 @@ class Annotation(Base):
     __tablename__ = "annotations"
     __table_args__ = (
         CheckConstraint("confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)", name="ck_annotation_confidence_score_range"),
-        CheckConstraint("review_status IN ('pending', 'approved', 'rejected')", name="ck_annotation_review_status"),
+        CheckConstraint("review_status IN ('pending', 'approved', 'rejected', 'needs_changes')", name="ck_annotation_review_status"),
     )
 
     # Separate UUID lets annotations be shared, updated, or deleted directly.
@@ -165,3 +165,24 @@ class Annotation(Base):
     scan: Mapped[Scan] = relationship(back_populates="annotations")
     project: Mapped[Project | None] = relationship(back_populates="annotations")
     label_ref: Mapped[Label | None] = relationship(back_populates="annotations")
+    history_entries: Mapped[list["AnnotationHistory"]] = relationship(
+        back_populates="annotation",
+        cascade="all, delete-orphan",
+    )
+
+
+class AnnotationHistory(Base):
+    """Append-only audit record for annotation edits and review changes."""
+
+    __tablename__ = "annotation_history"
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    annotation_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("annotations.id", ondelete="CASCADE"), nullable=False, index=True)
+    changed_by_user_id: Mapped[PythonUUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    action: Mapped[str] = mapped_column(String(60), nullable=False)
+    changed_fields: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    previous_values: Mapped[dict] = mapped_column(JSON, nullable=False)
+    new_values: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    annotation: Mapped[Annotation] = relationship(back_populates="history_entries")

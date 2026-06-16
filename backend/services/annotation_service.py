@@ -7,9 +7,25 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Annotation, Label, Project, Scan, User
+from ..models import Annotation, AnnotationHistory, Label, Project, Scan, User
 from ..schemas import AnnotationCreate, AnnotationReviewUpdate, AnnotationUpdate, AnnotationType, ReviewStatus
 from .scan_service import get_scan_or_404
+
+
+AUDITED_UPDATE_FIELDS = (
+    "project_id",
+    "label_id",
+    "label",
+    "annotation_type",
+    "coordinates",
+    "slice_index",
+    "created_by",
+    "confidence_score",
+    "review_status",
+    "reviewer",
+    "reviewed_at",
+    "notes",
+)
 
 
 def list_annotations(db: Session, scan_id: UUID | None = None) -> list[Annotation]:
@@ -41,6 +57,48 @@ def get_annotation_for_user_or_404(db: Session, annotation_id: UUID, current_use
     return annotation
 
 
+def _history_value(value: object) -> object:
+    """Convert ORM values to JSON-safe audit payloads."""
+
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, list):
+        return [_history_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _history_value(item) for key, item in value.items()}
+    return value
+
+
+def _audit_changes(annotation: Annotation, updates: dict, changed_by_user: User | None, action: str) -> AnnotationHistory | None:
+    previous_values = {}
+    new_values = {}
+
+    for field_name, value in updates.items():
+        if field_name not in AUDITED_UPDATE_FIELDS:
+            continue
+        previous = _history_value(getattr(annotation, field_name))
+        new = _history_value(value)
+        if previous == new:
+            continue
+        previous_values[field_name] = previous
+        new_values[field_name] = new
+
+    if not previous_values:
+        return None
+
+    return AnnotationHistory(
+        annotation_id=annotation.id,
+        changed_by_user_id=changed_by_user.id if changed_by_user is not None else None,
+        action=action,
+        changed_fields=sorted(previous_values),
+        previous_values=previous_values,
+        new_values=new_values,
+        created_at=datetime.now(timezone.utc),
+    )
+
+
 def _coordinate_number(coordinates: dict, field_name: str) -> float:
     value = coordinates.get(field_name)
     if not isinstance(value, (int, float)):
@@ -48,11 +106,34 @@ def _coordinate_number(coordinates: dict, field_name: str) -> float:
     return float(value)
 
 
+def _validate_polygon_geometry(scan: Scan, coordinates: dict) -> None:
+    points = coordinates.get("points")
+    if not isinstance(points, list) or len(points) < 3:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon coordinates must include at least three points")
+
+    for point in points:
+        if not isinstance(point, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon points must be objects with numeric x and y values")
+        x = point.get("x")
+        y = point.get("y")
+        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon points must be objects with numeric x and y values")
+        if x < 0 or y < 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon points must be inside image pixel space")
+        if scan.width is not None and x > scan.width:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon point exceeds scan image width")
+        if scan.height is not None and y > scan.height:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon point exceeds scan image height")
+
+
 def _validate_annotation_geometry(scan: Scan, annotation_type: str, coordinates: dict, slice_index: int) -> None:
     """Keep annotation geometry in the selected scan's image pixel space."""
 
     if slice_index >= scan.num_slices:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slice index out of range")
+    if annotation_type == "polygon":
+        _validate_polygon_geometry(scan, coordinates)
+        return
     if annotation_type != "bounding_box":
         return
 
@@ -112,7 +193,7 @@ def create_annotation_for_user(db: Session, payload: AnnotationCreate, current_u
     return create_annotation(db, payload)
 
 
-def update_annotation(db: Session, annotation_id: UUID, payload: AnnotationUpdate) -> Annotation:
+def update_annotation(db: Session, annotation_id: UUID, payload: AnnotationUpdate, changed_by_user: User | None = None) -> Annotation:
     """Patch editable annotation fields and commit the transaction."""
 
     annotation = get_annotation_or_404(db, annotation_id)
@@ -130,8 +211,13 @@ def update_annotation(db: Session, annotation_id: UUID, payload: AnnotationUpdat
         updates.get("coordinates", annotation.coordinates),
         updates.get("slice_index", annotation.slice_index),
     )
+    history = _audit_changes(annotation, updates, changed_by_user, "updated")
     for field_name, value in updates.items():
         setattr(annotation, field_name, value)
+    if changed_by_user is not None:
+        annotation.updated_by_user_id = changed_by_user.id
+    if history is not None:
+        db.add(history)
 
     db.commit()
     db.refresh(annotation)
@@ -142,10 +228,10 @@ def update_annotation_for_user(db: Session, annotation_id: UUID, payload: Annota
     """Patch an annotation after checking organization access."""
 
     get_annotation_for_user_or_404(db, annotation_id, current_user)
-    return update_annotation(db, annotation_id, payload)
+    return update_annotation(db, annotation_id, payload, current_user)
 
 
-def review_annotation(db: Session, annotation_id: UUID, payload: AnnotationReviewUpdate) -> Annotation:
+def review_annotation(db: Session, annotation_id: UUID, payload: AnnotationReviewUpdate, changed_by_user: User | None = None) -> Annotation:
     """Record a QA review decision for one annotation.
 
     A review step exists because labels often become ML training data, and a
@@ -154,10 +240,24 @@ def review_annotation(db: Session, annotation_id: UUID, payload: AnnotationRevie
     """
 
     annotation = get_annotation_or_404(db, annotation_id)
+    reviewed_at = datetime.now(timezone.utc)
+    history = _audit_changes(
+        annotation,
+        {
+            "reviewer": payload.reviewer,
+            "review_status": payload.review_status,
+            "notes": payload.notes,
+            "reviewed_at": reviewed_at,
+        },
+        changed_by_user,
+        "reviewed",
+    )
     annotation.reviewer = payload.reviewer
     annotation.review_status = payload.review_status
     annotation.notes = payload.notes
-    annotation.reviewed_at = datetime.now(timezone.utc)
+    annotation.reviewed_at = reviewed_at
+    if history is not None:
+        db.add(history)
     db.commit()
     db.refresh(annotation)
     return annotation
@@ -168,7 +268,15 @@ def review_annotation_for_user(db: Session, annotation_id: UUID, payload: Annota
 
     annotation = get_annotation_for_user_or_404(db, annotation_id, current_user)
     annotation.reviewed_by_user_id = current_user.id
-    return review_annotation(db, annotation_id, payload)
+    return review_annotation(db, annotation_id, payload, current_user)
+
+
+def list_annotation_history_for_user(db: Session, annotation_id: UUID, current_user: User) -> list[AnnotationHistory]:
+    """Return audit entries for one annotation after organization scoping."""
+
+    get_annotation_for_user_or_404(db, annotation_id, current_user)
+    statement = select(AnnotationHistory).where(AnnotationHistory.annotation_id == annotation_id).order_by(AnnotationHistory.created_at.asc())
+    return list(db.scalars(statement))
 
 
 def search_annotations(

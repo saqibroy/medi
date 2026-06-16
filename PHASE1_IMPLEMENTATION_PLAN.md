@@ -295,8 +295,28 @@ CI verification:
 - Phase 3 annotation tools checklist added.
 - Phase 3 selected annotation state added to the viewer and annotation list.
 - Bounding boxes can now be moved and resized from the viewer.
+- Selected annotations can now be deleted from the viewer with admin-only controls.
+- Route tests now cover annotation delete permissions across admin, annotator,
+  reviewer, and outside-organization users.
+- Polygon annotations can now be drawn, closed, rendered, and selected in the
+  viewer.
+- Polygon route tests now reject out-of-bounds and malformed point geometry.
+- Polygon vertices can now be dragged in the viewer and saved through the
+  annotation update API.
+- Polygon update tests now reject edited points outside scan image bounds.
+- Annotation history table, migration, and API response schema added.
+- Annotation updates and reviews now record who changed what and when.
+- Route tests now cover annotation history records and organization scoping.
+- COCO and YOLO export endpoints added for approved bounding-box annotations at
+  project and scan scope.
+- Export panel now supports internal JSON, COCO, and YOLO previews.
+- Route tests now cover COCO/YOLO coordinate conversion and tenant scoping.
+- Review workflow now supports the `needs_changes` status.
+- Annotation list now has review filter tabs with counts for all, pending,
+  approved, needs changes, and rejected annotations.
+- Route tests now cover `needs_changes` review decisions and search filtering.
 
 ## Next Engineering Priorities
 
-1. Add viewer delete action with role-aware controls.
-2. Add route tests for annotation delete permissions.
+1. Add CSV export for spreadsheet review.
+2. Add review activity timestamps and notes in the annotation list.

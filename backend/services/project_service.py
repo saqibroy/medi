@@ -122,3 +122,33 @@ def export_project_annotations(db: Session, project_id: UUID, current_user: User
         "approved_count": sum(scan_export["approved_count"] for scan_export in scan_exports),
         "pending_count": sum(scan_export["pending_count"] for scan_export in scan_exports),
     }
+
+
+def export_project_coco(db: Session, project_id: UUID, current_user: User) -> dict:
+    """Return approved project bounding boxes in COCO format."""
+
+    get_project_or_404(db, project_id, current_user)
+    from .export_service import build_coco_export
+
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    return build_coco_export(db, scans, project_id=project_id)
+
+
+def export_project_csv(db: Session, project_id: UUID, current_user: User) -> dict:
+    """Return project annotations as spreadsheet-friendly CSV."""
+
+    get_project_or_404(db, project_id, current_user)
+    from .export_service import build_csv_export
+
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    return build_csv_export(db, scans, project_id=project_id)
+
+
+def export_project_yolo(db: Session, project_id: UUID, current_user: User) -> dict:
+    """Return approved project bounding boxes in YOLO format."""
+
+    get_project_or_404(db, project_id, current_user)
+    from .export_service import build_yolo_export
+
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    return build_yolo_export(db, scans, project_id=project_id)

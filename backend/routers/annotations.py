@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import AnnotationCreate, AnnotationRead, AnnotationReviewUpdate, AnnotationType, AnnotationUpdate, ReviewStatus
+from ..schemas import AnnotationCreate, AnnotationHistoryRead, AnnotationRead, AnnotationReviewUpdate, AnnotationType, AnnotationUpdate, ReviewStatus
 from ..security import get_current_user, require_admin, require_annotator, require_reviewer
 from ..services import annotation_service
 
@@ -62,6 +62,17 @@ async def get_annotation(
     """Return one annotation for detail panels or edit forms."""
 
     return annotation_service.get_annotation_for_user_or_404(db, annotation_id, current_user)
+
+
+@router.get("/{annotation_id}/history", response_model=list[AnnotationHistoryRead])
+async def list_annotation_history(
+    annotation_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AnnotationHistoryRead]:
+    """Return audit entries for one annotation."""
+
+    return annotation_service.list_annotation_history_for_user(db, annotation_id, current_user)
 
 
 @router.post("", response_model=AnnotationRead, status_code=201)

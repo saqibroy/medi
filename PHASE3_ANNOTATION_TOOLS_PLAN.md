@@ -13,8 +13,9 @@ Status: in progress.
 - Labels are project-scoped and color-coded.
 - Reviewers can approve or reject annotations.
 - Project and scan exports return JSON payloads for approved annotations.
-- Polygon and segmentation annotations exist in the API shape, but the frontend
-  does not yet provide real drawing/editing tools for them.
+- Polygon annotations can be drawn, edited, validated, rendered, and exported in
+  the internal JSON shape. Segmentation annotations exist in the API shape, but
+  the frontend does not yet provide real mask tools.
 
 ## Phase 3 Goal
 
@@ -34,12 +35,12 @@ image labels quickly enough for real research dataset preparation.
 
 ## Polygon Tools
 
-- [ ] Add polygon drawing mode.
-- [ ] Add point placement and close-polygon behavior.
-- [ ] Add vertex drag editing.
-- [ ] Validate polygon points are numeric and inside image bounds.
-- [ ] Render polygon overlays on the current slice.
-- [ ] Export polygon coordinates unchanged in image pixel space.
+- [x] Add polygon drawing mode.
+- [x] Add point placement and close-polygon behavior.
+- [x] Add vertex drag editing.
+- [x] Validate polygon points are numeric and inside image bounds.
+- [x] Render polygon overlays on the current slice.
+- [x] Export polygon coordinates unchanged in image pixel space.
 
 ## Segmentation Workflow
 
@@ -61,29 +62,30 @@ image labels quickly enough for real research dataset preparation.
 
 ## Review Workflow
 
-- [ ] Add `needs_changes` review status.
+- [x] Add `needs_changes` review status.
 - [ ] Add reviewer comments visible to annotators.
-- [ ] Add review filter tabs: all, pending, approved, rejected, needs changes.
+- [x] Add review filter tabs: all, pending, approved, rejected, needs changes.
 - [ ] Add annotation assignment/ownership field.
 - [ ] Add review activity timestamps to the UI.
 - [ ] Add review summary metrics per project and scan.
 
 ## Version History And Audit
 
-- [ ] Add annotation version model or audit table.
-- [ ] Record geometry, label, status, reviewer, and note changes.
+- [x] Add annotation version model or audit table.
+- [x] Record geometry, label, status, reviewer, and note changes.
 - [ ] Show annotation history in the UI.
-- [ ] Preserve who changed what and when.
-- [ ] Add tests that updates create history records.
+- [x] Preserve who changed what and when.
+- [x] Add tests that updates create history records.
 
 ## Export Formats
 
-- [ ] Keep current JSON export as the canonical internal format.
+- [x] Keep current JSON export as the canonical internal format.
 - [ ] Add CSV export for spreadsheet review.
-- [ ] Add COCO export for bounding boxes and polygons.
-- [ ] Add YOLO export for bounding boxes.
+- [x] Add COCO export for bounding boxes.
+- [ ] Add COCO export for polygons.
+- [x] Add YOLO export for bounding boxes.
 - [ ] Add segmentation export once mask storage is implemented.
-- [ ] Add export tests for coordinate conversion and project scoping.
+- [x] Add export tests for coordinate conversion and project scoping.
 
 ## Frontend Plan
 
@@ -98,8 +100,8 @@ image labels quickly enough for real research dataset preparation.
 
 - [ ] Harden `AnnotationUpdate` validation for every geometry type.
 - [ ] Add reusable geometry validators.
-- [ ] Add annotation history model and migration.
-- [ ] Add export service modules by format.
+- [x] Add annotation history model and migration.
+- [x] Add export service modules by format.
 - [ ] Add permission tests for edit, delete, review, and export workflows.
 - [ ] Keep all annotation queries organization-scoped.
 
@@ -108,11 +110,11 @@ image labels quickly enough for real research dataset preparation.
 Backend tests:
 
 - [x] Bounding box updates respect image bounds.
-- [ ] Polygon creation rejects out-of-bounds points.
+- [x] Polygon creation rejects out-of-bounds points.
 - [x] Annotation deletes are role-scoped.
-- [ ] Reviewer-only status changes remain enforced.
-- [ ] Export formats include only visible project data.
-- [ ] Annotation history records update events.
+- [x] Reviewer-only status changes remain enforced.
+- [x] Export formats include only visible project data.
+- [x] Annotation history records update events.
 
 Frontend/manual checks:
 
@@ -128,18 +130,20 @@ Frontend/manual checks:
 2. [x] Add bounding box select/move/resize.
 3. [x] Add API update tests for bounding box geometry.
 4. [x] Add viewer delete action with role-aware controls.
-5. [ ] Add polygon drawing and rendering.
-6. [ ] Add polygon backend validation.
-7. [ ] Add annotation history table.
-8. [ ] Add COCO and YOLO exports for boxes.
-9. [ ] Add review filter tabs and `needs_changes`.
-10. [ ] Plan segmentation mask storage before brush tools.
+5. [x] Add polygon drawing and rendering.
+6. [x] Add polygon backend validation.
+7. [x] Add polygon vertex drag editing.
+8. [x] Add annotation history table.
+9. [x] Add COCO and YOLO exports for boxes.
+10. [x] Add review filter tabs and `needs_changes`.
+11. [ ] Add CSV export for spreadsheet review.
+12. [ ] Plan segmentation mask storage before brush tools.
 
 ## Phase 3 Exit Criteria
 
 - [ ] Annotators can edit and delete bounding boxes without leaving the viewer.
 - [ ] Polygon annotations can be created, rendered, edited, and exported.
 - [ ] Geometry validation protects image pixel-space coordinates.
-- [ ] Reviewers can filter and manage annotation QA efficiently.
-- [ ] At least one common ML export format is available beyond internal JSON.
+- [x] Reviewers can filter and manage annotation QA efficiently.
+- [x] At least one common ML export format is available beyond internal JSON.
 - [ ] Tests cover edit, delete, review, export, and organization scoping.

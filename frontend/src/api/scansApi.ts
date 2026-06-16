@@ -83,3 +83,18 @@ export async function exportScanForMl(scanId: string, token: string): Promise<Ex
   /** Load the approved annotation payload that an ML pipeline would consume. */
   return request<ExportResponse>(`/scans/${scanId}/export`, token);
 }
+
+export async function exportScanAsCoco(scanId: string, token: string): Promise<Record<string, unknown>> {
+  /** Load approved bounding boxes in COCO format. */
+  return request<Record<string, unknown>>(`/scans/${scanId}/export/coco`, token);
+}
+
+export async function exportScanAsCsv(scanId: string, token: string): Promise<Record<string, unknown>> {
+  /** Load annotations in spreadsheet-friendly CSV format. */
+  return request<Record<string, unknown>>(`/scans/${scanId}/export/csv`, token);
+}
+
+export async function exportScanAsYolo(scanId: string, token: string): Promise<Record<string, unknown>> {
+  /** Load approved bounding boxes in YOLO format. */
+  return request<Record<string, unknown>>(`/scans/${scanId}/export/yolo`, token);
+}

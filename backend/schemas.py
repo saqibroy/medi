@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Modality = Literal["MRI", "CT", "PET", "Ultrasound", "XRAY"]
 AnnotationType = Literal["bounding_box", "polygon", "segmentation"]
-ReviewStatus = Literal["pending", "approved", "rejected"]
+ReviewStatus = Literal["pending", "approved", "rejected", "needs_changes"]
 UserRole = Literal["admin", "annotator", "reviewer"]
 SourceFormat = Literal["synthetic", "nifti", "dicom", "dicom_zip", "unknown"]
 IngestionStatus = Literal["pending", "processing", "ready", "failed"]
@@ -271,6 +271,21 @@ class AnnotationRead(AnnotationBase):
     updated_at: datetime
 
 
+class AnnotationHistoryRead(BaseModel):
+    """Append-only audit entry for annotation geometry, label, or review edits."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    annotation_id: UUID
+    changed_by_user_id: UUID | None = None
+    action: str
+    changed_fields: list[str]
+    previous_values: dict[str, Any]
+    new_values: dict[str, Any]
+    created_at: datetime
+
+
 class ExportAnnotationRead(BaseModel):
     """ML-ready annotation row included in a scan export."""
 
@@ -308,6 +323,82 @@ class ProjectExportRead(BaseModel):
     total_annotations: int
     approved_count: int
     pending_count: int
+
+
+class CocoImageRead(BaseModel):
+    """COCO image entry for one scan slice."""
+
+    id: int
+    file_name: str
+    width: int
+    height: int
+    scan_id: UUID
+    slice_index: int
+
+
+class CocoAnnotationRead(BaseModel):
+    """COCO bounding-box annotation in image pixel coordinates."""
+
+    id: int
+    image_id: int
+    category_id: int
+    bbox: list[float]
+    area: float
+    iscrowd: int = 0
+    source_annotation_id: UUID
+
+
+class CocoCategoryRead(BaseModel):
+    """COCO category entry derived from project labels."""
+
+    id: int
+    name: str
+
+
+class CocoExportRead(BaseModel):
+    """COCO-style export for approved bounding-box annotations."""
+
+    export_format: str = "coco"
+    project_id: UUID | None = None
+    scan_id: UUID | None = None
+    export_timestamp: datetime
+    images: list[CocoImageRead]
+    annotations: list[CocoAnnotationRead]
+    categories: list[CocoCategoryRead]
+
+
+class YoloFileRead(BaseModel):
+    """One YOLO label text file for a scan slice."""
+
+    file_name: str
+    scan_id: UUID
+    slice_index: int
+    image_width: int
+    image_height: int
+    content: str
+
+
+class YoloExportRead(BaseModel):
+    """YOLO-style export with class names and per-slice label file contents."""
+
+    export_format: str = "yolo"
+    project_id: UUID | None = None
+    scan_id: UUID | None = None
+    export_timestamp: datetime
+    classes: list[str]
+    files: list[YoloFileRead]
+
+
+class CsvExportRead(BaseModel):
+    """Spreadsheet-friendly CSV export for annotation review."""
+
+    export_format: str = "csv"
+    project_id: UUID | None = None
+    scan_id: UUID | None = None
+    export_timestamp: datetime
+    file_name: str
+    row_count: int
+    content: str
 
 
 class ScanStatsRead(BaseModel):

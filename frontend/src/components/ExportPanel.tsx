@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 
-import { exportProjectForMl } from "../api/projectsApi";
-import { exportScanForMl } from "../api/scansApi";
-import type { ExportResponse } from "../types/annotation";
-import type { ProjectExportResponse } from "../types/project";
+import { exportProjectAsCoco, exportProjectAsCsv, exportProjectAsYolo, exportProjectForMl } from "../api/projectsApi";
+import { exportScanAsCoco, exportScanAsCsv, exportScanAsYolo, exportScanForMl } from "../api/scansApi";
 
 interface ExportPanelProps {
   projectId?: string;
@@ -14,13 +12,49 @@ interface ExportPanelProps {
 }
 
 type ExportMode = "project" | "scan";
+type ExportFormat = "internal" | "csv" | "coco" | "yolo";
+type ExportData = Record<string, unknown>;
 
 export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
   /** Let developers inspect exactly what the ML team receives from the API. */
   const [mode, setMode] = useState<ExportMode>("project");
-  const [exportData, setExportData] = useState<ExportResponse | ProjectExportResponse | null>(null);
+  const [format, setFormat] = useState<ExportFormat>("internal");
+  const [exportData, setExportData] = useState<ExportData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  function metricValue(key: string): number | null {
+    const value = exportData?.[key];
+    return typeof value === "number" ? value : null;
+  }
+
+  function collectionSize(key: string): number | null {
+    const value = exportData?.[key];
+    return Array.isArray(value) ? value.length : null;
+  }
+
+  function primaryMetricLabel(): string {
+    if (format === "internal") return "Total";
+    if (format === "csv") return "Rows";
+    if (format === "coco") return "Images";
+    return "Files";
+  }
+
+  function primaryMetricValue(): number {
+    return metricValue("total_annotations") ?? metricValue("row_count") ?? collectionSize(format === "coco" ? "images" : "files") ?? 0;
+  }
+
+  function secondaryMetricLabel(): string {
+    if (format === "internal") return "Approved";
+    if (format === "csv") return "File";
+    if (format === "coco") return "Boxes";
+    return "Classes";
+  }
+
+  function secondaryMetricValue(): string | number {
+    if (format === "csv") return String(exportData?.file_name ?? "CSV");
+    return metricValue("approved_count") ?? collectionSize(format === "coco" ? "annotations" : "classes") ?? 0;
+  }
 
   async function handleExport(): Promise<void> {
     /** Fetch approved annotation data for a training pipeline handoff. */
@@ -30,8 +64,23 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = mode === "project" ? await exportProjectForMl(projectId as string, token) : await exportScanForMl(scanId as string, token);
-      setExportData(response);
+      const response =
+        mode === "project"
+          ? format === "coco"
+            ? await exportProjectAsCoco(projectId as string, token)
+            : format === "csv"
+              ? await exportProjectAsCsv(projectId as string, token)
+            : format === "yolo"
+              ? await exportProjectAsYolo(projectId as string, token)
+              : await exportProjectForMl(projectId as string, token)
+          : format === "coco"
+            ? await exportScanAsCoco(scanId as string, token)
+            : format === "csv"
+              ? await exportScanAsCsv(scanId as string, token)
+            : format === "yolo"
+              ? await exportScanAsYolo(scanId as string, token)
+              : await exportScanForMl(scanId as string, token);
+      setExportData(response as ExportData);
     } catch (apiError) {
       setError(apiError instanceof Error ? apiError.message : "Export failed");
     } finally {
@@ -50,6 +99,20 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
           Scan
         </button>
       </div>
+      <div className="mb-3 grid grid-cols-4 rounded-md border border-slate-200 bg-white p-1 text-xs font-medium">
+        <button className={`rounded px-2 py-1 ${format === "internal" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setFormat("internal")}>
+          JSON
+        </button>
+        <button className={`rounded px-2 py-1 ${format === "csv" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setFormat("csv")}>
+          CSV
+        </button>
+        <button className={`rounded px-2 py-1 ${format === "coco" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setFormat("coco")}>
+          COCO
+        </button>
+        <button className={`rounded px-2 py-1 ${format === "yolo" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setFormat("yolo")}>
+          YOLO
+        </button>
+      </div>
       {/* ML teams use this JSON to build datasets, check label quality, and feed training jobs. */}
       <button
         className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"
@@ -65,16 +128,16 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
         <div className="mt-3 space-y-3 text-sm">
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-md bg-white p-2">
-              <p className="text-xs text-slate-500">Total</p>
-              <p className="font-semibold text-slate-900">{exportData.total_annotations}</p>
+              <p className="text-xs text-slate-500">{primaryMetricLabel()}</p>
+              <p className="font-semibold text-slate-900">{primaryMetricValue()}</p>
             </div>
             <div className="rounded-md bg-white p-2">
-              <p className="text-xs text-slate-500">Approved</p>
-              <p className="font-semibold text-emerald-700">{exportData.approved_count}</p>
+              <p className="text-xs text-slate-500">{secondaryMetricLabel()}</p>
+              <p className="truncate font-semibold text-emerald-700">{secondaryMetricValue()}</p>
             </div>
             <div className="rounded-md bg-white p-2">
-              <p className="text-xs text-slate-500">Pending</p>
-              <p className="font-semibold text-amber-700">{exportData.pending_count}</p>
+              <p className="text-xs text-slate-500">{format === "internal" ? "Pending" : "Format"}</p>
+              <p className="font-semibold text-amber-700">{metricValue("pending_count") ?? String(exportData.export_format ?? format)}</p>
             </div>
           </div>
           <pre className="max-h-56 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(exportData, null, 2)}</pre>

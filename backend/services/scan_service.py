@@ -363,6 +363,33 @@ def export_scan_annotations(db: Session, scan_id: UUID) -> dict:
     }
 
 
+def export_scan_coco(db: Session, scan_id: UUID) -> dict:
+    """Return approved scan bounding boxes in COCO format."""
+
+    scan = get_scan_or_404(db, scan_id)
+    from .export_service import build_coco_export
+
+    return build_coco_export(db, [scan], project_id=scan.project_id, scan_id=scan.id)
+
+
+def export_scan_csv(db: Session, scan_id: UUID) -> dict:
+    """Return scan annotations as spreadsheet-friendly CSV."""
+
+    scan = get_scan_or_404(db, scan_id)
+    from .export_service import build_csv_export
+
+    return build_csv_export(db, [scan], project_id=scan.project_id, scan_id=scan.id)
+
+
+def export_scan_yolo(db: Session, scan_id: UUID) -> dict:
+    """Return approved scan bounding boxes in YOLO format."""
+
+    scan = get_scan_or_404(db, scan_id)
+    from .export_service import build_yolo_export
+
+    return build_yolo_export(db, [scan], project_id=scan.project_id, scan_id=scan.id)
+
+
 def get_scan_annotation_stats(db: Session, scan_id: UUID) -> dict:
     """Return annotation distribution metrics for one scan.
 
@@ -379,7 +406,7 @@ def get_scan_annotation_stats(db: Session, scan_id: UUID) -> dict:
         "annotations_by_type": dict(Counter(annotation.annotation_type for annotation in annotations)),
         "annotations_by_status": {
             status_name: Counter(annotation.review_status for annotation in annotations).get(status_name, 0)
-            for status_name in ("pending", "approved", "rejected")
+            for status_name in ("pending", "approved", "rejected", "needs_changes")
         },
         "slices_with_annotations": sorted({annotation.slice_index for annotation in annotations}),
         "radiologists_involved": sorted({annotation.created_by for annotation in annotations}),

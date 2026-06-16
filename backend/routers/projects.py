@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectUpdate, ScanRead
+from ..schemas import CocoExportRead, CsvExportRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectUpdate, ScanRead, YoloExportRead
 from ..security import get_current_user, require_admin
 from ..services import project_service, scan_service
 
@@ -71,6 +71,27 @@ async def export_project(project_id: UUID, db: Session = Depends(get_db), curren
     """Export reviewed annotation data across every scan in a project."""
 
     return project_service.export_project_annotations(db, project_id, current_user)
+
+
+@router.get("/projects/{project_id}/export/coco", response_model=CocoExportRead)
+async def export_project_coco(project_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> CocoExportRead:
+    """Export approved project bounding boxes in COCO format."""
+
+    return project_service.export_project_coco(db, project_id, current_user)
+
+
+@router.get("/projects/{project_id}/export/csv", response_model=CsvExportRead)
+async def export_project_csv(project_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> CsvExportRead:
+    """Export project annotations as spreadsheet-friendly CSV."""
+
+    return project_service.export_project_csv(db, project_id, current_user)
+
+
+@router.get("/projects/{project_id}/export/yolo", response_model=YoloExportRead)
+async def export_project_yolo(project_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> YoloExportRead:
+    """Export approved project bounding boxes in YOLO format."""
+
+    return project_service.export_project_yolo(db, project_id, current_user)
 
 
 @router.post("/projects/{project_id}/labels", response_model=LabelRead, status_code=201)

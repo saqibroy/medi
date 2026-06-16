@@ -93,12 +93,12 @@ Goal: support useful research datasets rather than generated placeholder slices.
 Goal: make the product efficient for real labeling work.
 
 - [x] Editable bounding boxes.
-- [ ] Polygon drawing and editing.
+- [x] Polygon drawing and editing.
 - [ ] Segmentation mask workflow.
 - [ ] Undo and redo.
 - [ ] Keyboard shortcuts.
-- [ ] Annotation version history.
-- [ ] Review statuses: pending, approved, rejected, needs changes.
+- [x] Annotation version history.
+- [x] Review statuses: pending, approved, rejected, needs changes.
 - [ ] Inter-annotator agreement metrics.
 - [ ] Exports for common ML formats such as JSON, CSV, COCO, YOLO, and segmentation
   training formats.
@@ -168,5 +168,5 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Add polygon drawing and rendering.
-2. Add polygon backend validation.
+1. Add CSV export for spreadsheet review.
+2. Add review activity timestamps and notes in the annotation list.
