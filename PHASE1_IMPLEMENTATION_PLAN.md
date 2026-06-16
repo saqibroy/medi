@@ -315,8 +315,32 @@ CI verification:
 - Annotation list now has review filter tabs with counts for all, pending,
   approved, needs changes, and rejected annotations.
 - Route tests now cover `needs_changes` review decisions and search filtering.
+- CSV export endpoints added for spreadsheet review at project and scan scope.
+- Export panel now supports CSV previews alongside JSON, COCO, and YOLO.
+- Route tests now cover CSV content, row counts, review statuses, and tenant scoping.
+- Annotation list now shows created, updated, reviewed timestamps, reviewer,
+  and review notes.
+- Selected annotations now show their audit history in the right panel.
+- Keyboard shortcuts added for box/polygon tools, label cycling, slice navigation,
+  selected-annotation review decisions, draft cancel, and polygon finish.
+- Segmentation mask storage plan added with binary PNG masks, tenant-scoped
+  object keys, dedicated mask metadata table, mask API shape, and export path.
+- Production storage plan now includes segmentation mask object keys and storage
+  interface methods.
+- Viewer geometry edits now support undo and redo for bounding-box move/resize
+  and polygon vertex drag changes.
+- Local segmentation brush, eraser, clear, and opacity controls added in the
+  viewer using an offscreen mask canvas.
+- Backend segmentation mask metadata table, migration, local PNG storage
+  service, upload/read/delete endpoints, and route tests added.
+- Frontend segmentation masks can now be saved, loaded, and deleted through the
+  mask API from the viewer.
+- Segmentation mask manifest export added at project and scan scope, with CSV
+  mask metadata columns for training-data handoff.
+- Segmentation mask brush and clear actions now support local undo/redo
+  snapshots in the viewer.
 
 ## Next Engineering Priorities
 
-1. Add CSV export for spreadsheet review.
-2. Add review activity timestamps and notes in the annotation list.
+1. Add COCO export for polygon annotations.
+2. Add annotation edit panel for label/status/notes.

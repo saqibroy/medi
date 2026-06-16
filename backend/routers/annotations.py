@@ -2,14 +2,25 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import AnnotationCreate, AnnotationHistoryRead, AnnotationRead, AnnotationReviewUpdate, AnnotationType, AnnotationUpdate, ReviewStatus
+from ..schemas import (
+    AnnotationCreate,
+    AnnotationHistoryRead,
+    AnnotationRead,
+    AnnotationReviewUpdate,
+    AnnotationType,
+    AnnotationUpdate,
+    ReviewStatus,
+    SegmentationMaskImageRead,
+    SegmentationMaskRead,
+)
 from ..security import get_current_user, require_admin, require_annotator, require_reviewer
 from ..services import annotation_service
+from ..services import segmentation_mask_service
 
 
 router = APIRouter(prefix="/annotations", tags=["annotations"])
@@ -73,6 +84,45 @@ async def list_annotation_history(
     """Return audit entries for one annotation."""
 
     return annotation_service.list_annotation_history_for_user(db, annotation_id, current_user)
+
+
+@router.post("/{annotation_id}/mask", response_model=SegmentationMaskRead, status_code=201)
+async def upload_segmentation_mask(
+    annotation_id: UUID,
+    slice_index: int = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_annotator),
+) -> SegmentationMaskRead:
+    """Create or replace a PNG segmentation mask for one annotation slice."""
+
+    content = await file.read()
+    return segmentation_mask_service.upload_mask_for_user(db, annotation_id, slice_index, content, current_user)
+
+
+@router.get("/{annotation_id}/mask/{slice_index}", response_model=SegmentationMaskImageRead)
+async def get_segmentation_mask(
+    annotation_id: UUID,
+    slice_index: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SegmentationMaskImageRead:
+    """Return a stored segmentation mask as base64 PNG bytes."""
+
+    return segmentation_mask_service.get_mask_image_for_user(db, annotation_id, slice_index, current_user)
+
+
+@router.delete("/{annotation_id}/mask/{slice_index}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_segmentation_mask(
+    annotation_id: UUID,
+    slice_index: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_annotator),
+) -> Response:
+    """Delete one segmentation mask without deleting the annotation row."""
+
+    segmentation_mask_service.delete_mask_for_user(db, annotation_id, slice_index, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("", response_model=AnnotationRead, status_code=201)

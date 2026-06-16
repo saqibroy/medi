@@ -4,7 +4,7 @@
  * the full flow from API data to viewer state to saved annotation overlays.
  */
 
-import { FormEvent, Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
 import { getMe, login } from "./api/authApi";
 import { createProject, createProjectLabel, deleteProjectLabel, listProjectLabels, listProjects, updateProject, updateProjectLabel } from "./api/projectsApi";
@@ -59,7 +59,20 @@ export default function App() {
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
 
   const { scans, selectedScan, sliceIndex, sliceImage, isLoading: isScansLoading, error, selectScan, addScan, setSliceIndex } = useScan(selectedProject?.id, token || undefined);
-  const { annotations, saveAnnotation, updateExistingAnnotation, removeAnnotation, reviewExistingAnnotation } = useAnnotations(selectedScan?.id, token, user?.full_name ?? "Reviewer");
+  const {
+    annotations,
+    annotationHistory,
+    historyError,
+    isHistoryLoading,
+    loadAnnotationHistory,
+    saveAnnotation,
+    updateExistingAnnotation,
+    removeAnnotation,
+    reviewExistingAnnotation,
+    saveSegmentationMask,
+    loadSegmentationMask,
+    removeSegmentationMask,
+  } = useAnnotations(selectedScan?.id, token, user?.full_name ?? "Reviewer");
   const selectedLabel = useMemo(() => labels.find((label) => label.id === selectedLabelId) ?? labels[0] ?? null, [labels, selectedLabelId]);
   const canManageWorkspace = user?.role === "admin";
   const canAnnotate = user?.role === "admin" || user?.role === "annotator";
@@ -139,6 +152,10 @@ export default function App() {
       setSelectedAnnotationId(null);
     }
   }, [annotations, selectedAnnotationId]);
+
+  useEffect(() => {
+    void loadAnnotationHistory(selectedAnnotationId);
+  }, [annotations, loadAnnotationHistory, selectedAnnotationId]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -225,6 +242,74 @@ export default function App() {
       setSelectedAnnotationId(null);
     }
   }
+
+  const selectAdjacentLabel = useCallback(
+    (direction: 1 | -1): void => {
+      if (labels.length === 0) return;
+      const currentIndex = Math.max(0, labels.findIndex((label) => label.id === selectedLabelId));
+      const nextIndex = (currentIndex + direction + labels.length) % labels.length;
+      setSelectedLabelId(labels[nextIndex].id);
+    },
+    [labels, selectedLabelId],
+  );
+
+  useEffect(() => {
+    if (!user) return;
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      const target = event.target as HTMLElement | null;
+      if (target && (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+
+      const selectedAnnotation = annotations.find((annotation) => annotation.id === selectedAnnotationId);
+      if (event.key === "b" || event.key === "B") {
+        event.preventDefault();
+        setAnnotationType("bounding_box");
+        return;
+      }
+      if (event.key === "p" || event.key === "P") {
+        event.preventDefault();
+        setAnnotationType("polygon");
+        return;
+      }
+      if (event.key === "[") {
+        event.preventDefault();
+        selectAdjacentLabel(-1);
+        return;
+      }
+      if (event.key === "]") {
+        event.preventDefault();
+        selectAdjacentLabel(1);
+        return;
+      }
+      if (event.key === "ArrowLeft" && selectedScan) {
+        event.preventDefault();
+        setSliceIndex(Math.max(0, sliceIndex - 1));
+        return;
+      }
+      if (event.key === "ArrowRight" && selectedScan) {
+        event.preventDefault();
+        setSliceIndex(Math.min(Math.max(selectedScan.num_slices - 1, 0), sliceIndex + 1));
+        return;
+      }
+      if (!canReview || !selectedAnnotation) return;
+      if (event.key === "a" || event.key === "A") {
+        event.preventDefault();
+        void reviewExistingAnnotation(selectedAnnotation.id, "approved");
+      }
+      if (event.key === "n" || event.key === "N") {
+        event.preventDefault();
+        void reviewExistingAnnotation(selectedAnnotation.id, "needs_changes");
+      }
+      if (event.key === "r" || event.key === "R") {
+        event.preventDefault();
+        void reviewExistingAnnotation(selectedAnnotation.id, "rejected");
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [annotations, canReview, reviewExistingAnnotation, selectAdjacentLabel, selectedAnnotationId, selectedScan, setSliceIndex, sliceIndex, user]);
 
   if (!user) {
     return (
@@ -340,6 +425,9 @@ export default function App() {
             onSaveAnnotation={saveAnnotation}
             onUpdateAnnotation={updateExistingAnnotation}
             onDeleteAnnotation={handleDeleteAnnotation}
+            onSaveMask={saveSegmentationMask}
+            onLoadMask={loadSegmentationMask}
+            onDeleteMask={removeSegmentationMask}
           />
         </Suspense>
         <WindowLevelControls center={windowCenter} width={windowWidth} onCenterChange={setWindowCenter} onWidthChange={setWindowWidth} onReset={() => {
@@ -351,7 +439,20 @@ export default function App() {
       <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white">
         <ScanMetadataPanel scanId={selectedScan?.id} token={token} />
         <ExportPanel projectId={selectedProject?.id} scanId={selectedScan?.id} token={token} />
-        <AnnotationList annotations={annotations} labels={labels} currentSlice={sliceIndex} selectedAnnotationId={selectedAnnotationId} canReview={canReview} canDelete={canManageWorkspace} onSelectAnnotation={setSelectedAnnotationId} onDelete={handleDeleteAnnotation} onReview={reviewExistingAnnotation} />
+        <AnnotationList
+          annotations={annotations}
+          annotationHistory={annotationHistory}
+          historyError={historyError}
+          isHistoryLoading={isHistoryLoading}
+          labels={labels}
+          currentSlice={sliceIndex}
+          selectedAnnotationId={selectedAnnotationId}
+          canReview={canReview}
+          canDelete={canManageWorkspace}
+          onSelectAnnotation={setSelectedAnnotationId}
+          onDelete={handleDeleteAnnotation}
+          onReview={reviewExistingAnnotation}
+        />
       </aside>
     </div>
   );

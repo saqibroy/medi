@@ -98,3 +98,8 @@ export async function exportScanAsYolo(scanId: string, token: string): Promise<R
   /** Load approved bounding boxes in YOLO format. */
   return request<Record<string, unknown>>(`/scans/${scanId}/export/yolo`, token);
 }
+
+export async function exportScanAsSegmentation(scanId: string, token: string): Promise<Record<string, unknown>> {
+  /** Load approved segmentation masks as a training manifest. */
+  return request<Record<string, unknown>>(`/scans/${scanId}/export/segmentation`, token);
+}

@@ -43,6 +43,38 @@ export interface Annotation {
   updated_at: string;
 }
 
+export interface AnnotationHistory {
+  id: string;
+  annotation_id: string;
+  changed_by_user_id: string | null;
+  action: string;
+  changed_fields: string[];
+  previous_values: Record<string, unknown>;
+  new_values: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SegmentationMask {
+  id: string;
+  annotation_id: string;
+  project_id: string;
+  scan_id: string;
+  slice_index: number;
+  width: number;
+  height: number;
+  encoding: string;
+  byte_size: number;
+  checksum_sha256: string;
+  created_by_user_id: string;
+  updated_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SegmentationMaskImage extends SegmentationMask {
+  mask_base64: string;
+}
+
 export interface AnnotationCreate {
   project_id?: string | null;
   scan_id: string;

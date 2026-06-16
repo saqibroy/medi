@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-import { exportProjectAsCoco, exportProjectAsCsv, exportProjectAsYolo, exportProjectForMl } from "../api/projectsApi";
-import { exportScanAsCoco, exportScanAsCsv, exportScanAsYolo, exportScanForMl } from "../api/scansApi";
+import { exportProjectAsCoco, exportProjectAsCsv, exportProjectAsSegmentation, exportProjectAsYolo, exportProjectForMl } from "../api/projectsApi";
+import { exportScanAsCoco, exportScanAsCsv, exportScanAsSegmentation, exportScanAsYolo, exportScanForMl } from "../api/scansApi";
 
 interface ExportPanelProps {
   projectId?: string;
@@ -12,7 +12,7 @@ interface ExportPanelProps {
 }
 
 type ExportMode = "project" | "scan";
-type ExportFormat = "internal" | "csv" | "coco" | "yolo";
+type ExportFormat = "internal" | "csv" | "coco" | "yolo" | "segmentation";
 type ExportData = Record<string, unknown>;
 
 export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
@@ -37,22 +37,25 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
     if (format === "internal") return "Total";
     if (format === "csv") return "Rows";
     if (format === "coco") return "Images";
+    if (format === "segmentation") return "Masks";
     return "Files";
   }
 
   function primaryMetricValue(): number {
-    return metricValue("total_annotations") ?? metricValue("row_count") ?? collectionSize(format === "coco" ? "images" : "files") ?? 0;
+    return metricValue("total_annotations") ?? metricValue("row_count") ?? metricValue("mask_count") ?? collectionSize(format === "coco" ? "images" : "files") ?? 0;
   }
 
   function secondaryMetricLabel(): string {
     if (format === "internal") return "Approved";
     if (format === "csv") return "File";
     if (format === "coco") return "Boxes";
+    if (format === "segmentation") return "Available";
     return "Classes";
   }
 
   function secondaryMetricValue(): string | number {
     if (format === "csv") return String(exportData?.file_name ?? "CSV");
+    if (format === "segmentation") return metricValue("available_mask_count") ?? 0;
     return metricValue("approved_count") ?? collectionSize(format === "coco" ? "annotations" : "classes") ?? 0;
   }
 
@@ -72,6 +75,8 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
               ? await exportProjectAsCsv(projectId as string, token)
             : format === "yolo"
               ? await exportProjectAsYolo(projectId as string, token)
+            : format === "segmentation"
+              ? await exportProjectAsSegmentation(projectId as string, token)
               : await exportProjectForMl(projectId as string, token)
           : format === "coco"
             ? await exportScanAsCoco(scanId as string, token)
@@ -79,6 +84,8 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
               ? await exportScanAsCsv(scanId as string, token)
             : format === "yolo"
               ? await exportScanAsYolo(scanId as string, token)
+            : format === "segmentation"
+              ? await exportScanAsSegmentation(scanId as string, token)
               : await exportScanForMl(scanId as string, token);
       setExportData(response as ExportData);
     } catch (apiError) {
@@ -99,7 +106,7 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
           Scan
         </button>
       </div>
-      <div className="mb-3 grid grid-cols-4 rounded-md border border-slate-200 bg-white p-1 text-xs font-medium">
+      <div className="mb-3 grid grid-cols-5 rounded-md border border-slate-200 bg-white p-1 text-xs font-medium">
         <button className={`rounded px-2 py-1 ${format === "internal" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setFormat("internal")}>
           JSON
         </button>
@@ -111,6 +118,9 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
         </button>
         <button className={`rounded px-2 py-1 ${format === "yolo" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setFormat("yolo")}>
           YOLO
+        </button>
+        <button className={`rounded px-2 py-1 ${format === "segmentation" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`} onClick={() => setFormat("segmentation")}>
+          SEG
         </button>
       </div>
       {/* ML teams use this JSON to build datasets, check label quality, and feed training jobs. */}

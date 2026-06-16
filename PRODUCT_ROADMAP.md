@@ -95,8 +95,13 @@ Goal: make the product efficient for real labeling work.
 - [x] Editable bounding boxes.
 - [x] Polygon drawing and editing.
 - [ ] Segmentation mask workflow.
-- [ ] Undo and redo.
-- [ ] Keyboard shortcuts.
+- [x] Local segmentation brush, eraser, and opacity controls.
+- [x] Backend segmentation mask metadata, local PNG storage, and API endpoints.
+- [x] Frontend segmentation mask save, load, and delete-saved controls.
+- [x] Segmentation mask manifest export for training data.
+- [x] Local undo/redo snapshots for segmentation mask brush edits.
+- [x] Undo and redo.
+- [x] Keyboard shortcuts.
 - [x] Annotation version history.
 - [x] Review statuses: pending, approved, rejected, needs changes.
 - [ ] Inter-annotator agreement metrics.
@@ -168,5 +173,5 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Add CSV export for spreadsheet review.
-2. Add review activity timestamps and notes in the annotation list.
+1. Add COCO export for polygon annotations.
+2. Add annotation edit panel for label/status/notes.

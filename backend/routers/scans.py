@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import AnnotationRead, CocoExportRead, CsvExportRead, Modality, ScanCreate, ScanExportRead, ScanMetadataRead, ScanRead, ScanStatsRead, SliceDicomMetadataRead, SliceRead, YoloExportRead
+from ..schemas import AnnotationRead, CocoExportRead, CsvExportRead, Modality, ScanCreate, ScanExportRead, ScanMetadataRead, ScanRead, ScanStatsRead, SegmentationExportRead, SliceDicomMetadataRead, SliceRead, YoloExportRead
 from ..security import get_current_user, require_admin
 from ..services import annotation_service, scan_service
 
@@ -139,6 +139,14 @@ async def export_scan_yolo(scan_id: UUID, db: Session = Depends(get_db), current
 
     scan_service.get_scan_for_user_or_404(db, scan_id, current_user)
     return scan_service.export_scan_yolo(db, scan_id)
+
+
+@router.get("/{scan_id}/export/segmentation", response_model=SegmentationExportRead)
+async def export_scan_segmentation(scan_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> SegmentationExportRead:
+    """Return approved scan segmentations as a mask manifest."""
+
+    scan_service.get_scan_for_user_or_404(db, scan_id, current_user)
+    return scan_service.export_scan_segmentation(db, scan_id)
 
 
 @router.get("/{scan_id}/stats", response_model=ScanStatsRead)

@@ -22,6 +22,8 @@ Use deterministic keys that mirror the current local folder structure:
 org/{organization_id}/project/{project_id}/scan/{scan_id}/original/{filename}
 org/{organization_id}/project/{project_id}/scan/{scan_id}/derived/preview/{slice_index}.png
 org/{organization_id}/project/{project_id}/scan/{scan_id}/metadata/ingestion.json
+org/{organization_id}/project/{project_id}/scan/{scan_id}/annotations/{annotation_id}/mask/{slice_index}.png
+org/{organization_id}/project/{project_id}/scan/{scan_id}/annotations/{annotation_id}/mask/{slice_index}.metadata.json
 ```
 
 Rules:
@@ -43,6 +45,8 @@ class ScanStorage:
     def read_original(key: str) -> bytes: ...
     def write_preview(key: str, content: bytes) -> None: ...
     def read_preview(key: str) -> bytes: ...
+    def write_mask(key: str, content: bytes) -> None: ...
+    def read_mask(key: str) -> bytes: ...
     def delete_prefix(prefix: str) -> None: ...
     def signed_get_url(key: str, expires_seconds: int) -> str: ...
 ```
@@ -54,6 +58,9 @@ Initial implementations:
 
 The parser can keep writing previews through `Path` during Phase 2, but the next
 implementation step should move preview writes behind this interface.
+Segmentation masks should use the same storage abstraction so brush tools can
+write local PNG masks during development and private object-storage masks in
+production.
 
 ## Signed URLs
 
@@ -117,7 +124,7 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
 - No public response includes local filesystem paths or raw object keys.
 - Existing upload, slice, metadata, and reprocess tests pass on local storage.
 - S3 storage can upload originals, read originals for reprocess, write previews,
-  and generate signed preview URLs.
+  write segmentation masks, and generate signed preview URLs.
 - Cross-organization tests prove signed URLs cannot be created for another
   tenant's scans.
 - Docker Compose remains local-only and requires no cloud credentials.

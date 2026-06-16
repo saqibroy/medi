@@ -286,6 +286,33 @@ class AnnotationHistoryRead(BaseModel):
     created_at: datetime
 
 
+class SegmentationMaskRead(BaseModel):
+    """Metadata for a stored segmentation mask without exposing storage paths."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    annotation_id: UUID
+    project_id: UUID
+    scan_id: UUID
+    slice_index: int
+    width: int
+    height: int
+    encoding: str
+    byte_size: int
+    checksum_sha256: str
+    created_by_user_id: UUID
+    updated_by_user_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class SegmentationMaskImageRead(SegmentationMaskRead):
+    """Stored mask PNG returned as base64 for browser overlay loading."""
+
+    mask_base64: str
+
+
 class ExportAnnotationRead(BaseModel):
     """ML-ready annotation row included in a scan export."""
 
@@ -337,7 +364,7 @@ class CocoImageRead(BaseModel):
 
 
 class CocoAnnotationRead(BaseModel):
-    """COCO bounding-box annotation in image pixel coordinates."""
+    """COCO annotation in image pixel coordinates."""
 
     id: int
     image_id: int
@@ -346,6 +373,8 @@ class CocoAnnotationRead(BaseModel):
     area: float
     iscrowd: int = 0
     source_annotation_id: UUID
+    annotation_type: AnnotationType
+    segmentation: list[list[float]] | None = None
 
 
 class CocoCategoryRead(BaseModel):
@@ -356,7 +385,7 @@ class CocoCategoryRead(BaseModel):
 
 
 class CocoExportRead(BaseModel):
-    """COCO-style export for approved bounding-box annotations."""
+    """COCO-style export for approved box and polygon annotations."""
 
     export_format: str = "coco"
     project_id: UUID | None = None
@@ -399,6 +428,41 @@ class CsvExportRead(BaseModel):
     file_name: str
     row_count: int
     content: str
+
+
+class SegmentationMaskManifestItemRead(BaseModel):
+    """One segmentation mask entry for training-data packaging."""
+
+    annotation_id: UUID
+    project_id: UUID | None = None
+    scan_id: UUID
+    scan_name: str
+    slice_index: int
+    label: str
+    review_status: ReviewStatus
+    image_width: int
+    image_height: int
+    mask_available: bool
+    mask_file_name: str | None = None
+    mask_api_path: str | None = None
+    mask_width: int | None = None
+    mask_height: int | None = None
+    mask_encoding: str | None = None
+    mask_byte_size: int | None = None
+    mask_checksum_sha256: str | None = None
+
+
+class SegmentationExportRead(BaseModel):
+    """Manifest export for approved segmentation masks."""
+
+    export_format: str = "segmentation_manifest"
+    project_id: UUID | None = None
+    scan_id: UUID | None = None
+    export_timestamp: datetime
+    mask_count: int
+    available_mask_count: int
+    missing_mask_count: int
+    masks: list[SegmentationMaskManifestItemRead]
 
 
 class ScanStatsRead(BaseModel):

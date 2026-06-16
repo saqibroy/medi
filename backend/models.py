@@ -8,7 +8,7 @@ hold user-created labels tied to one scan and one slice.
 from datetime import datetime
 from uuid import UUID as PythonUUID, uuid4
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, Uuid, func
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -60,6 +60,7 @@ class Project(Base):
     labels: Mapped[list["Label"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     scans: Mapped[list["Scan"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     annotations: Mapped[list["Annotation"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    segmentation_masks: Mapped[list["SegmentationMask"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
 
 class Label(Base):
@@ -112,6 +113,10 @@ class Scan(Base):
 
     project: Mapped[Project | None] = relationship(back_populates="scans")
     annotations: Mapped[list["Annotation"]] = relationship(
+        back_populates="scan",
+        cascade="all, delete-orphan",
+    )
+    segmentation_masks: Mapped[list["SegmentationMask"]] = relationship(
         back_populates="scan",
         cascade="all, delete-orphan",
     )
@@ -169,6 +174,10 @@ class Annotation(Base):
         back_populates="annotation",
         cascade="all, delete-orphan",
     )
+    segmentation_masks: Mapped[list["SegmentationMask"]] = relationship(
+        back_populates="annotation",
+        cascade="all, delete-orphan",
+    )
 
 
 class AnnotationHistory(Base):
@@ -186,3 +195,38 @@ class AnnotationHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     annotation: Mapped[Annotation] = relationship(back_populates="history_entries")
+
+
+class SegmentationMask(Base):
+    """Metadata for a binary segmentation mask stored outside annotation JSON."""
+
+    __tablename__ = "segmentation_masks"
+    __table_args__ = (
+        UniqueConstraint("annotation_id", "slice_index", name="uq_segmentation_masks_annotation_slice"),
+        CheckConstraint("width > 0", name="ck_segmentation_mask_width_positive"),
+        CheckConstraint("height > 0", name="ck_segmentation_mask_height_positive"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    annotation_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("annotations.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
+    scan_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("scans.id"), nullable=False, index=True)
+    slice_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(700), nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    encoding: Mapped[str] = mapped_column(String(40), nullable=False, default="png_binary", server_default="png_binary")
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    updated_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    annotation: Mapped[Annotation] = relationship(back_populates="segmentation_masks")
+    project: Mapped[Project] = relationship(back_populates="segmentation_masks")
+    scan: Mapped[Scan] = relationship(back_populates="segmentation_masks")

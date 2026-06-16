@@ -325,6 +325,9 @@ def delete_annotation(db: Session, annotation_id: UUID) -> None:
     """Delete one annotation; no response body is needed for a 204."""
 
     annotation = get_annotation_or_404(db, annotation_id)
+    from .segmentation_mask_service import delete_mask_files_for_annotation
+
+    delete_mask_files_for_annotation(db, annotation)
     db.delete(annotation)
     db.commit()
 

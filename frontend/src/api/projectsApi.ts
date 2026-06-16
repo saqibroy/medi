@@ -54,6 +54,10 @@ export async function exportProjectAsYolo(projectId: string, token: string): Pro
   return request<Record<string, unknown>>(`/projects/${projectId}/export/yolo`, token);
 }
 
+export async function exportProjectAsSegmentation(projectId: string, token: string): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(`/projects/${projectId}/export/segmentation`, token);
+}
+
 export async function createProjectLabel(projectId: string, token: string, payload: Pick<Label, "name" | "color" | "description">): Promise<Label> {
   return request<Label>(`/projects/${projectId}/labels`, token, { method: "POST", body: JSON.stringify(payload) });
 }

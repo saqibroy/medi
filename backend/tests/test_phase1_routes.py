@@ -1,6 +1,8 @@
 """Route-level smoke tests for the Phase 1 API contract."""
 
+import base64
 from collections.abc import Generator
+from io import BytesIO
 from pathlib import Path
 
 import httpx
@@ -15,7 +17,7 @@ from backend.database import Base, get_db
 from backend.models import Annotation, Label, Organization, Project, Scan, User
 from backend.routers import annotations, auth, projects, scans
 from backend.security import hash_password
-from backend.services import imaging_service, scan_service
+from backend.services import imaging_service, scan_service, segmentation_mask_service
 from backend.tests.fixtures.imaging import write_synthetic_dicom, write_synthetic_dicom_zip, write_synthetic_nifti
 
 
@@ -30,6 +32,7 @@ def build_test_app(storage_root: Path) -> FastAPI:
     """Build an isolated app with an in-memory SQLite database."""
 
     scan_service.STORAGE_ROOT = storage_root
+    segmentation_mask_service.MASK_STORAGE_ROOT = storage_root / "segmentation_masks"
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -122,6 +125,12 @@ def auth_headers(token: str) -> dict[str, str]:
 def assert_scan_response_hides_storage_paths(scan: dict) -> None:
     assert "file_path" not in scan
     assert "storage_key" not in scan
+
+
+def make_png_bytes(width: int, height: int, color: int = 255) -> bytes:
+    buffer = BytesIO()
+    Image.new("L", (width, height), color=color).save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 @pytest.mark.anyio
@@ -682,6 +691,113 @@ async def test_annotation_history_records_update_and_review_events(tmp_path: Pat
 
 
 @pytest.mark.anyio
+async def test_segmentation_mask_routes_store_validate_scope_and_audit(tmp_path: Path) -> None:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
+        admin_token = await login(client, "admin@test.local")
+        annotator_token = await login(client, "annotator@test.local")
+        reviewer_token = await login(client, "reviewer@test.local")
+        outside_admin_token = await login(client, "outside-admin@test.local")
+        project_id = (await client.get("/projects", headers=auth_headers(admin_token))).json()[0]["id"]
+        label = (await client.get(f"/projects/{project_id}/labels", headers=auth_headers(admin_token))).json()[0]
+        fixture_path = write_synthetic_dicom(tmp_path / "mask-source.dcm", width=6, height=4)
+        upload = await client.post(
+            "/scans/upload",
+            data={"project_id": project_id, "name": "Segmentation Source", "modality": "CT"},
+            files={"file": ("mask-source.dcm", fixture_path.read_bytes(), "application/dicom")},
+            headers=auth_headers(admin_token),
+        )
+        scan = upload.json()
+        created = await client.post(
+            "/annotations",
+            json={
+                "project_id": project_id,
+                "scan_id": scan["id"],
+                "label_id": label["id"],
+                "label": label["name"],
+                "annotation_type": "segmentation",
+                "coordinates": {"mask_ref": True, "representation": "png_binary"},
+                "slice_index": 0,
+                "created_by": "Annotator User",
+            },
+            headers=auth_headers(annotator_token),
+        )
+
+        mask_png = make_png_bytes(6, 4)
+        bad_size_png = make_png_bytes(5, 4)
+        stored = await client.post(
+            f"/annotations/{created.json()['id']}/mask",
+            data={"slice_index": "0"},
+            files={"file": ("mask.png", mask_png, "image/png")},
+            headers=auth_headers(annotator_token),
+        )
+        reviewed = await client.patch(
+            f"/annotations/{created.json()['id']}/review",
+            json={"reviewer": "Reviewer User", "review_status": "approved", "notes": "Mask ready for training."},
+            headers=auth_headers(reviewer_token),
+        )
+        loaded = await client.get(f"/annotations/{created.json()['id']}/mask/0", headers=auth_headers(admin_token))
+        outside_loaded = await client.get(f"/annotations/{created.json()['id']}/mask/0", headers=auth_headers(outside_admin_token))
+        project_segmentation = await client.get(f"/projects/{project_id}/export/segmentation", headers=auth_headers(admin_token))
+        scan_segmentation = await client.get(f"/scans/{scan['id']}/export/segmentation", headers=auth_headers(admin_token))
+        project_csv = await client.get(f"/projects/{project_id}/export/csv", headers=auth_headers(admin_token))
+        forbidden_segmentation = await client.get(f"/projects/{project_id}/export/segmentation", headers=auth_headers(outside_admin_token))
+        rejected_dimensions = await client.post(
+            f"/annotations/{created.json()['id']}/mask",
+            data={"slice_index": "0"},
+            files={"file": ("mask.png", bad_size_png, "image/png")},
+            headers=auth_headers(annotator_token),
+        )
+        history_after_upload = await client.get(f"/annotations/{created.json()['id']}/history", headers=auth_headers(admin_token))
+        mask_files_after_upload = list((tmp_path / "segmentation_masks").rglob("000000.png"))
+        deleted = await client.delete(f"/annotations/{created.json()['id']}/mask/0", headers=auth_headers(annotator_token))
+        missing_after_delete = await client.get(f"/annotations/{created.json()['id']}/mask/0", headers=auth_headers(admin_token))
+        history_after_delete = await client.get(f"/annotations/{created.json()['id']}/history", headers=auth_headers(admin_token))
+
+        assert upload.status_code == 201
+        assert created.status_code == 201
+        assert stored.status_code == 201
+        assert reviewed.status_code == 200
+        assert "storage_key" not in stored.json()
+        assert stored.json()["annotation_id"] == created.json()["id"]
+        assert stored.json()["width"] == 6
+        assert stored.json()["height"] == 4
+        assert stored.json()["encoding"] == "png_binary"
+        assert stored.json()["byte_size"] == len(mask_png)
+        assert loaded.status_code == 200
+        assert loaded.json()["mask_base64"] == base64.b64encode(mask_png).decode("ascii")
+        assert loaded.json()["checksum_sha256"] == stored.json()["checksum_sha256"]
+        assert outside_loaded.status_code == 404
+        assert project_segmentation.status_code == 200
+        assert project_segmentation.json()["export_format"] == "segmentation_manifest"
+        assert project_segmentation.json()["mask_count"] == 1
+        assert project_segmentation.json()["available_mask_count"] == 1
+        assert project_segmentation.json()["masks"][0]["annotation_id"] == created.json()["id"]
+        assert project_segmentation.json()["masks"][0]["mask_available"] is True
+        assert project_segmentation.json()["masks"][0]["mask_api_path"] == f"/annotations/{created.json()['id']}/mask/0"
+        assert project_segmentation.json()["masks"][0]["mask_file_name"].endswith(f"{created.json()['id']}_slice_000000.png")
+        assert project_segmentation.json()["masks"][0]["mask_checksum_sha256"] == stored.json()["checksum_sha256"]
+        assert "storage_key" not in project_segmentation.json()["masks"][0]
+        assert scan_segmentation.status_code == 200
+        assert scan_segmentation.json()["masks"] == project_segmentation.json()["masks"]
+        assert project_csv.status_code == 200
+        assert "mask_available,mask_file_name,mask_width,mask_height,mask_encoding,mask_byte_size,mask_checksum_sha256,mask_api_path" in project_csv.json()["content"]
+        assert f"/annotations/{created.json()['id']}/mask/0" in project_csv.json()["content"]
+        assert stored.json()["checksum_sha256"] in project_csv.json()["content"]
+        assert forbidden_segmentation.status_code == 404
+        assert rejected_dimensions.status_code == 400
+        assert "dimensions" in rejected_dimensions.json()["detail"]
+        assert history_after_upload.status_code == 200
+        assert [entry["action"] for entry in history_after_upload.json()] == ["mask_uploaded", "reviewed"]
+        assert history_after_upload.json()[0]["changed_fields"] == ["segmentation_mask"]
+        assert mask_files_after_upload
+        assert deleted.status_code == 204
+        assert missing_after_delete.status_code == 404
+        assert history_after_delete.status_code == 200
+        assert [entry["action"] for entry in history_after_delete.json()] == ["mask_uploaded", "reviewed", "mask_deleted"]
+        assert not list((tmp_path / "segmentation_masks").rglob("000000.png"))
+
+
+@pytest.mark.anyio
 async def test_slice_endpoint_returns_useful_errors_for_unavailable_scans(tmp_path: Path) -> None:
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
         admin_token = await login(client, "admin@test.local")
@@ -726,9 +842,15 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
             "annotation_type": "polygon",
             "coordinates": {"points": [{"x": 10, "y": 10}, {"x": 20, "y": 10}, {"x": 15, "y": 20}]},
         }
+        approved_polygon_payload = {
+            **annotation_payload,
+            "annotation_type": "polygon",
+            "coordinates": {"points": [{"x": 100, "y": 100}, {"x": 110, "y": 100}, {"x": 110, "y": 110}, {"x": 100, "y": 110}]},
+        }
 
         created = await client.post("/annotations", json=annotation_payload, headers=auth_headers(annotator_token))
         polygon = await client.post("/annotations", json=polygon_payload, headers=auth_headers(annotator_token))
+        approved_polygon = await client.post("/annotations", json=approved_polygon_payload, headers=auth_headers(annotator_token))
         forbidden_review = await client.patch(
             f"/annotations/{created.json()['id']}/review",
             json={"reviewer": "Annotator User", "review_status": "approved", "notes": None},
@@ -742,6 +864,11 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
         reviewed_polygon = await client.patch(
             f"/annotations/{polygon.json()['id']}/review",
             json={"reviewer": "Reviewer User", "review_status": "needs_changes", "notes": "Polygon needs another contour pass."},
+            headers=auth_headers(reviewer_token),
+        )
+        reviewed_approved_polygon = await client.patch(
+            f"/annotations/{approved_polygon.json()['id']}/review",
+            json={"reviewer": "Reviewer User", "review_status": "approved", "notes": "Polygon ready for COCO export."},
             headers=auth_headers(reviewer_token),
         )
         exported = await client.get(f"/projects/{project_id}/export", headers=auth_headers(admin_token))
@@ -758,11 +885,14 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
 
         assert created.status_code == 201
         assert polygon.status_code == 201
+        assert approved_polygon.status_code == 201
         assert forbidden_review.status_code == 403
         assert reviewed.status_code == 200
         assert reviewed_polygon.status_code == 200
+        assert reviewed_approved_polygon.status_code == 200
         assert reviewed.json()["review_status"] == "approved"
         assert reviewed_polygon.json()["review_status"] == "needs_changes"
+        assert reviewed_approved_polygon.json()["review_status"] == "approved"
         assert exported.status_code == 200
         assert exported.json()["approved_count"] >= 1
         assert all(annotation["review_status"] == "approved" for scan_export in exported.json()["scans"] for annotation in scan_export["annotations"])
@@ -770,10 +900,16 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
         assert polygon.json()["id"] in {annotation["id"] for annotation in needs_changes_search.json()}
         assert project_coco.status_code == 200
         assert project_coco.json()["export_format"] == "coco"
-        assert len(project_coco.json()["annotations"]) == 1
-        assert project_coco.json()["annotations"][0]["source_annotation_id"] == created.json()["id"]
-        assert project_coco.json()["annotations"][0]["bbox"] == [40.0, 50.0, 25.0, 30.0]
-        assert project_coco.json()["annotations"][0]["area"] == 750.0
+        assert len(project_coco.json()["annotations"]) == 2
+        coco_by_source = {annotation["source_annotation_id"]: annotation for annotation in project_coco.json()["annotations"]}
+        assert coco_by_source[created.json()["id"]]["annotation_type"] == "bounding_box"
+        assert coco_by_source[created.json()["id"]]["bbox"] == [40.0, 50.0, 25.0, 30.0]
+        assert coco_by_source[created.json()["id"]]["area"] == 750.0
+        assert coco_by_source[created.json()["id"]]["segmentation"] is None
+        assert coco_by_source[approved_polygon.json()["id"]]["annotation_type"] == "polygon"
+        assert coco_by_source[approved_polygon.json()["id"]]["bbox"] == [100.0, 100.0, 10.0, 10.0]
+        assert coco_by_source[approved_polygon.json()["id"]]["area"] == 100.0
+        assert coco_by_source[approved_polygon.json()["id"]]["segmentation"] == [[100.0, 100.0, 110.0, 100.0, 110.0, 110.0, 100.0, 110.0]]
         assert project_coco.json()["images"][0]["slice_index"] == 2
         assert project_coco.json()["categories"] == [{"id": 1, "name": label["name"]}]
         assert project_csv.status_code == 200

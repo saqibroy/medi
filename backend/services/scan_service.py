@@ -390,6 +390,15 @@ def export_scan_yolo(db: Session, scan_id: UUID) -> dict:
     return build_yolo_export(db, [scan], project_id=scan.project_id, scan_id=scan.id)
 
 
+def export_scan_segmentation(db: Session, scan_id: UUID) -> dict:
+    """Return approved scan segmentations as a mask manifest."""
+
+    scan = get_scan_or_404(db, scan_id)
+    from .export_service import build_segmentation_export
+
+    return build_segmentation_export(db, [scan], project_id=scan.project_id, scan_id=scan.id)
+
+
 def get_scan_annotation_stats(db: Session, scan_id: UUID) -> dict:
     """Return annotation distribution metrics for one scan.
 

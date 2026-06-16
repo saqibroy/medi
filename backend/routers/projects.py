@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import CocoExportRead, CsvExportRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectUpdate, ScanRead, YoloExportRead
+from ..schemas import CocoExportRead, CsvExportRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectUpdate, ScanRead, SegmentationExportRead, YoloExportRead
 from ..security import get_current_user, require_admin
 from ..services import project_service, scan_service
 
@@ -92,6 +92,13 @@ async def export_project_yolo(project_id: UUID, db: Session = Depends(get_db), c
     """Export approved project bounding boxes in YOLO format."""
 
     return project_service.export_project_yolo(db, project_id, current_user)
+
+
+@router.get("/projects/{project_id}/export/segmentation", response_model=SegmentationExportRead)
+async def export_project_segmentation(project_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> SegmentationExportRead:
+    """Export approved project segmentations as a mask manifest."""
+
+    return project_service.export_project_segmentation(db, project_id, current_user)
 
 
 @router.post("/projects/{project_id}/labels", response_model=LabelRead, status_code=201)

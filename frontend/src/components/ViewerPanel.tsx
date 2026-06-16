@@ -9,7 +9,7 @@
 import { MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useViewer } from "../hooks/useViewer";
-import type { Annotation, AnnotationCreate, AnnotationUpdate, BoundingBoxCoordinates, PolygonCoordinates, PolygonPoint } from "../types/annotation";
+import type { Annotation, AnnotationCreate, AnnotationUpdate, BoundingBoxCoordinates, PolygonCoordinates, PolygonPoint, SegmentationMaskImage } from "../types/annotation";
 import type { Scan, SliceImage } from "../types/scan";
 
 interface ViewerPanelProps {
@@ -29,13 +29,19 @@ interface ViewerPanelProps {
   windowWidth: number;
   emptyMessage: string;
   onSelectAnnotation: (annotationId: string | null) => void;
-  onSaveAnnotation: (payload: AnnotationCreate) => Promise<void>;
+  onSaveAnnotation: (payload: AnnotationCreate) => Promise<Annotation | void>;
   onUpdateAnnotation: (annotationId: string, payload: AnnotationUpdate) => Promise<void>;
   onDeleteAnnotation: (annotationId: string) => Promise<void>;
+  onSaveMask: (annotationId: string, sliceIndex: number, mask: Blob) => Promise<unknown>;
+  onLoadMask: (annotationId: string, sliceIndex: number) => Promise<SegmentationMaskImage | null>;
+  onDeleteMask: (annotationId: string, sliceIndex: number) => Promise<void>;
 }
 
 type InteractionMode = "draw" | "move" | "resize" | "polygon_vertex";
 type ResizeHandle = "nw" | "ne" | "sw" | "se";
+type GeometryCoordinates = Record<string, unknown>;
+type MaskTool = "brush" | "eraser";
+type MaskStatus = "idle" | "loading" | "saving" | "saved" | "error";
 
 interface Interaction {
   mode: InteractionMode;
@@ -49,19 +55,46 @@ interface Interaction {
   points?: PolygonPoint[];
 }
 
+interface GeometryHistoryEntry {
+  annotationId: string;
+  before: GeometryCoordinates;
+  after: GeometryCoordinates;
+}
+
+interface MaskHistoryEntry {
+  before: ImageData;
+  after: ImageData;
+}
+
 export function ViewerPanel(props: ViewerPanelProps) {
   /** Capture mouse gestures, render images, and save annotation geometry. */
   const { elementRef } = useViewer();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const maskGestureStartRef = useRef<ImageData | null>(null);
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [polygonPoints, setPolygonPoints] = useState<PolygonPoint[]>([]);
   const [polygonPreviewPoint, setPolygonPreviewPoint] = useState<PolygonPoint | null>(null);
+  const [undoStack, setUndoStack] = useState<GeometryHistoryEntry[]>([]);
+  const [redoStack, setRedoStack] = useState<GeometryHistoryEntry[]>([]);
+  const [maskUndoStack, setMaskUndoStack] = useState<MaskHistoryEntry[]>([]);
+  const [maskRedoStack, setMaskRedoStack] = useState<MaskHistoryEntry[]>([]);
+  const [maskTool, setMaskTool] = useState<MaskTool>("brush");
+  const [maskBrushSize, setMaskBrushSize] = useState(24);
+  const [maskOpacity, setMaskOpacity] = useState(0.45);
+  const [isMaskDrawing, setIsMaskDrawing] = useState(false);
+  const [maskRevision, setMaskRevision] = useState(0);
+  const [maskStatus, setMaskStatus] = useState<MaskStatus>("idle");
   const [isDeleting, setIsDeleting] = useState(false);
   const { canDeleteAnnotation, onDeleteAnnotation, onSelectAnnotation, selectedAnnotationId } = props;
 
   const currentSliceAnnotations = useMemo(
     () => props.annotations.filter((annotation) => annotation.slice_index === props.sliceIndex),
     [props.annotations, props.sliceIndex],
+  );
+  const selectedSegmentationAnnotation = useMemo(
+    () => currentSliceAnnotations.find((annotation) => annotation.id === props.selectedAnnotationId && annotation.annotation_type === "segmentation") ?? null,
+    [currentSliceAnnotations, props.selectedAnnotationId],
   );
   const contrast = Math.max(0.25, Math.min(4, 1200 / Math.max(props.windowWidth, 1)));
   const brightness = Math.max(0.25, Math.min(2.5, props.windowCenter / 600));
@@ -72,6 +105,20 @@ export function ViewerPanel(props: ViewerPanelProps) {
     const box = annotation.coordinates as Partial<BoundingBoxCoordinates>;
     if (typeof box.x !== "number" || typeof box.y !== "number" || typeof box.width !== "number" || typeof box.height !== "number") return null;
     return { x: box.x, y: box.y, width: box.width, height: box.height };
+  }
+
+  function cloneCoordinates<T extends GeometryCoordinates>(coordinates: T): T {
+    return JSON.parse(JSON.stringify(coordinates)) as T;
+  }
+
+  function sameCoordinates(left: GeometryCoordinates, right: GeometryCoordinates): boolean {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function recordGeometryEdit(annotationId: string, before: GeometryCoordinates, after: GeometryCoordinates): void {
+    if (sameCoordinates(before, after)) return;
+    setUndoStack((current) => [...current.slice(-24), { annotationId, before: cloneCoordinates(before), after: cloneCoordinates(after) }]);
+    setRedoStack([]);
   }
 
   function polygonFor(annotation: Annotation): PolygonPoint[] | null {
@@ -183,6 +230,112 @@ export function ViewerPanel(props: ViewerPanelProps) {
     points.forEach((point) => context.fillRect(point.x - 3, point.y - 3, 6, 6));
   }
 
+  function ensureMaskCanvas(): HTMLCanvasElement {
+    if (!maskCanvasRef.current) {
+      maskCanvasRef.current = document.createElement("canvas");
+    }
+    const maskCanvas = maskCanvasRef.current;
+    if (maskCanvas.width !== canvasWidth || maskCanvas.height !== canvasHeight) {
+      maskCanvas.width = canvasWidth;
+      maskCanvas.height = canvasHeight;
+    }
+    return maskCanvas;
+  }
+
+  function captureMaskSnapshot(): ImageData | null {
+    const maskCanvas = ensureMaskCanvas();
+    const context = maskCanvas.getContext("2d");
+    return context?.getImageData(0, 0, maskCanvas.width, maskCanvas.height) ?? null;
+  }
+
+  function sameMaskSnapshot(left: ImageData | null, right: ImageData | null): boolean {
+    if (!left || !right) return left === right;
+    if (left.width !== right.width || left.height !== right.height || left.data.length !== right.data.length) return false;
+    for (let index = 0; index < left.data.length; index += 1) {
+      if (left.data[index] !== right.data[index]) return false;
+    }
+    return true;
+  }
+
+  function applyMaskSnapshot(snapshot: ImageData): void {
+    const maskCanvas = ensureMaskCanvas();
+    const context = maskCanvas.getContext("2d");
+    if (!context) return;
+    context.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+    context.putImageData(snapshot, 0, 0);
+    setMaskRevision((current) => current + 1);
+    setMaskStatus("idle");
+  }
+
+  function recordMaskEdit(before: ImageData | null, after: ImageData | null): void {
+    if (!before || !after || sameMaskSnapshot(before, after)) return;
+    setMaskUndoStack((current) => [...current.slice(-24), { before, after }]);
+    setMaskRedoStack([]);
+  }
+
+  function drawMaskPoint(point: PolygonPoint): void {
+    const maskCanvas = ensureMaskCanvas();
+    const context = maskCanvas.getContext("2d");
+    if (!context) return;
+    context.save();
+    context.globalCompositeOperation = maskTool === "eraser" ? "destination-out" : "source-over";
+    context.fillStyle = "rgba(14, 165, 233, 1)";
+    context.beginPath();
+    context.arc(point.x, point.y, maskBrushSize / 2, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+    setMaskRevision((current) => current + 1);
+    setMaskStatus("idle");
+  }
+
+  function clearMask(): void {
+    const maskCanvas = ensureMaskCanvas();
+    const context = maskCanvas.getContext("2d");
+    context?.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+    setMaskRevision((current) => current + 1);
+    setMaskStatus("idle");
+  }
+
+  function handleClearMask(): void {
+    const before = captureMaskSnapshot();
+    clearMask();
+    recordMaskEdit(before, captureMaskSnapshot());
+  }
+
+  function maskCanvasToBlob(): Promise<Blob> {
+    const maskCanvas = ensureMaskCanvas();
+    return new Promise((resolve, reject) => {
+      maskCanvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error("Could not encode mask"));
+          return;
+        }
+        resolve(blob);
+      }, "image/png");
+    });
+  }
+
+  function drawLoadedMask(mask: SegmentationMaskImage, shouldDraw: () => boolean, onDone?: () => void, onError?: () => void): void {
+    const maskCanvas = ensureMaskCanvas();
+    const context = maskCanvas.getContext("2d");
+    if (!context) {
+      onError?.();
+      return;
+    }
+    const image = new Image();
+    image.onload = () => {
+      if (!shouldDraw()) return;
+      context.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+      context.drawImage(image, 0, 0, maskCanvas.width, maskCanvas.height);
+      setMaskRevision((current) => current + 1);
+      onDone?.();
+    };
+    image.onerror = () => {
+      if (shouldDraw()) onError?.();
+    };
+    image.src = `data:image/png;base64,${mask.mask_base64}`;
+  }
+
   const finishPolygon = useCallback(
     async (points: PolygonPoint[]): Promise<void> => {
       if (!props.scan || !props.canAnnotate || points.length < 3) return;
@@ -214,6 +367,40 @@ export function ViewerPanel(props: ViewerPanelProps) {
     }
   }, [canDeleteAnnotation, isDeleting, onDeleteAnnotation, onSelectAnnotation, selectedAnnotationId]);
 
+  const undoGeometryEdit = useCallback(async (): Promise<void> => {
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry || !props.canAnnotate) return;
+    setUndoStack((current) => current.slice(0, -1));
+    await props.onUpdateAnnotation(entry.annotationId, { coordinates: cloneCoordinates(entry.before) });
+    props.onSelectAnnotation(entry.annotationId);
+    setRedoStack((current) => [...current.slice(-24), entry]);
+  }, [props, undoStack]);
+
+  const redoGeometryEdit = useCallback(async (): Promise<void> => {
+    const entry = redoStack[redoStack.length - 1];
+    if (!entry || !props.canAnnotate) return;
+    setRedoStack((current) => current.slice(0, -1));
+    await props.onUpdateAnnotation(entry.annotationId, { coordinates: cloneCoordinates(entry.after) });
+    props.onSelectAnnotation(entry.annotationId);
+    setUndoStack((current) => [...current.slice(-24), entry]);
+  }, [props, redoStack]);
+
+  const undoMaskEdit = useCallback((): void => {
+    const entry = maskUndoStack[maskUndoStack.length - 1];
+    if (!entry || !props.canAnnotate) return;
+    setMaskUndoStack((current) => current.slice(0, -1));
+    applyMaskSnapshot(entry.before);
+    setMaskRedoStack((current) => [...current.slice(-24), entry]);
+  }, [maskUndoStack, props.canAnnotate]);
+
+  const redoMaskEdit = useCallback((): void => {
+    const entry = maskRedoStack[maskRedoStack.length - 1];
+    if (!entry || !props.canAnnotate) return;
+    setMaskRedoStack((current) => current.slice(0, -1));
+    applyMaskSnapshot(entry.after);
+    setMaskUndoStack((current) => [...current.slice(-24), entry]);
+  }, [maskRedoStack, props.canAnnotate]);
+
   useEffect(() => {
     if (!props.canDeleteAnnotation || !props.selectedAnnotationId) return;
 
@@ -230,9 +417,112 @@ export function ViewerPanel(props: ViewerPanelProps) {
   }, [handleDeleteSelected, props.canDeleteAnnotation, props.selectedAnnotationId]);
 
   useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent): void {
+      const target = event.target as HTMLElement | null;
+      if (target && (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable)) return;
+      const isUndo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey;
+      const isRedo = ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") || ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "z");
+      if (isUndo) {
+        event.preventDefault();
+        if (props.annotationType === "segmentation") {
+          undoMaskEdit();
+          return;
+        }
+        void undoGeometryEdit();
+        return;
+      }
+      if (isRedo) {
+        event.preventDefault();
+        if (props.annotationType === "segmentation") {
+          redoMaskEdit();
+          return;
+        }
+        void redoGeometryEdit();
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setInteraction(null);
+        setPolygonPoints([]);
+        setPolygonPreviewPoint(null);
+        props.onSelectAnnotation(null);
+      }
+      if (event.key === "Enter" && props.annotationType === "polygon" && polygonPoints.length >= 3) {
+        event.preventDefault();
+        void finishPolygon(polygonPoints);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [finishPolygon, polygonPoints, props, redoGeometryEdit, redoMaskEdit, undoGeometryEdit, undoMaskEdit]);
+
+  useEffect(() => {
     setPolygonPoints([]);
     setPolygonPreviewPoint(null);
   }, [props.annotationType, props.scan?.id, props.sliceIndex]);
+
+  useEffect(() => {
+    setUndoStack([]);
+    setRedoStack([]);
+    setMaskUndoStack([]);
+    setMaskRedoStack([]);
+    maskGestureStartRef.current = null;
+  }, [props.scan?.id, props.sliceIndex]);
+
+  useEffect(() => {
+    clearMask();
+  }, [canvasHeight, canvasWidth, props.scan?.id, props.sliceIndex]);
+
+  useEffect(() => {
+    if (props.annotationType !== "segmentation") return;
+    let isCancelled = false;
+
+    if (!selectedSegmentationAnnotation) {
+      const maskCanvas = ensureMaskCanvas();
+      maskCanvas.getContext("2d")?.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+      setMaskUndoStack([]);
+      setMaskRedoStack([]);
+      maskGestureStartRef.current = null;
+      setMaskStatus("idle");
+      setMaskRevision((current) => current + 1);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    setMaskStatus("loading");
+    setMaskUndoStack([]);
+    setMaskRedoStack([]);
+    maskGestureStartRef.current = null;
+    props
+      .onLoadMask(selectedSegmentationAnnotation.id, props.sliceIndex)
+      .then((mask) => {
+        if (isCancelled) return;
+        if (!mask) {
+          clearMask();
+          setMaskStatus("idle");
+          return;
+        }
+        drawLoadedMask(
+          mask,
+          () => !isCancelled,
+          () => {
+            if (!isCancelled) setMaskStatus("saved");
+          },
+          () => {
+            if (!isCancelled) setMaskStatus("error");
+          },
+        );
+      })
+      .catch(() => {
+        if (!isCancelled) setMaskStatus("error");
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [canvasHeight, canvasWidth, props.annotationType, props.onLoadMask, props.sliceIndex, selectedSegmentationAnnotation]);
 
   useEffect(() => {
     /** Draw the current slice and overlays whenever source data changes. */
@@ -246,6 +536,13 @@ export function ViewerPanel(props: ViewerPanelProps) {
       context.filter = `contrast(${contrast}) brightness(${brightness})`;
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
       context.filter = "none";
+      const maskCanvas = maskCanvasRef.current;
+      if (maskCanvas && props.annotationType === "segmentation") {
+        context.save();
+        context.globalAlpha = maskOpacity;
+        context.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+        context.restore();
+      }
       currentSliceAnnotations.forEach((annotation) => {
         const box = boundingBoxFor(annotation);
         if (annotation.annotation_type === "bounding_box" && box) {
@@ -286,7 +583,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
       }
     };
     image.src = `data:image/png;base64,${props.sliceImage.image_base64}`;
-  }, [brightness, contrast, props.sliceImage, currentSliceAnnotations, interaction, polygonPoints, polygonPreviewPoint, props.selectedAnnotationId]);
+  }, [brightness, contrast, props.sliceImage, currentSliceAnnotations, interaction, maskOpacity, maskRevision, polygonPoints, polygonPreviewPoint, props.annotationType, props.selectedAnnotationId]);
 
   function canvasPoint(event: MouseEvent<HTMLCanvasElement>) {
     /** Convert browser coordinates into canvas coordinates used by annotation JSON. */
@@ -298,10 +595,62 @@ export function ViewerPanel(props: ViewerPanelProps) {
     };
   }
 
+  async function handleSaveMask(): Promise<void> {
+    if (!props.scan || !props.canAnnotate) return;
+    setMaskStatus("saving");
+    try {
+      const maskBlob = await maskCanvasToBlob();
+      let targetAnnotation = selectedSegmentationAnnotation;
+      if (!targetAnnotation) {
+        const saved = await props.onSaveAnnotation({
+          scan_id: props.scan.id,
+          project_id: props.projectId ?? props.scan.project_id,
+          label_id: props.labelId ?? null,
+          label: props.label,
+          annotation_type: "segmentation",
+          coordinates: { mask_ref: true, representation: "png_binary" },
+          slice_index: props.sliceIndex,
+          created_by: props.createdBy,
+        });
+        if (!saved) throw new Error("Could not create segmentation annotation");
+        targetAnnotation = saved;
+      }
+      await props.onSaveMask(targetAnnotation.id, props.sliceIndex, maskBlob);
+      props.onSelectAnnotation(targetAnnotation.id);
+      setMaskStatus("saved");
+    } catch {
+      setMaskStatus("error");
+    }
+  }
+
+  async function handleDeleteSavedMask(): Promise<void> {
+    if (!selectedSegmentationAnnotation || !props.canAnnotate) return;
+    setMaskStatus("saving");
+    try {
+      await props.onDeleteMask(selectedSegmentationAnnotation.id, props.sliceIndex);
+      clearMask();
+      setMaskStatus("idle");
+    } catch {
+      setMaskStatus("error");
+    }
+  }
+
   async function handleMouseDown(event: MouseEvent<HTMLCanvasElement>): Promise<void> {
     /** Select existing annotations or start a new annotation draft. */
     if (!props.canAnnotate) return;
     const point = canvasPoint(event);
+    if (props.annotationType === "segmentation") {
+      if (props.selectedAnnotationId && !selectedSegmentationAnnotation) {
+        props.onSelectAnnotation(null);
+      }
+      setInteraction(null);
+      setPolygonPoints([]);
+      setPolygonPreviewPoint(null);
+      maskGestureStartRef.current = captureMaskSnapshot();
+      setIsMaskDrawing(true);
+      drawMaskPoint(point);
+      return;
+    }
     const selectedAnnotation = [...currentSliceAnnotations].reverse().find((annotation) => {
       if (annotation.annotation_type === "bounding_box") {
         const box = boundingBoxFor(annotation);
@@ -362,6 +711,10 @@ export function ViewerPanel(props: ViewerPanelProps) {
   function handleMouseMove(event: MouseEvent<HTMLCanvasElement>): void {
     /** Update width and height as the user drags across the image. */
     const point = canvasPoint(event);
+    if (props.annotationType === "segmentation" && isMaskDrawing) {
+      drawMaskPoint(point);
+      return;
+    }
     if (polygonPoints.length > 0) {
       setPolygonPreviewPoint(point);
     }
@@ -391,14 +744,27 @@ export function ViewerPanel(props: ViewerPanelProps) {
     }
   }
 
+  function finishMaskGesture(): void {
+    setIsMaskDrawing(false);
+    recordMaskEdit(maskGestureStartRef.current, captureMaskSnapshot());
+    maskGestureStartRef.current = null;
+  }
+
   async function handleMouseUp(): Promise<void> {
     /** Normalize and save the completed draft box through the annotation API. */
+    if (isMaskDrawing) {
+      finishMaskGesture();
+      return;
+    }
     if (!props.scan || !props.canAnnotate || !interaction) return;
     const mode = interaction.mode;
     const annotationId = interaction.annotationId;
     setInteraction(null);
     if (mode === "polygon_vertex" && annotationId && interaction.points) {
-      await props.onUpdateAnnotation(annotationId, { coordinates: { points: interaction.points } });
+      const before = { points: interaction.originalPoints ?? [] };
+      const after = { points: interaction.points };
+      await props.onUpdateAnnotation(annotationId, { coordinates: after });
+      recordGeometryEdit(annotationId, before, after);
       return;
     }
     if (props.annotationType !== "bounding_box" || !interaction.box) return;
@@ -406,6 +772,9 @@ export function ViewerPanel(props: ViewerPanelProps) {
     if (coordinates.width < 4 || coordinates.height < 4) return;
     if ((mode === "move" || mode === "resize") && annotationId) {
       await props.onUpdateAnnotation(annotationId, { coordinates: { ...coordinates } });
+      if (interaction.originalBox) {
+        recordGeometryEdit(annotationId, { ...interaction.originalBox }, { ...coordinates });
+      }
       return;
     }
     await props.onSaveAnnotation({
@@ -419,6 +788,8 @@ export function ViewerPanel(props: ViewerPanelProps) {
       created_by: props.createdBy,
     });
   }
+
+  const maskSaveLabel = maskStatus === "saving" ? "Saving..." : maskStatus === "loading" ? "Loading..." : maskStatus === "saved" ? "Saved" : maskStatus === "error" ? "Retry save" : "Save";
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-slate-950">
@@ -458,12 +829,78 @@ export function ViewerPanel(props: ViewerPanelProps) {
                 </button>
               </div>
             ) : null}
+            {props.annotationType === "segmentation" ? (
+              <div className="absolute left-3 top-3 z-10 flex max-w-[min(28rem,calc(100vw-2rem))] flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
+                <button
+                  className={`rounded-md border px-2 py-1 font-medium ${maskTool === "brush" ? "border-sky-500 bg-sky-50 text-sky-700" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
+                  onClick={() => setMaskTool("brush")}
+                  type="button"
+                >
+                  Brush
+                </button>
+                <button
+                  className={`rounded-md border px-2 py-1 font-medium ${maskTool === "eraser" ? "border-sky-500 bg-sky-50 text-sky-700" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
+                  onClick={() => setMaskTool("eraser")}
+                  type="button"
+                >
+                  Eraser
+                </button>
+                <label className="flex items-center gap-2 text-slate-600">
+                  Size
+                  <input className="w-20 accent-sky-600" max={80} min={4} onChange={(event) => setMaskBrushSize(Number(event.target.value))} type="range" value={maskBrushSize} />
+                </label>
+                <label className="flex items-center gap-2 text-slate-600">
+                  Opacity
+                  <input className="w-20 accent-sky-600" max={0.9} min={0.1} onChange={(event) => setMaskOpacity(Number(event.target.value))} step={0.05} type="range" value={maskOpacity} />
+                </label>
+                <button
+                  className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!props.canAnnotate || maskUndoStack.length === 0 || maskStatus === "saving" || maskStatus === "loading"}
+                  onClick={undoMaskEdit}
+                  type="button"
+                >
+                  Undo
+                </button>
+                <button
+                  className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!props.canAnnotate || maskRedoStack.length === 0 || maskStatus === "saving" || maskStatus === "loading"}
+                  onClick={redoMaskEdit}
+                  type="button"
+                >
+                  Redo
+                </button>
+                <button className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50" onClick={handleClearMask} type="button">
+                  Clear
+                </button>
+                <button
+                  className="rounded-md border border-sky-500 bg-sky-600 px-2 py-1 font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!props.canAnnotate || maskStatus === "saving" || maskStatus === "loading"}
+                  onClick={() => void handleSaveMask()}
+                  type="button"
+                >
+                  {maskSaveLabel}
+                </button>
+                {selectedSegmentationAnnotation ? (
+                  <button
+                    className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={!props.canAnnotate || maskStatus === "saving" || maskStatus === "loading"}
+                    onClick={() => void handleDeleteSavedMask()}
+                    type="button"
+                  >
+                    Delete saved
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <canvas
               ref={canvasRef}
               width={canvasWidth}
               height={canvasHeight}
               className={`max-h-full max-w-full rounded-md border border-slate-700 bg-black ${props.canAnnotate ? "cursor-crosshair" : "cursor-not-allowed"}`}
               onMouseDown={handleMouseDown}
+              onMouseLeave={() => {
+                if (isMaskDrawing) finishMaskGesture();
+              }}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
             />

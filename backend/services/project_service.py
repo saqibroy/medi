@@ -152,3 +152,13 @@ def export_project_yolo(db: Session, project_id: UUID, current_user: User) -> di
 
     scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
     return build_yolo_export(db, scans, project_id=project_id)
+
+
+def export_project_segmentation(db: Session, project_id: UUID, current_user: User) -> dict:
+    """Return approved project segmentations as a mask manifest."""
+
+    get_project_or_404(db, project_id, current_user)
+    from .export_service import build_segmentation_export
+
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    return build_segmentation_export(db, scans, project_id=project_id)

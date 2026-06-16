@@ -6,13 +6,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { createAnnotation, deleteAnnotation, listAnnotations, reviewAnnotation, updateAnnotation } from "../api/annotationsApi";
-import type { Annotation, AnnotationCreate, AnnotationUpdate, ReviewStatus } from "../types/annotation";
+import { createAnnotation, deleteAnnotation, deleteSegmentationMask, getSegmentationMask, listAnnotationHistory, listAnnotations, reviewAnnotation, updateAnnotation, uploadSegmentationMask } from "../api/annotationsApi";
+import type { Annotation, AnnotationCreate, AnnotationHistory, AnnotationUpdate, ReviewStatus, SegmentationMask, SegmentationMaskImage } from "../types/annotation";
 
 export function useAnnotations(scanId?: string, token?: string, reviewerName = "Reviewer") {
   /** Load and mutate annotations for the selected scan. */
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [annotationHistory, setAnnotationHistory] = useState<AnnotationHistory[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   const refresh = useCallback(() => {
     /** Refresh keeps overlays aligned with database state after mutations. */
@@ -31,14 +34,53 @@ export function useAnnotations(scanId?: string, token?: string, reviewerName = "
   }, [refresh]);
 
   const saveAnnotation = useCallback(
-    async (payload: AnnotationCreate) => {
+    async (payload: AnnotationCreate): Promise<Annotation | undefined> => {
       /** Persist one annotation and append the server-confirmed version. */
-      if (!token) return;
+      if (!token) return undefined;
       const saved = await createAnnotation(payload, token);
       setAnnotations((current) => [saved, ...current]);
+      return saved;
     },
     [token],
   );
+
+  const saveSegmentationMask = useCallback(async (annotationId: string, sliceIndex: number, mask: Blob): Promise<SegmentationMask | undefined> => {
+    /** Store mask PNG bytes for an existing segmentation annotation. */
+    if (!token) return undefined;
+    return uploadSegmentationMask(annotationId, sliceIndex, mask, token);
+  }, [token]);
+
+  const loadSegmentationMask = useCallback(async (annotationId: string, sliceIndex: number): Promise<SegmentationMaskImage | null> => {
+    /** Load saved mask bytes for the viewer overlay. */
+    if (!token) return null;
+    return getSegmentationMask(annotationId, sliceIndex, token);
+  }, [token]);
+
+  const removeSegmentationMask = useCallback(async (annotationId: string, sliceIndex: number): Promise<void> => {
+    /** Remove saved mask bytes without deleting the annotation row. */
+    if (!token) return;
+    await deleteSegmentationMask(annotationId, sliceIndex, token);
+  }, [token]);
+
+  const loadAnnotationHistory = useCallback(async (annotationId?: string | null) => {
+    /** Load audit entries for the selected annotation detail view. */
+    if (!token || !annotationId) {
+      setAnnotationHistory([]);
+      setHistoryError(null);
+      setIsHistoryLoading(false);
+      return;
+    }
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      setAnnotationHistory(await listAnnotationHistory(annotationId, token));
+    } catch (apiError) {
+      setHistoryError(apiError instanceof Error ? apiError.message : "Could not load annotation history");
+      setAnnotationHistory([]);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [token]);
 
   const removeAnnotation = useCallback(async (annotationId: string) => {
     /** Delete in the backend first, then update UI state optimistically. */
@@ -61,5 +103,20 @@ export function useAnnotations(scanId?: string, token?: string, reviewerName = "
     setAnnotations((current) => current.map((annotation) => (annotation.id === reviewed.id ? reviewed : annotation)));
   }, [reviewerName, token]);
 
-  return { annotations, error, refresh, saveAnnotation, updateExistingAnnotation, removeAnnotation, reviewExistingAnnotation };
+  return {
+    annotations,
+    annotationHistory,
+    error,
+    historyError,
+    isHistoryLoading,
+    refresh,
+    loadAnnotationHistory,
+    saveAnnotation,
+    updateExistingAnnotation,
+    removeAnnotation,
+    reviewExistingAnnotation,
+    saveSegmentationMask,
+    loadSegmentationMask,
+    removeSegmentationMask,
+  };
 }

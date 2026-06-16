@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from "react";
 
-import type { Annotation, ReviewStatus } from "../types/annotation";
+import type { Annotation, AnnotationHistory, ReviewStatus } from "../types/annotation";
 import type { Label } from "../types/project";
 
 interface AnnotationListProps {
   annotations: Annotation[];
+  annotationHistory: AnnotationHistory[];
+  historyError: string | null;
+  isHistoryLoading: boolean;
   labels: Label[];
   currentSlice: number;
   selectedAnnotationId: string | null;
@@ -32,7 +35,31 @@ const reviewFilters: Array<{ value: "all" | ReviewStatus; label: string }> = [
   { value: "rejected", label: "Rejected" },
 ];
 
-export function AnnotationList({ annotations, labels, currentSlice, selectedAnnotationId, canReview, canDelete, onSelectAnnotation, onDelete, onReview }: AnnotationListProps) {
+function formatDateTime(value: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function summarizeHistory(entry: AnnotationHistory): string {
+  return entry.changed_fields.map((field) => field.replace(/_/g, " ")).join(", ");
+}
+
+export function AnnotationList({
+  annotations,
+  annotationHistory,
+  historyError,
+  isHistoryLoading,
+  labels,
+  currentSlice,
+  selectedAnnotationId,
+  canReview,
+  canDelete,
+  onSelectAnnotation,
+  onDelete,
+  onReview,
+}: AnnotationListProps) {
   /** Surface saved labels and make current-slice annotations easy to spot. */
   const [reviewFilter, setReviewFilter] = useState<"all" | ReviewStatus>("all");
   const labelColorById = new Map(labels.map((label) => [label.id, label.color]));
@@ -91,6 +118,12 @@ export function AnnotationList({ annotations, labels, currentSlice, selectedAnno
               </div>
               <span className={`rounded-full px-2 py-1 text-xs font-medium ${statusBadgeClass[annotation.review_status]}`}>{annotation.review_status}</span>
             </div>
+            <div className="mt-3 space-y-1 border-t border-slate-100 pt-2 text-xs text-slate-500">
+              <p>Created {formatDateTime(annotation.created_at)}</p>
+              <p>Updated {formatDateTime(annotation.updated_at)}</p>
+              {annotation.reviewed_at ? <p>Reviewed {formatDateTime(annotation.reviewed_at)}{annotation.reviewer ? ` by ${annotation.reviewer}` : ""}</p> : null}
+              {annotation.notes ? <p className="rounded-md bg-slate-50 p-2 text-slate-700">{annotation.notes}</p> : null}
+            </div>
             {/* Review buttons model the QA workflow before annotations become ML training data. */}
             <div className="mt-3 flex flex-wrap gap-2">
               {canReview ? (
@@ -118,6 +151,26 @@ export function AnnotationList({ annotations, labels, currentSlice, selectedAnno
                 </button>
               ) : null}
             </div>
+            {annotation.id === selectedAnnotationId ? (
+              <div className="mt-3 border-t border-slate-200 pt-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">History</h3>
+                {isHistoryLoading ? <p className="mt-2 text-xs text-slate-500">Loading history...</p> : null}
+                {historyError ? <p className="mt-2 text-xs text-red-700">{historyError}</p> : null}
+                {!isHistoryLoading && !historyError && annotationHistory.length === 0 ? <p className="mt-2 text-xs text-slate-500">No recorded changes yet.</p> : null}
+                <div className="mt-2 space-y-2">
+                  {annotationHistory.map((entry) => (
+                    <div className="rounded-md border border-slate-200 bg-white p-2 text-xs" key={entry.id}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-slate-700">{entry.action}</p>
+                        <p className="shrink-0 text-slate-500">{formatDateTime(entry.created_at)}</p>
+                      </div>
+                      <p className="mt-1 text-slate-500">{summarizeHistory(entry)}</p>
+                      {entry.changed_by_user_id ? <p className="mt-1 truncate text-slate-400">User {entry.changed_by_user_id}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </article>
         ))}
       </div>
