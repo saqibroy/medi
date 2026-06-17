@@ -4,11 +4,12 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from ..models import Annotation, AnnotationHistory, Label, Project, Scan, User
 from ..schemas import AnnotationCreate, AnnotationReviewUpdate, AnnotationUpdate, AnnotationType, ReviewStatus
+from .geometry_validation import validate_annotation_geometry
 from .scan_service import get_scan_or_404
 
 
@@ -25,6 +26,7 @@ AUDITED_UPDATE_FIELDS = (
     "reviewer",
     "reviewed_at",
     "notes",
+    "assigned_to_user_id",
 )
 
 
@@ -47,14 +49,32 @@ def get_annotation_or_404(db: Session, annotation_id: UUID) -> Annotation:
 
 
 def get_annotation_for_user_or_404(db: Session, annotation_id: UUID, current_user: User) -> Annotation:
-    """Fetch one annotation and enforce organization scoping through its project."""
+    """Fetch one annotation and enforce organization scoping through its scan."""
 
-    annotation = get_annotation_or_404(db, annotation_id)
-    if annotation.project_id is not None:
-        project = db.get(Project, annotation.project_id)
-        if project is None or project.organization_id != current_user.organization_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Annotation not found")
+    annotation = db.scalar(_organization_scoped_annotations(current_user).where(Annotation.id == annotation_id))
+    if annotation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Annotation not found")
     return annotation
+
+
+def _organization_scoped_annotations(current_user: User) -> Select[tuple[Annotation]]:
+    """Return an annotation query limited by the scan's project organization."""
+
+    return (
+        select(Annotation)
+        .join(Scan, Annotation.scan_id == Scan.id)
+        .join(Project, Scan.project_id == Project.id)
+        .where(Project.organization_id == current_user.organization_id)
+    )
+
+
+def _annotation_project_id(db: Session, annotation: Annotation) -> UUID | None:
+    """Resolve the project through the annotation first, then its scan."""
+
+    if annotation.project_id is not None:
+        return annotation.project_id
+    scan = db.get(Scan, annotation.scan_id)
+    return scan.project_id if scan is not None else None
 
 
 def _history_value(value: object) -> object:
@@ -99,61 +119,25 @@ def _audit_changes(annotation: Annotation, updates: dict, changed_by_user: User 
     )
 
 
-def _coordinate_number(coordinates: dict, field_name: str) -> float:
-    value = coordinates.get(field_name)
-    if not isinstance(value, (int, float)):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bounding box coordinates must be numeric")
-    return float(value)
+def _validate_assigned_user(db: Session, assigned_to_user_id: UUID | None, project_id: UUID | None) -> None:
+    """Ensure assignment points to an active user in the annotation project organization."""
 
-
-def _validate_polygon_geometry(scan: Scan, coordinates: dict) -> None:
-    points = coordinates.get("points")
-    if not isinstance(points, list) or len(points) < 3:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon coordinates must include at least three points")
-
-    for point in points:
-        if not isinstance(point, dict):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon points must be objects with numeric x and y values")
-        x = point.get("x")
-        y = point.get("y")
-        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon points must be objects with numeric x and y values")
-        if x < 0 or y < 0:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon points must be inside image pixel space")
-        if scan.width is not None and x > scan.width:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon point exceeds scan image width")
-        if scan.height is not None and y > scan.height:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Polygon point exceeds scan image height")
-
-
-def _validate_annotation_geometry(scan: Scan, annotation_type: str, coordinates: dict, slice_index: int) -> None:
-    """Keep annotation geometry in the selected scan's image pixel space."""
-
-    if slice_index >= scan.num_slices:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slice index out of range")
-    if annotation_type == "polygon":
-        _validate_polygon_geometry(scan, coordinates)
+    if assigned_to_user_id is None:
         return
-    if annotation_type != "bounding_box":
+    assigned_user = db.get(User, assigned_to_user_id)
+    if assigned_user is None or not assigned_user.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned user not found")
+    if project_id is None:
         return
-
-    x = _coordinate_number(coordinates, "x")
-    y = _coordinate_number(coordinates, "y")
-    width = _coordinate_number(coordinates, "width")
-    height = _coordinate_number(coordinates, "height")
-    if x < 0 or y < 0 or width <= 0 or height <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bounding box must have positive image-space dimensions")
-    if scan.width is not None and x + width > scan.width:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bounding box exceeds scan image width")
-    if scan.height is not None and y + height > scan.height:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bounding box exceeds scan image height")
+    project = db.get(Project, project_id)
+    if project is None or assigned_user.organization_id != project.organization_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assigned user does not belong to annotation project")
 
 
 def list_annotations_for_user(db: Session, current_user: User, scan_id: UUID | None = None) -> list[Annotation]:
     """Return annotations visible to the signed-in user's organization."""
 
-    statement = select(Annotation).outerjoin(Project, Annotation.project_id == Project.id).order_by(Annotation.created_at.desc())
-    statement = statement.where((Annotation.project_id.is_(None)) | (Project.organization_id == current_user.organization_id))
+    statement = _organization_scoped_annotations(current_user).order_by(Annotation.created_at.desc())
     if scan_id is not None:
         statement = statement.where(Annotation.scan_id == scan_id)
     return list(db.scalars(statement))
@@ -163,7 +147,7 @@ def create_annotation(db: Session, payload: AnnotationCreate) -> Annotation:
     """Validate the scan exists, then persist a new annotation row."""
 
     scan = get_scan_or_404(db, payload.scan_id)
-    _validate_annotation_geometry(scan, payload.annotation_type, payload.coordinates, payload.slice_index)
+    validate_annotation_geometry(scan, payload.annotation_type, payload.coordinates, payload.slice_index)
     if payload.project_id is not None and scan.project_id is not None and payload.project_id != scan.project_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Annotation project does not match scan project")
     if payload.label_id is not None:
@@ -175,6 +159,7 @@ def create_annotation(db: Session, payload: AnnotationCreate) -> Annotation:
 
     annotation_data = payload.model_dump()
     annotation_data["project_id"] = payload.project_id or scan.project_id
+    _validate_assigned_user(db, payload.assigned_to_user_id, annotation_data["project_id"])
     annotation = Annotation(**annotation_data)
     db.add(annotation)
     db.commit()
@@ -190,6 +175,8 @@ def create_annotation_for_user(db: Session, payload: AnnotationCreate, current_u
         project = db.get(Project, scan.project_id)
         if project is None or project.organization_id != current_user.organization_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+    if payload.assigned_to_user_id is None:
+        payload = payload.model_copy(update={"assigned_to_user_id": current_user.id})
     return create_annotation(db, payload)
 
 
@@ -199,13 +186,16 @@ def update_annotation(db: Session, annotation_id: UUID, payload: AnnotationUpdat
     annotation = get_annotation_or_404(db, annotation_id)
     updates = payload.model_dump(exclude_unset=True)
     if "label_id" in updates and updates["label_id"] is not None:
+        project_id = _annotation_project_id(db, annotation)
         label = db.get(Label, updates["label_id"])
         if label is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
-        if annotation.project_id is not None and label.project_id != annotation.project_id:
+        if project_id is not None and label.project_id != project_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Label does not belong to annotation project")
+    if "assigned_to_user_id" in updates:
+        _validate_assigned_user(db, updates["assigned_to_user_id"], _annotation_project_id(db, annotation))
     scan = get_scan_or_404(db, annotation.scan_id)
-    _validate_annotation_geometry(
+    validate_annotation_geometry(
         scan,
         updates.get("annotation_type", annotation.annotation_type),
         updates.get("coordinates", annotation.coordinates),
@@ -297,11 +287,9 @@ def search_annotations(
     one radiologist's work, or a slice range that matches a sampled volume.
     """
 
-    statement = select(Annotation)
+    statement: Select[tuple[Annotation]] = select(Annotation)
     if current_user is not None:
-        statement = statement.outerjoin(Project, Annotation.project_id == Project.id).where(
-            (Annotation.project_id.is_(None)) | (Project.organization_id == current_user.organization_id)
-        )
+        statement = _organization_scoped_annotations(current_user)
     if label is not None:
         statement = statement.where(Annotation.label == label)
     if annotation_type is not None:

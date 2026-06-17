@@ -157,6 +157,7 @@ class Annotation(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Free text supports clinical nuance that a label alone cannot capture.
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    assigned_to_user_id: Mapped[PythonUUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
     updated_by_user_id: Mapped[PythonUUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
     reviewed_by_user_id: Mapped[PythonUUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=True)
     # Created and updated timestamps are essential for audit trails.

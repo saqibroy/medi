@@ -20,3 +20,7 @@ export async function login(email: string, password: string): Promise<AuthRespon
 export async function getMe(token: string): Promise<User> {
   return request<User>("/auth/me", { headers: { Authorization: `Bearer ${token}` } });
 }
+
+export async function listUsers(token: string): Promise<User[]> {
+  return request<User[]>("/users", { headers: { Authorization: `Bearer ${token}` } });
+}

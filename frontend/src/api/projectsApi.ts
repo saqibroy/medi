@@ -1,5 +1,5 @@
 import type { Label, Project, ProjectExportResponse, ProjectPayload } from "../types/project";
-import type { Scan } from "../types/scan";
+import type { ProjectReviewStats, Scan } from "../types/scan";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -40,6 +40,10 @@ export async function listProjectLabels(projectId: string, token: string): Promi
 
 export async function exportProjectForMl(projectId: string, token: string): Promise<ProjectExportResponse> {
   return request<ProjectExportResponse>(`/projects/${projectId}/export`, token);
+}
+
+export async function getProjectStats(projectId: string, token: string): Promise<ProjectReviewStats> {
+  return request<ProjectReviewStats>(`/projects/${projectId}/stats`, token);
 }
 
 export async function exportProjectAsCoco(projectId: string, token: string): Promise<Record<string, unknown>> {

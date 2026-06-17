@@ -96,10 +96,10 @@ export function useAnnotations(scanId?: string, token?: string, reviewerName = "
     setAnnotations((current) => current.map((annotation) => (annotation.id === updated.id ? updated : annotation)));
   }, [token]);
 
-  const reviewExistingAnnotation = useCallback(async (annotationId: string, status: ReviewStatus) => {
+  const reviewExistingAnnotation = useCallback(async (annotationId: string, status: ReviewStatus, notes?: string | null) => {
     /** Save QA decisions and replace the local row with the reviewed version. */
     if (!token) return;
-    const reviewed = await reviewAnnotation(annotationId, reviewerName, status, token, null);
+    const reviewed = await reviewAnnotation(annotationId, reviewerName, status, token, notes ?? null);
     setAnnotations((current) => current.map((annotation) => (annotation.id === reviewed.id ? reviewed : annotation)));
   }, [reviewerName, token]);
 

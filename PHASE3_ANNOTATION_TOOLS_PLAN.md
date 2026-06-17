@@ -58,19 +58,19 @@ image labels quickly enough for real research dataset preparation.
 
 - [x] Add undo and redo for local viewer edits.
 - [x] Add keyboard shortcuts for common actions.
-- [ ] Add copy annotation to adjacent slice.
+- [x] Add copy annotation to adjacent slice.
 - [x] Add quick label switching.
-- [ ] Add zoom and pan controls for detailed image work.
-- [ ] Add clear empty states when no label is selected.
+- [x] Add zoom and pan controls for detailed image work.
+- [x] Add clear empty states when no label is selected.
 
 ## Review Workflow
 
 - [x] Add `needs_changes` review status.
 - [x] Add reviewer comments visible to annotators.
 - [x] Add review filter tabs: all, pending, approved, rejected, needs changes.
-- [ ] Add annotation assignment/ownership field.
+- [x] Add annotation assignment/ownership field.
 - [x] Add review activity timestamps to the UI.
-- [ ] Add review summary metrics per project and scan.
+- [x] Add review summary metrics per project and scan.
 
 ## Version History And Audit
 
@@ -85,7 +85,7 @@ image labels quickly enough for real research dataset preparation.
 - [x] Keep current JSON export as the canonical internal format.
 - [x] Add CSV export for spreadsheet review.
 - [x] Add COCO export for bounding boxes.
-- [ ] Add COCO export for polygons.
+- [x] Add COCO export for polygons.
 - [x] Add YOLO export for bounding boxes.
 - [x] Add segmentation export once mask storage is implemented.
 - [x] Add export tests for coordinate conversion and project scoping.
@@ -96,18 +96,18 @@ image labels quickly enough for real research dataset preparation.
 - [ ] Add icon buttons and tooltips for annotation tools.
 - [x] Add selected annotation styling.
 - [x] Add keyboard shortcut handling.
-- [ ] Add annotation edit panel for label/status/notes.
+- [x] Add annotation edit panel for label/status/notes.
 - [x] Keep canvas dimensions tied to parsed scan dimensions.
 
 ## Backend Plan
 
-- [ ] Harden `AnnotationUpdate` validation for every geometry type.
-- [ ] Add reusable geometry validators.
+- [x] Harden `AnnotationUpdate` validation for every geometry type.
+- [x] Add reusable geometry validators.
 - [x] Add annotation history model and migration.
 - [x] Add export service modules by format.
 - [x] Add segmentation mask model, migration, local storage service, and routes.
-- [ ] Add permission tests for edit, delete, review, and export workflows.
-- [ ] Keep all annotation queries organization-scoped.
+- [x] Add permission tests for edit, delete, review, and export workflows.
+- [x] Keep all annotation queries organization-scoped.
 
 ## Testing Plan
 
@@ -152,13 +152,24 @@ Frontend/manual checks:
 18. [x] Add frontend mask save/load behavior through the API.
 19. [x] Add segmentation export path for training data.
 20. [x] Add local undo/redo snapshots for mask brush edits.
-21. [ ] Add COCO export for polygon annotations.
+21. [x] Add COCO export for polygon annotations.
+22. [x] Add annotation edit panel for label/status/notes.
+23. [x] Add review summary metrics per project and scan.
+24. [x] Add annotation assignment/ownership field.
+25. [x] Add zoom and pan controls for detailed image work.
+26. [x] Add copy annotation to adjacent slice.
+27. [x] Add clear empty states when no label is selected.
+28. [x] Harden `AnnotationUpdate` validation for every geometry type.
+29. [x] Add reusable geometry validators.
+30. [x] Add permission tests for edit, delete, review, and export workflows.
+31. [x] Keep all annotation queries organization-scoped.
+32. [ ] Split viewer toolbar into explicit modes: pan, box, polygon, mask, select.
 
 ## Phase 3 Exit Criteria
 
 - [x] Annotators can edit and delete bounding boxes without leaving the viewer.
-- [ ] Polygon annotations can be created, rendered, edited, and exported.
-- [ ] Geometry validation protects image pixel-space coordinates.
+- [x] Polygon annotations can be created, rendered, edited, and exported.
+- [x] Geometry validation protects image pixel-space coordinates.
 - [x] Reviewers can filter and manage annotation QA efficiently.
 - [x] At least one common ML export format is available beyond internal JSON.
-- [ ] Tests cover edit, delete, review, export, and organization scoping.
+- [x] Tests cover edit, delete, review, export, and organization scoping.

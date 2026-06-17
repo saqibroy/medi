@@ -23,6 +23,7 @@ CSV_COLUMNS = [
     "annotation_type",
     "review_status",
     "created_by",
+    "assigned_to_user_id",
     "reviewer",
     "confidence_score",
     "notes",
@@ -110,6 +111,21 @@ def _approved_coco_annotations(db: Session, scan_ids: Sequence[UUID]) -> list[An
             Annotation.scan_id.in_(scan_ids),
             Annotation.review_status == "approved",
             Annotation.annotation_type.in_(("bounding_box", "polygon")),
+        )
+        .order_by(Annotation.scan_id, Annotation.slice_index, Annotation.created_at)
+    )
+    return list(db.scalars(statement))
+
+
+def _approved_bounding_boxes(db: Session, scan_ids: Sequence[UUID]) -> list[Annotation]:
+    if not scan_ids:
+        return []
+    statement = (
+        select(Annotation)
+        .where(
+            Annotation.scan_id.in_(scan_ids),
+            Annotation.review_status == "approved",
+            Annotation.annotation_type == "bounding_box",
         )
         .order_by(Annotation.scan_id, Annotation.slice_index, Annotation.created_at)
     )
@@ -290,6 +306,7 @@ def build_csv_export(db: Session, scans: Sequence[Scan], project_id: UUID | None
                 "annotation_type": annotation.annotation_type,
                 "review_status": annotation.review_status,
                 "created_by": annotation.created_by,
+                "assigned_to_user_id": annotation.assigned_to_user_id,
                 "reviewer": annotation.reviewer,
                 "confidence_score": annotation.confidence_score,
                 "notes": annotation.notes,

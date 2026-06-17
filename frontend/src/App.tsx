@@ -6,14 +6,15 @@
 
 import { FormEvent, Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
-import { getMe, login } from "./api/authApi";
-import { createProject, createProjectLabel, deleteProjectLabel, listProjectLabels, listProjects, updateProject, updateProjectLabel } from "./api/projectsApi";
-import { createScan, uploadScan } from "./api/scansApi";
+import { getMe, listUsers, login } from "./api/authApi";
+import { createProject, createProjectLabel, deleteProjectLabel, getProjectStats, listProjectLabels, listProjects, updateProject, updateProjectLabel } from "./api/projectsApi";
+import { createScan, getScanStats, uploadScan } from "./api/scansApi";
 import { AnnotationList } from "./components/AnnotationList";
 import { AnnotationTools } from "./components/AnnotationTools";
 import { ExportPanel } from "./components/ExportPanel";
 import { LabelManager } from "./components/LabelManager";
 import { ProjectManager } from "./components/ProjectManager";
+import { ReviewSummaryPanel } from "./components/ReviewSummaryPanel";
 import { ScanList } from "./components/ScanList";
 import { ScanManager } from "./components/ScanManager";
 import { ScanMetadataPanel } from "./components/ScanMetadataPanel";
@@ -23,7 +24,7 @@ import { useAnnotations } from "./hooks/useAnnotations";
 import { useScan } from "./hooks/useScan";
 import type { AnnotationType } from "./types/annotation";
 import type { Label, Project, ProjectPayload } from "./types/project";
-import type { ScanCreate, ScanUpload } from "./types/scan";
+import type { ProjectReviewStats, ReviewStats, ScanCreate, ScanUpload } from "./types/scan";
 import type { User } from "./types/user";
 
 const ViewerPanel = lazy(() => import("./components/ViewerPanel").then((module) => ({ default: module.ViewerPanel })));
@@ -45,6 +46,7 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [labels, setLabels] = useState<Label[]>([]);
+  const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
   const [selectedLabelId, setSelectedLabelId] = useState("");
   const [annotationType, setAnnotationType] = useState<AnnotationType>("bounding_box");
   const [loginEmail, setLoginEmail] = useState("admin@medi.local");
@@ -52,8 +54,14 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [labelsError, setLabelsError] = useState<string | null>(null);
+  const [usersError, setUsersError] = useState<string | null>(null);
   const [isProjectsLoading, setIsProjectsLoading] = useState(false);
   const [isLabelsLoading, setIsLabelsLoading] = useState(false);
+  const [projectReviewStats, setProjectReviewStats] = useState<ProjectReviewStats | null>(null);
+  const [scanReviewStats, setScanReviewStats] = useState<ReviewStats | null>(null);
+  const [reviewStatsError, setReviewStatsError] = useState<string | null>(null);
+  const [isProjectStatsLoading, setIsProjectStatsLoading] = useState(false);
+  const [isScanStatsLoading, setIsScanStatsLoading] = useState(false);
   const [windowCenter, setWindowCenter] = useState(600);
   const [windowWidth, setWindowWidth] = useState(1200);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
@@ -77,7 +85,9 @@ export default function App() {
   const canManageWorkspace = user?.role === "admin";
   const canAnnotate = user?.role === "admin" || user?.role === "annotator";
   const canReview = user?.role === "admin" || user?.role === "reviewer";
-  const projectStats = useMemo(
+  const canDrawAnnotations = canAnnotate && Boolean(selectedLabel);
+  const annotationBlockedMessage = canAnnotate && selectedProject && selectedScan && !isLabelsLoading && !selectedLabel ? "Add a project label before drawing annotations." : null;
+  const workspaceStats = useMemo(
     () => ({
       scans: scans.length,
       labels: labels.length,
@@ -112,6 +122,17 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
+    if (!token || !user) {
+      setWorkspaceUsers([]);
+      setUsersError(null);
+      return;
+    }
+    listUsers(token)
+      .then(setWorkspaceUsers)
+      .catch((apiError: Error) => setUsersError(apiError.message));
+  }, [token, user]);
+
+  useEffect(() => {
     if (!token || !user) return;
     setIsProjectsLoading(true);
     setProjectsError(null);
@@ -140,6 +161,33 @@ export default function App() {
       .catch((apiError: Error) => setLabelsError(apiError.message))
       .finally(() => setIsLabelsLoading(false));
   }, [token, selectedProject]);
+
+  useEffect(() => {
+    if (!token || !selectedProject) {
+      setProjectReviewStats(null);
+      setReviewStatsError(null);
+      return;
+    }
+    setIsProjectStatsLoading(true);
+    setReviewStatsError(null);
+    getProjectStats(selectedProject.id, token)
+      .then(setProjectReviewStats)
+      .catch((apiError: Error) => setReviewStatsError(apiError.message))
+      .finally(() => setIsProjectStatsLoading(false));
+  }, [annotations, selectedProject, token]);
+
+  useEffect(() => {
+    if (!token || !selectedScan) {
+      setScanReviewStats(null);
+      return;
+    }
+    setIsScanStatsLoading(true);
+    setReviewStatsError(null);
+    getScanStats(selectedScan.id, token)
+      .then(setScanReviewStats)
+      .catch((apiError: Error) => setReviewStatsError(apiError.message))
+      .finally(() => setIsScanStatsLoading(false));
+  }, [annotations, selectedScan, token]);
 
   useEffect(() => {
     setWindowCenter(defaultWindowCenter);
@@ -363,22 +411,23 @@ export default function App() {
           <div className="grid grid-cols-2 gap-2 text-center text-sm">
             <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
               <p className="text-xs text-slate-500">Scans</p>
-              <p className="font-semibold text-slate-950">{projectStats.scans}</p>
+              <p className="font-semibold text-slate-950">{workspaceStats.scans}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
               <p className="text-xs text-slate-500">Labels</p>
-              <p className="font-semibold text-slate-950">{projectStats.labels}</p>
+              <p className="font-semibold text-slate-950">{workspaceStats.labels}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
               <p className="text-xs text-slate-500">Approved</p>
-              <p className="font-semibold text-emerald-700">{projectStats.approved}</p>
+              <p className="font-semibold text-emerald-700">{workspaceStats.approved}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 p-2">
               <p className="text-xs text-slate-500">Pending</p>
-              <p className="font-semibold text-amber-700">{projectStats.pending}</p>
+              <p className="font-semibold text-amber-700">{workspaceStats.pending}</p>
             </div>
           </div>
         </div>
+        <ReviewSummaryPanel projectStats={projectReviewStats} scanStats={scanReviewStats} isLoading={isProjectStatsLoading || isScanStatsLoading} error={reviewStatsError} />
         <LabelManager
           labels={labels}
           selectedLabelId={selectedLabel?.id ?? ""}
@@ -404,6 +453,7 @@ export default function App() {
         />
         {error ? <div className="bg-red-50 p-2 text-sm text-red-700">{error}</div> : null}
         {authError ? <div className="bg-red-50 p-2 text-sm text-red-700">{authError}</div> : null}
+        {usersError ? <div className="bg-red-50 p-2 text-sm text-red-700">{usersError}</div> : null}
         <Suspense fallback={<ViewerFallback />}>
           <ViewerPanel
             scan={selectedScan}
@@ -415,13 +465,15 @@ export default function App() {
             projectId={selectedProject?.id}
             annotationType={annotationType}
             createdBy={user.full_name}
-            canAnnotate={canAnnotate}
+            canAnnotate={canDrawAnnotations}
             canDeleteAnnotation={canManageWorkspace}
             selectedAnnotationId={selectedAnnotationId}
             windowCenter={windowCenter}
             windowWidth={windowWidth}
             emptyMessage={viewerEmptyMessage}
+            annotationBlockedMessage={annotationBlockedMessage}
             onSelectAnnotation={setSelectedAnnotationId}
+            onSliceChange={setSliceIndex}
             onSaveAnnotation={saveAnnotation}
             onUpdateAnnotation={updateExistingAnnotation}
             onDeleteAnnotation={handleDeleteAnnotation}
@@ -445,12 +497,15 @@ export default function App() {
           historyError={historyError}
           isHistoryLoading={isHistoryLoading}
           labels={labels}
+          users={workspaceUsers}
           currentSlice={sliceIndex}
           selectedAnnotationId={selectedAnnotationId}
+          canAnnotate={canAnnotate}
           canReview={canReview}
           canDelete={canManageWorkspace}
           onSelectAnnotation={setSelectedAnnotationId}
           onDelete={handleDeleteAnnotation}
+          onUpdateAnnotation={updateExistingAnnotation}
           onReview={reviewExistingAnnotation}
         />
       </aside>

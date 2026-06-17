@@ -4,7 +4,7 @@
  * contract easy to replace with generated clients or test doubles later.
  */
 
-import type { Scan, ScanCreate, ScanMetadata, ScanUpload, SliceImage } from "../types/scan";
+import type { ReviewStats, Scan, ScanCreate, ScanMetadata, ScanUpload, SliceImage } from "../types/scan";
 import type { ExportResponse } from "../types/annotation";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -54,6 +54,11 @@ export async function getScanSlice(scanId: string, sliceIndex: number, token: st
 export async function getScanMetadata(scanId: string, token: string): Promise<ScanMetadata> {
   /** Load parsed imaging metadata for the selected scan. */
   return request<ScanMetadata>(`/scans/${scanId}/metadata`, token);
+}
+
+export async function getScanStats(scanId: string, token: string): Promise<ReviewStats> {
+  /** Load annotation and review metrics for one scan. */
+  return request<ReviewStats>(`/scans/${scanId}/stats`, token);
 }
 
 export async function createScan(payload: ScanCreate, token: string): Promise<Scan> {

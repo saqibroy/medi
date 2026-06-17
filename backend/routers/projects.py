@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import CocoExportRead, CsvExportRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectUpdate, ScanRead, SegmentationExportRead, YoloExportRead
+from ..schemas import CocoExportRead, CsvExportRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectStatsRead, ProjectUpdate, ScanRead, SegmentationExportRead, YoloExportRead
 from ..security import get_current_user, require_admin
 from ..services import project_service, scan_service
 
@@ -71,6 +71,13 @@ async def export_project(project_id: UUID, db: Session = Depends(get_db), curren
     """Export reviewed annotation data across every scan in a project."""
 
     return project_service.export_project_annotations(db, project_id, current_user)
+
+
+@router.get("/projects/{project_id}/stats", response_model=ProjectStatsRead)
+async def get_project_stats(project_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> ProjectStatsRead:
+    """Return project-level annotation coverage and QA statistics."""
+
+    return project_service.get_project_annotation_stats(db, project_id, current_user)
 
 
 @router.get("/projects/{project_id}/export/coco", response_model=CocoExportRead)

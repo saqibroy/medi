@@ -28,7 +28,9 @@ interface ViewerPanelProps {
   windowCenter: number;
   windowWidth: number;
   emptyMessage: string;
+  annotationBlockedMessage?: string | null;
   onSelectAnnotation: (annotationId: string | null) => void;
+  onSliceChange: (sliceIndex: number) => void;
   onSaveAnnotation: (payload: AnnotationCreate) => Promise<Annotation | void>;
   onUpdateAnnotation: (annotationId: string, payload: AnnotationUpdate) => Promise<void>;
   onDeleteAnnotation: (annotationId: string) => Promise<void>;
@@ -69,10 +71,15 @@ interface MaskHistoryEntry {
 export function ViewerPanel(props: ViewerPanelProps) {
   /** Capture mouse gestures, render images, and save annotation geometry. */
   const { elementRef } = useViewer();
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskGestureStartRef = useRef<ImageData | null>(null);
+  const panStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
   const [interaction, setInteraction] = useState<Interaction | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [isPanMode, setIsPanMode] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
   const [polygonPoints, setPolygonPoints] = useState<PolygonPoint[]>([]);
   const [polygonPreviewPoint, setPolygonPreviewPoint] = useState<PolygonPoint | null>(null);
   const [undoStack, setUndoStack] = useState<GeometryHistoryEntry[]>([]);
@@ -86,6 +93,8 @@ export function ViewerPanel(props: ViewerPanelProps) {
   const [maskRevision, setMaskRevision] = useState(0);
   const [maskStatus, setMaskStatus] = useState<MaskStatus>("idle");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [copyDirection, setCopyDirection] = useState<-1 | 1 | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const { canDeleteAnnotation, onDeleteAnnotation, onSelectAnnotation, selectedAnnotationId } = props;
 
   const currentSliceAnnotations = useMemo(
@@ -96,10 +105,39 @@ export function ViewerPanel(props: ViewerPanelProps) {
     () => currentSliceAnnotations.find((annotation) => annotation.id === props.selectedAnnotationId && annotation.annotation_type === "segmentation") ?? null,
     [currentSliceAnnotations, props.selectedAnnotationId],
   );
+  const selectedAnnotation = useMemo(
+    () => props.annotations.find((annotation) => annotation.id === props.selectedAnnotationId) ?? null,
+    [props.annotations, props.selectedAnnotationId],
+  );
   const contrast = Math.max(0.25, Math.min(4, 1200 / Math.max(props.windowWidth, 1)));
   const brightness = Math.max(0.25, Math.min(2.5, props.windowCenter / 600));
   const canvasWidth = props.scan?.width ?? 512;
   const canvasHeight = props.scan?.height ?? 512;
+  const zoomPercent = Math.round(zoom * 100);
+  const previousSliceIndex = selectedAnnotation ? selectedAnnotation.slice_index - 1 : -1;
+  const nextSliceIndex = selectedAnnotation ? selectedAnnotation.slice_index + 1 : -1;
+  const canCopySelectedAnnotation = Boolean(props.canAnnotate && props.scan && selectedAnnotation && selectedAnnotation.annotation_type !== "segmentation");
+  const canCopyPrevious = canCopySelectedAnnotation && previousSliceIndex >= 0;
+  const canCopyNext = canCopySelectedAnnotation && props.scan !== null && nextSliceIndex < props.scan.num_slices;
+
+  function clampZoom(value: number): number {
+    return Math.max(0.5, Math.min(4, Number(value.toFixed(2))));
+  }
+
+  function changeZoom(delta: number): void {
+    setZoom((current) => clampZoom(current + delta));
+  }
+
+  function resetViewport(): void {
+    setZoom(1);
+    setIsPanMode(false);
+    setIsPanning(false);
+    panStartRef.current = null;
+    if (viewportRef.current) {
+      viewportRef.current.scrollLeft = 0;
+      viewportRef.current.scrollTop = 0;
+    }
+  }
 
   function boundingBoxFor(annotation: Annotation): BoundingBoxCoordinates | null {
     const box = annotation.coordinates as Partial<BoundingBoxCoordinates>;
@@ -302,6 +340,32 @@ export function ViewerPanel(props: ViewerPanelProps) {
     recordMaskEdit(before, captureMaskSnapshot());
   }
 
+  function handlePanMouseDown(event: MouseEvent<HTMLDivElement>): void {
+    if (!isPanMode || event.button !== 0) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    event.preventDefault();
+    panStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+    setIsPanning(true);
+  }
+
+  function handlePanMouseMove(event: MouseEvent<HTMLDivElement>): void {
+    if (!isPanning || !panStartRef.current || !viewportRef.current) return;
+    const start = panStartRef.current;
+    viewportRef.current.scrollLeft = start.scrollLeft - (event.clientX - start.x);
+    viewportRef.current.scrollTop = start.scrollTop - (event.clientY - start.y);
+  }
+
+  function finishPanGesture(): void {
+    panStartRef.current = null;
+    setIsPanning(false);
+  }
+
   function maskCanvasToBlob(): Promise<Blob> {
     const maskCanvas = ensureMaskCanvas();
     return new Promise((resolve, reject) => {
@@ -366,6 +430,36 @@ export function ViewerPanel(props: ViewerPanelProps) {
       setIsDeleting(false);
     }
   }, [canDeleteAnnotation, isDeleting, onDeleteAnnotation, onSelectAnnotation, selectedAnnotationId]);
+
+  async function copySelectedAnnotation(direction: -1 | 1): Promise<void> {
+    if (!props.scan || !selectedAnnotation || selectedAnnotation.annotation_type === "segmentation") return;
+    const targetSliceIndex = selectedAnnotation.slice_index + direction;
+    if (targetSliceIndex < 0 || targetSliceIndex >= props.scan.num_slices) return;
+    setCopyDirection(direction);
+    setCopyError(null);
+    try {
+      const copied = await props.onSaveAnnotation({
+        scan_id: selectedAnnotation.scan_id,
+        project_id: selectedAnnotation.project_id ?? props.projectId ?? props.scan.project_id,
+        label_id: selectedAnnotation.label_id,
+        label: selectedAnnotation.label,
+        annotation_type: selectedAnnotation.annotation_type,
+        coordinates: cloneCoordinates(selectedAnnotation.coordinates),
+        slice_index: targetSliceIndex,
+        created_by: props.createdBy,
+        confidence_score: selectedAnnotation.confidence_score,
+        review_status: "pending",
+        notes: selectedAnnotation.notes,
+        assigned_to_user_id: selectedAnnotation.assigned_to_user_id,
+      });
+      props.onSliceChange(targetSliceIndex);
+      if (copied) props.onSelectAnnotation(copied.id);
+    } catch (error) {
+      setCopyError(error instanceof Error ? error.message : "Could not copy annotation");
+    } finally {
+      setCopyDirection(null);
+    }
+  }
 
   const undoGeometryEdit = useCallback(async (): Promise<void> => {
     const entry = undoStack[undoStack.length - 1];
@@ -469,6 +563,14 @@ export function ViewerPanel(props: ViewerPanelProps) {
     setMaskRedoStack([]);
     maskGestureStartRef.current = null;
   }, [props.scan?.id, props.sliceIndex]);
+
+  useEffect(() => {
+    setCopyError(null);
+  }, [props.selectedAnnotationId, props.sliceIndex]);
+
+  useEffect(() => {
+    resetViewport();
+  }, [canvasHeight, canvasWidth, props.scan?.id]);
 
   useEffect(() => {
     clearMask();
@@ -637,6 +739,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
 
   async function handleMouseDown(event: MouseEvent<HTMLCanvasElement>): Promise<void> {
     /** Select existing annotations or start a new annotation draft. */
+    if (isPanMode) return;
     if (!props.canAnnotate) return;
     const point = canvasPoint(event);
     if (props.annotationType === "segmentation") {
@@ -710,6 +813,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
 
   function handleMouseMove(event: MouseEvent<HTMLCanvasElement>): void {
     /** Update width and height as the user drags across the image. */
+    if (isPanMode) return;
     const point = canvasPoint(event);
     if (props.annotationType === "segmentation" && isMaskDrawing) {
       drawMaskPoint(point);
@@ -752,6 +856,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
 
   async function handleMouseUp(): Promise<void> {
     /** Normalize and save the completed draft box through the annotation API. */
+    if (isPanMode) return;
     if (isMaskDrawing) {
       finishMaskGesture();
       return;
@@ -794,119 +899,180 @@ export function ViewerPanel(props: ViewerPanelProps) {
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-slate-950">
       <div ref={elementRef} className="hidden" />
-      <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+      <div className="relative min-h-0 flex-1 p-4">
         {props.scan && props.sliceImage ? (
-          <div className="relative flex max-h-full max-w-full items-center justify-center">
-            {props.canDeleteAnnotation && props.selectedAnnotationId ? (
-              <button
-                className="absolute right-3 top-3 z-10 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={isDeleting}
-                onClick={handleDeleteSelected}
-                type="button"
-              >
-                {isDeleting ? "Deleting..." : "Delete selected"}
+          <>
+            <div className="absolute bottom-6 right-6 z-20 flex items-center gap-1 rounded-md border border-slate-700 bg-slate-950/90 p-1 text-xs text-white shadow-sm">
+              <button className="h-8 min-w-8 rounded border border-slate-600 px-2 font-semibold hover:bg-slate-800" onClick={() => changeZoom(-0.25)} type="button">
+                -
               </button>
-            ) : null}
-            {props.annotationType === "polygon" && polygonPoints.length > 0 ? (
-              <div className="absolute left-3 top-3 z-10 flex gap-2">
-                <button
-                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={polygonPoints.length < 3}
-                  onClick={() => void finishPolygon(polygonPoints)}
-                  type="button"
-                >
-                  Finish polygon
-                </button>
-                <button
-                  className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-                  onClick={() => {
-                    setPolygonPoints([]);
-                    setPolygonPreviewPoint(null);
-                  }}
-                  type="button"
-                >
-                  Cancel
-                </button>
+              <span className="min-w-12 text-center font-medium">{zoomPercent}%</span>
+              <button className="h-8 min-w-8 rounded border border-slate-600 px-2 font-semibold hover:bg-slate-800" onClick={() => changeZoom(0.25)} type="button">
+                +
+              </button>
+              <button className="h-8 rounded border border-slate-600 px-2 font-medium hover:bg-slate-800" onClick={resetViewport} type="button">
+                Reset
+              </button>
+              <button className={`h-8 rounded border px-2 font-medium ${isPanMode ? "border-teal-400 bg-teal-500 text-white" : "border-slate-600 hover:bg-slate-800"}`} onClick={() => setIsPanMode((current) => !current)} type="button">
+                Pan
+              </button>
+            </div>
+            {props.annotationBlockedMessage ? (
+              <div className="absolute left-1/2 top-6 z-20 max-w-sm -translate-x-1/2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-900 shadow-sm">
+                {props.annotationBlockedMessage}
               </div>
             ) : null}
-            {props.annotationType === "segmentation" ? (
-              <div className="absolute left-3 top-3 z-10 flex max-w-[min(28rem,calc(100vw-2rem))] flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
-                <button
-                  className={`rounded-md border px-2 py-1 font-medium ${maskTool === "brush" ? "border-sky-500 bg-sky-50 text-sky-700" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
-                  onClick={() => setMaskTool("brush")}
-                  type="button"
-                >
-                  Brush
-                </button>
-                <button
-                  className={`rounded-md border px-2 py-1 font-medium ${maskTool === "eraser" ? "border-sky-500 bg-sky-50 text-sky-700" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
-                  onClick={() => setMaskTool("eraser")}
-                  type="button"
-                >
-                  Eraser
-                </button>
-                <label className="flex items-center gap-2 text-slate-600">
-                  Size
-                  <input className="w-20 accent-sky-600" max={80} min={4} onChange={(event) => setMaskBrushSize(Number(event.target.value))} type="range" value={maskBrushSize} />
-                </label>
-                <label className="flex items-center gap-2 text-slate-600">
-                  Opacity
-                  <input className="w-20 accent-sky-600" max={0.9} min={0.1} onChange={(event) => setMaskOpacity(Number(event.target.value))} step={0.05} type="range" value={maskOpacity} />
-                </label>
-                <button
-                  className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!props.canAnnotate || maskUndoStack.length === 0 || maskStatus === "saving" || maskStatus === "loading"}
-                  onClick={undoMaskEdit}
-                  type="button"
-                >
-                  Undo
-                </button>
-                <button
-                  className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!props.canAnnotate || maskRedoStack.length === 0 || maskStatus === "saving" || maskStatus === "loading"}
-                  onClick={redoMaskEdit}
-                  type="button"
-                >
-                  Redo
-                </button>
-                <button className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50" onClick={handleClearMask} type="button">
-                  Clear
-                </button>
-                <button
-                  className="rounded-md border border-sky-500 bg-sky-600 px-2 py-1 font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={!props.canAnnotate || maskStatus === "saving" || maskStatus === "loading"}
-                  onClick={() => void handleSaveMask()}
-                  type="button"
-                >
-                  {maskSaveLabel}
-                </button>
-                {selectedSegmentationAnnotation ? (
-                  <button
-                    className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={!props.canAnnotate || maskStatus === "saving" || maskStatus === "loading"}
-                    onClick={() => void handleDeleteSavedMask()}
-                    type="button"
-                  >
-                    Delete saved
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-            <canvas
-              ref={canvasRef}
-              width={canvasWidth}
-              height={canvasHeight}
-              className={`max-h-full max-w-full rounded-md border border-slate-700 bg-black ${props.canAnnotate ? "cursor-crosshair" : "cursor-not-allowed"}`}
-              onMouseDown={handleMouseDown}
+            <div
+              ref={viewportRef}
+              className={`h-full w-full overflow-auto rounded-md border border-slate-800 bg-slate-900 ${isPanMode ? (isPanning ? "cursor-grabbing" : "cursor-grab") : ""}`}
+              onMouseDown={handlePanMouseDown}
               onMouseLeave={() => {
+                finishPanGesture();
                 if (isMaskDrawing) finishMaskGesture();
               }}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-            />
-          </div>
+              onMouseMove={handlePanMouseMove}
+              onMouseUp={finishPanGesture}
+            >
+              <div className="flex min-h-full min-w-full items-center justify-center p-3">
+                <div className="relative shrink-0" style={{ width: canvasWidth * zoom, height: canvasHeight * zoom }}>
+                  {props.selectedAnnotationId ? (
+                    <div className="absolute right-3 top-3 z-10 flex max-w-44 flex-wrap justify-end gap-2">
+                      {canCopySelectedAnnotation ? (
+                        <>
+                          <button
+                            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={!canCopyPrevious || copyDirection !== null}
+                            onClick={() => void copySelectedAnnotation(-1)}
+                            type="button"
+                          >
+                            {copyDirection === -1 ? "Copying..." : "Copy prev"}
+                          </button>
+                          <button
+                            className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={!canCopyNext || copyDirection !== null}
+                            onClick={() => void copySelectedAnnotation(1)}
+                            type="button"
+                          >
+                            {copyDirection === 1 ? "Copying..." : "Copy next"}
+                          </button>
+                        </>
+                      ) : null}
+                      {props.canDeleteAnnotation ? (
+                        <button
+                          className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={isDeleting}
+                          onClick={handleDeleteSelected}
+                          type="button"
+                        >
+                          {isDeleting ? "Deleting..." : "Delete"}
+                        </button>
+                      ) : null}
+                      {copyError ? <p className="w-full rounded-md bg-white/95 px-2 py-1 text-right text-xs text-red-700 shadow-sm">{copyError}</p> : null}
+                    </div>
+                  ) : null}
+                  {props.annotationType === "polygon" && polygonPoints.length > 0 ? (
+                    <div className="absolute left-3 top-3 z-10 flex gap-2">
+                      <button
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={polygonPoints.length < 3}
+                        onClick={() => void finishPolygon(polygonPoints)}
+                        type="button"
+                      >
+                        Finish polygon
+                      </button>
+                      <button
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                        onClick={() => {
+                          setPolygonPoints([]);
+                          setPolygonPreviewPoint(null);
+                        }}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : null}
+                  {props.annotationType === "segmentation" ? (
+                    <div className="absolute left-3 top-3 z-10 flex max-w-[min(28rem,calc(100vw-2rem))] flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
+                      <button
+                        className={`rounded-md border px-2 py-1 font-medium ${maskTool === "brush" ? "border-sky-500 bg-sky-50 text-sky-700" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
+                        onClick={() => setMaskTool("brush")}
+                        type="button"
+                      >
+                        Brush
+                      </button>
+                      <button
+                        className={`rounded-md border px-2 py-1 font-medium ${maskTool === "eraser" ? "border-sky-500 bg-sky-50 text-sky-700" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
+                        onClick={() => setMaskTool("eraser")}
+                        type="button"
+                      >
+                        Eraser
+                      </button>
+                      <label className="flex items-center gap-2 text-slate-600">
+                        Size
+                        <input className="w-20 accent-sky-600" max={80} min={4} onChange={(event) => setMaskBrushSize(Number(event.target.value))} type="range" value={maskBrushSize} />
+                      </label>
+                      <label className="flex items-center gap-2 text-slate-600">
+                        Opacity
+                        <input className="w-20 accent-sky-600" max={0.9} min={0.1} onChange={(event) => setMaskOpacity(Number(event.target.value))} step={0.05} type="range" value={maskOpacity} />
+                      </label>
+                      <button
+                        className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!props.canAnnotate || maskUndoStack.length === 0 || maskStatus === "saving" || maskStatus === "loading"}
+                        onClick={undoMaskEdit}
+                        type="button"
+                      >
+                        Undo
+                      </button>
+                      <button
+                        className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!props.canAnnotate || maskRedoStack.length === 0 || maskStatus === "saving" || maskStatus === "loading"}
+                        onClick={redoMaskEdit}
+                        type="button"
+                      >
+                        Redo
+                      </button>
+                      <button className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50" onClick={handleClearMask} type="button">
+                        Clear
+                      </button>
+                      <button
+                        className="rounded-md border border-sky-500 bg-sky-600 px-2 py-1 font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!props.canAnnotate || maskStatus === "saving" || maskStatus === "loading"}
+                        onClick={() => void handleSaveMask()}
+                        type="button"
+                      >
+                        {maskSaveLabel}
+                      </button>
+                      {selectedSegmentationAnnotation ? (
+                        <button
+                          className="rounded-md border border-slate-300 px-2 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!props.canAnnotate || maskStatus === "saving" || maskStatus === "loading"}
+                          onClick={() => void handleDeleteSavedMask()}
+                          type="button"
+                        >
+                          Delete saved
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <canvas
+                    ref={canvasRef}
+                    width={canvasWidth}
+                    height={canvasHeight}
+                    className={`rounded-md border border-slate-700 bg-black ${isPanMode ? (isPanning ? "cursor-grabbing" : "cursor-grab") : props.canAnnotate ? "cursor-crosshair" : "cursor-not-allowed"}`}
+                    style={{ width: canvasWidth * zoom, height: canvasHeight * zoom }}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                  />
+                </div>
+              </div>
+            </div>
+          </>
         ) : (
-          <p className="max-w-sm text-center text-sm text-slate-300">{props.emptyMessage}</p>
+          <div className="flex h-full items-center justify-center">
+            <p className="max-w-sm text-center text-sm text-slate-300">{props.emptyMessage}</p>
+          </div>
         )}
       </div>
     </main>

@@ -39,6 +39,7 @@ export interface Annotation {
   reviewer: string | null;
   reviewed_at: string | null;
   notes: string | null;
+  assigned_to_user_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -89,6 +90,7 @@ export interface AnnotationCreate {
   reviewer?: string | null;
   reviewed_at?: string | null;
   notes?: string | null;
+  assigned_to_user_id?: string | null;
 }
 
 export interface AnnotationUpdate {
@@ -104,6 +106,7 @@ export interface AnnotationUpdate {
   reviewer?: string | null;
   reviewed_at?: string | null;
   notes?: string | null;
+  assigned_to_user_id?: string | null;
 }
 
 export interface ExportAnnotation {
@@ -114,6 +117,7 @@ export interface ExportAnnotation {
   slice_index: number;
   confidence_score: number | null;
   created_by: string;
+  assigned_to_user_id: string | null;
   review_status: ReviewStatus;
 }
 

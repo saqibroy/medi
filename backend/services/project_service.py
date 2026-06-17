@@ -1,9 +1,10 @@
 """Business logic for project workspaces and label taxonomies."""
 
+from collections import Counter
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import Annotation, Label, Project, Scan, User
@@ -121,6 +122,38 @@ def export_project_annotations(db: Session, project_id: UUID, current_user: User
         "total_annotations": sum(scan_export["total_annotations"] for scan_export in scan_exports),
         "approved_count": sum(scan_export["approved_count"] for scan_export in scan_exports),
         "pending_count": sum(scan_export["pending_count"] for scan_export in scan_exports),
+    }
+
+
+def get_project_annotation_stats(db: Session, project_id: UUID, current_user: User) -> dict:
+    """Return annotation and review metrics across all scans in a project."""
+
+    project = get_project_or_404(db, project_id, current_user)
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    scan_ids = [scan.id for scan in scans]
+    annotations = list(db.scalars(select(Annotation).where(Annotation.scan_id.in_(scan_ids)))) if scan_ids else []
+    status_counts = Counter(annotation.review_status for annotation in annotations)
+    reviewed_count = status_counts.get("approved", 0) + status_counts.get("rejected", 0) + status_counts.get("needs_changes", 0)
+    label_count = db.scalar(select(func.count()).select_from(Label).where(Label.project_id == project_id))
+    return {
+        "project_id": project.id,
+        "project_name": project.name,
+        "scan_count": len(scans),
+        "label_count": label_count or 0,
+        "total_annotations": len(annotations),
+        "approved_count": status_counts.get("approved", 0),
+        "pending_count": status_counts.get("pending", 0),
+        "rejected_count": status_counts.get("rejected", 0),
+        "needs_changes_count": status_counts.get("needs_changes", 0),
+        "review_completion_rate": reviewed_count / len(annotations) if annotations else 0,
+        "annotations_by_label": dict(Counter(annotation.label for annotation in annotations)),
+        "annotations_by_type": dict(Counter(annotation.annotation_type for annotation in annotations)),
+        "annotations_by_status": {
+            status_name: status_counts.get(status_name, 0)
+            for status_name in ("pending", "approved", "rejected", "needs_changes")
+        },
+        "slices_with_annotations": sorted({annotation.slice_index for annotation in annotations}),
+        "radiologists_involved": sorted({annotation.created_by for annotation in annotations}),
     }
 
 

@@ -15,3 +15,10 @@ def authenticate_user(db: Session, email: str, password: str) -> tuple[str, User
     if user is None or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     return create_access_token(user.id), user
+
+
+def list_organization_users(db: Session, current_user: User) -> list[User]:
+    """Return active users in the signed-in user's organization."""
+
+    statement = select(User).where(User.organization_id == current_user.organization_id, User.is_active.is_(True)).order_by(User.full_name)
+    return list(db.scalars(statement))

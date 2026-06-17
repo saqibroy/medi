@@ -111,7 +111,7 @@ should use a standard library such as Passlib.
 ### Users
 
 - [ ] `GET /users/me`
-- [ ] `GET /users`
+- [x] `GET /users`
 
 Phase 1 can keep user management minimal and seed demo users.
 
@@ -339,8 +339,33 @@ CI verification:
   mask metadata columns for training-data handoff.
 - Segmentation mask brush and clear actions now support local undo/redo
   snapshots in the viewer.
+- COCO export now includes approved polygon annotations with segmentation
+  points, derived bounding boxes, and polygon area.
+- Selected annotations can now be edited from the right panel for label,
+  status, and notes with role-aware save actions.
+- Project and selected-scan review summary metrics now show annotation totals,
+  review status counts, completion rate, top labels, annotated slices, and
+  annotator counts.
+- Annotation assignment/ownership added with organization-scoped user listing,
+  default assignment to the creating annotator, auditable reassignment, and a
+  right-panel assignee picker.
+- Viewer zoom and pan controls added so users can inspect image details while
+  keeping saved annotation coordinates in original scan pixel space.
+- Selected bounding box and polygon annotations can now be copied to adjacent
+  slices with review status reset to pending.
+- Annotation tools and viewer now clearly block unlabeled drawing when a project
+  has no selectable labels.
+- Annotation create/update validation now explicitly protects bounding box,
+  polygon, and segmentation coordinate shapes.
+- Geometry validation rules moved into a reusable service module for annotation
+  CRUD and future batch/import workflows.
+- Route tests now cover role and tenant permissions for annotation edit,
+  delete, review, and export workflows.
+- Annotation list, search, and direct fetch now scope through the scan's
+  project organization, including legacy annotations without a direct
+  `project_id`.
 
 ## Next Engineering Priorities
 
-1. Add COCO export for polygon annotations.
-2. Add annotation edit panel for label/status/notes.
+1. Split viewer toolbar into explicit modes: pan, box, polygon, mask, select.
+2. Add icon buttons and tooltips for annotation tools.

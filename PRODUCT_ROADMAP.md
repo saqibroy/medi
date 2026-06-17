@@ -94,18 +94,24 @@ Goal: make the product efficient for real labeling work.
 
 - [x] Editable bounding boxes.
 - [x] Polygon drawing and editing.
-- [ ] Segmentation mask workflow.
+- [x] Segmentation mask workflow.
 - [x] Local segmentation brush, eraser, and opacity controls.
 - [x] Backend segmentation mask metadata, local PNG storage, and API endpoints.
 - [x] Frontend segmentation mask save, load, and delete-saved controls.
 - [x] Segmentation mask manifest export for training data.
 - [x] Local undo/redo snapshots for segmentation mask brush edits.
 - [x] Undo and redo.
+- [x] Zoom and pan controls.
+- [x] Copy annotation to adjacent slice.
+- [x] Clear empty states when no label is selected.
 - [x] Keyboard shortcuts.
 - [x] Annotation version history.
 - [x] Review statuses: pending, approved, rejected, needs changes.
+- [x] Annotation edit panel for label/status/notes.
+- [x] Review summary metrics per project and scan.
+- [x] Annotation assignment/ownership field.
 - [ ] Inter-annotator agreement metrics.
-- [ ] Exports for common ML formats such as JSON, CSV, COCO, YOLO, and segmentation
+- [x] Exports for common ML formats such as JSON, CSV, COCO, YOLO, and segmentation
   training formats.
 
 ## Phase 4: Production Operations
@@ -173,5 +179,5 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Add COCO export for polygon annotations.
-2. Add annotation edit panel for label/status/notes.
+1. Split viewer toolbar into explicit modes: pan, box, polygon, mask, select.
+2. Add icon buttons and tooltips for annotation tools.

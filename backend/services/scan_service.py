@@ -353,6 +353,7 @@ def export_scan_annotations(db: Session, scan_id: UUID) -> dict:
                 "slice_index": annotation.slice_index,
                 "confidence_score": annotation.confidence_score,
                 "created_by": annotation.created_by,
+                "assigned_to_user_id": annotation.assigned_to_user_id,
                 "review_status": annotation.review_status,
             }
             for annotation in approved_annotations
@@ -409,12 +410,19 @@ def get_scan_annotation_stats(db: Session, scan_id: UUID) -> dict:
 
     get_scan_or_404(db, scan_id)
     annotations = list(db.scalars(select(Annotation).where(Annotation.scan_id == scan_id)))
+    status_counts = Counter(annotation.review_status for annotation in annotations)
+    reviewed_count = status_counts.get("approved", 0) + status_counts.get("rejected", 0) + status_counts.get("needs_changes", 0)
     return {
         "total_annotations": len(annotations),
+        "approved_count": status_counts.get("approved", 0),
+        "pending_count": status_counts.get("pending", 0),
+        "rejected_count": status_counts.get("rejected", 0),
+        "needs_changes_count": status_counts.get("needs_changes", 0),
+        "review_completion_rate": reviewed_count / len(annotations) if annotations else 0,
         "annotations_by_label": dict(Counter(annotation.label for annotation in annotations)),
         "annotations_by_type": dict(Counter(annotation.annotation_type for annotation in annotations)),
         "annotations_by_status": {
-            status_name: Counter(annotation.review_status for annotation in annotations).get(status_name, 0)
+            status_name: status_counts.get(status_name, 0)
             for status_name in ("pending", "approved", "rejected", "needs_changes")
         },
         "slices_with_annotations": sorted({annotation.slice_index for annotation in annotations}),

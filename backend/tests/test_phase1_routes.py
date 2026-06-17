@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.database import Base, get_db
 from backend.models import Annotation, Label, Organization, Project, Scan, User
-from backend.routers import annotations, auth, projects, scans
+from backend.routers import annotations, auth, projects, scans, users
 from backend.security import hash_password
 from backend.services import imaging_service, scan_service, segmentation_mask_service
 from backend.tests.fixtures.imaging import write_synthetic_dicom, write_synthetic_dicom_zip, write_synthetic_nifti
@@ -56,6 +56,7 @@ def build_test_app(storage_root: Path) -> FastAPI:
     app.include_router(projects.router)
     app.include_router(scans.router)
     app.include_router(annotations.router)
+    app.include_router(users.router)
     app.dependency_overrides[get_db] = override_get_db
 
     return app
@@ -546,6 +547,85 @@ async def test_annotation_update_respects_image_pixel_bounds(tmp_path: Path) -> 
 
 
 @pytest.mark.anyio
+async def test_annotation_update_validates_geometry_shape_by_type(tmp_path: Path) -> None:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
+        admin_token = await login(client, "admin@test.local")
+        annotator_token = await login(client, "annotator@test.local")
+        project_id = (await client.get("/projects", headers=auth_headers(admin_token))).json()[0]["id"]
+        label_id = (await client.get(f"/projects/{project_id}/labels", headers=auth_headers(admin_token))).json()[0]["id"]
+        fixture_path = write_synthetic_dicom(tmp_path / "geometry-shape.dcm", width=8, height=6)
+        upload = await client.post(
+            "/scans/upload",
+            data={"project_id": project_id, "name": "Geometry Shape DICOM", "modality": "CT"},
+            files={"file": ("geometry-shape.dcm", fixture_path.read_bytes(), "application/dicom")},
+            headers=auth_headers(admin_token),
+        )
+        scan = upload.json()
+        created = await client.post(
+            "/annotations",
+            json={
+                "project_id": project_id,
+                "scan_id": scan["id"],
+                "label_id": label_id,
+                "label": "tumour",
+                "annotation_type": "bounding_box",
+                "coordinates": {"x": 1, "y": 1, "width": 3, "height": 2},
+                "slice_index": 0,
+                "created_by": "Annotator User",
+            },
+            headers=auth_headers(annotator_token),
+        )
+
+        rejected_box_shape = await client.put(
+            f"/annotations/{created.json()['id']}",
+            json={"coordinates": {"x": 2, "y": 2, "width": True, "height": 2}},
+            headers=auth_headers(annotator_token),
+        )
+        rejected_type_change = await client.put(
+            f"/annotations/{created.json()['id']}",
+            json={"annotation_type": "segmentation"},
+            headers=auth_headers(annotator_token),
+        )
+        changed_to_segmentation = await client.put(
+            f"/annotations/{created.json()['id']}",
+            json={"annotation_type": "segmentation", "coordinates": {"mask_ref": True, "representation": "png_binary"}},
+            headers=auth_headers(annotator_token),
+        )
+        rejected_segmentation_shape = await client.put(
+            f"/annotations/{created.json()['id']}",
+            json={"coordinates": {"mask_ref": False, "representation": "png_binary"}},
+            headers=auth_headers(annotator_token),
+        )
+        rejected_segmentation_representation = await client.post(
+            "/annotations",
+            json={
+                "project_id": project_id,
+                "scan_id": scan["id"],
+                "label_id": label_id,
+                "label": "tumour",
+                "annotation_type": "segmentation",
+                "coordinates": {"mask_ref": True, "representation": "rle"},
+                "slice_index": 0,
+                "created_by": "Annotator User",
+            },
+            headers=auth_headers(annotator_token),
+        )
+
+        assert upload.status_code == 201
+        assert created.status_code == 201
+        assert rejected_box_shape.status_code == 400
+        assert "numeric x, y, width, and height" in rejected_box_shape.json()["detail"]
+        assert rejected_type_change.status_code == 400
+        assert "mask_ref true" in rejected_type_change.json()["detail"]
+        assert changed_to_segmentation.status_code == 200
+        assert changed_to_segmentation.json()["annotation_type"] == "segmentation"
+        assert rejected_segmentation_shape.status_code == 400
+        assert "mask_ref true" in rejected_segmentation_shape.json()["detail"]
+        assert rejected_segmentation_representation.status_code == 400
+        assert "png_binary" in rejected_segmentation_representation.json()["detail"]
+
+
+@pytest.mark.anyio
 async def test_annotation_delete_permissions_are_role_scoped(tmp_path: Path) -> None:
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
         admin_token = await login(client, "admin@test.local")
@@ -569,6 +649,69 @@ async def test_annotation_delete_permissions_are_role_scoped(tmp_path: Path) -> 
         assert outside_admin_delete.status_code == 404
         assert admin_delete.status_code == 204
         assert annotation_id not in {annotation["id"] for annotation in remaining.json()}
+
+
+@pytest.mark.anyio
+async def test_annotation_edit_review_and_export_permissions_are_role_scoped(tmp_path: Path) -> None:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
+        admin_token = await login(client, "admin@test.local")
+        annotator_token = await login(client, "annotator@test.local")
+        reviewer_token = await login(client, "reviewer@test.local")
+        outside_admin_token = await login(client, "outside-admin@test.local")
+        project_id = (await client.get("/projects", headers=auth_headers(admin_token))).json()[0]["id"]
+        scan = (await client.get(f"/projects/{project_id}/scans", headers=auth_headers(admin_token))).json()[0]
+        annotation_id = (await client.get(f"/scans/{scan['id']}/annotations", headers=auth_headers(admin_token))).json()[0]["id"]
+
+        annotator_update = await client.put(f"/annotations/{annotation_id}", json={"notes": "Ready for QA."}, headers=auth_headers(annotator_token))
+        admin_update = await client.put(f"/annotations/{annotation_id}", json={"notes": "Admin QA note."}, headers=auth_headers(admin_token))
+        reviewer_update = await client.put(f"/annotations/{annotation_id}", json={"notes": "Reviewer edit attempt."}, headers=auth_headers(reviewer_token))
+        outside_update = await client.put(f"/annotations/{annotation_id}", json={"notes": "Outside edit attempt."}, headers=auth_headers(outside_admin_token))
+        annotator_review = await client.patch(
+            f"/annotations/{annotation_id}/review",
+            json={"reviewer": "Annotator User", "review_status": "approved", "notes": None},
+            headers=auth_headers(annotator_token),
+        )
+        reviewer_review = await client.patch(
+            f"/annotations/{annotation_id}/review",
+            json={"reviewer": "Reviewer User", "review_status": "needs_changes", "notes": "Needs another pass."},
+            headers=auth_headers(reviewer_token),
+        )
+        admin_review = await client.patch(
+            f"/annotations/{annotation_id}/review",
+            json={"reviewer": "Admin User", "review_status": "approved", "notes": "Approved by admin."},
+            headers=auth_headers(admin_token),
+        )
+        outside_review = await client.patch(
+            f"/annotations/{annotation_id}/review",
+            json={"reviewer": "Outside Admin", "review_status": "approved", "notes": None},
+            headers=auth_headers(outside_admin_token),
+        )
+
+        annotator_project_export = await client.get(f"/projects/{project_id}/export", headers=auth_headers(annotator_token))
+        reviewer_project_coco = await client.get(f"/projects/{project_id}/export/coco", headers=auth_headers(reviewer_token))
+        annotator_project_csv = await client.get(f"/projects/{project_id}/export/csv", headers=auth_headers(annotator_token))
+        reviewer_project_yolo = await client.get(f"/projects/{project_id}/export/yolo", headers=auth_headers(reviewer_token))
+        annotator_scan_export = await client.get(f"/scans/{scan['id']}/export", headers=auth_headers(annotator_token))
+        reviewer_scan_csv = await client.get(f"/scans/{scan['id']}/export/csv", headers=auth_headers(reviewer_token))
+        outside_project_export = await client.get(f"/projects/{project_id}/export", headers=auth_headers(outside_admin_token))
+        outside_scan_export = await client.get(f"/scans/{scan['id']}/export", headers=auth_headers(outside_admin_token))
+
+        assert annotator_update.status_code == 200
+        assert admin_update.status_code == 200
+        assert reviewer_update.status_code == 403
+        assert outside_update.status_code == 404
+        assert annotator_review.status_code == 403
+        assert reviewer_review.status_code == 200
+        assert admin_review.status_code == 200
+        assert outside_review.status_code == 404
+        assert annotator_project_export.status_code == 200
+        assert reviewer_project_coco.status_code == 200
+        assert annotator_project_csv.status_code == 200
+        assert reviewer_project_yolo.status_code == 200
+        assert annotator_scan_export.status_code == 200
+        assert reviewer_scan_csv.status_code == 200
+        assert outside_project_export.status_code == 404
+        assert outside_scan_export.status_code == 404
 
 
 @pytest.mark.anyio
@@ -825,8 +968,12 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
         outside_admin_token = await login(client, "outside-admin@test.local")
 
         project_id = (await client.get("/projects", headers=auth_headers(admin_token))).json()[0]["id"]
+        workspace_users = await client.get("/users", headers=auth_headers(admin_token))
+        outside_users = await client.get("/users", headers=auth_headers(outside_admin_token))
         scan = (await client.get(f"/projects/{project_id}/scans", headers=auth_headers(admin_token))).json()[0]
         label = (await client.get(f"/projects/{project_id}/labels", headers=auth_headers(admin_token))).json()[0]
+        user_by_email = {user["email"]: user for user in workspace_users.json()}
+        outside_user_id = outside_users.json()[0]["id"]
         annotation_payload = {
             "project_id": project_id,
             "scan_id": scan["id"],
@@ -849,6 +996,16 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
         }
 
         created = await client.post("/annotations", json=annotation_payload, headers=auth_headers(annotator_token))
+        reassigned = await client.put(
+            f"/annotations/{created.json()['id']}",
+            json={"assigned_to_user_id": user_by_email["reviewer@test.local"]["id"]},
+            headers=auth_headers(annotator_token),
+        )
+        rejected_assignment = await client.put(
+            f"/annotations/{created.json()['id']}",
+            json={"assigned_to_user_id": outside_user_id},
+            headers=auth_headers(annotator_token),
+        )
         polygon = await client.post("/annotations", json=polygon_payload, headers=auth_headers(annotator_token))
         approved_polygon = await client.post("/annotations", json=approved_polygon_payload, headers=auth_headers(annotator_token))
         forbidden_review = await client.patch(
@@ -872,6 +1029,8 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
             headers=auth_headers(reviewer_token),
         )
         exported = await client.get(f"/projects/{project_id}/export", headers=auth_headers(admin_token))
+        project_stats = await client.get(f"/projects/{project_id}/stats", headers=auth_headers(admin_token))
+        scan_stats = await client.get(f"/scans/{scan['id']}/stats", headers=auth_headers(admin_token))
         needs_changes_search = await client.get("/annotations/search?review_status=needs_changes", headers=auth_headers(admin_token))
         project_coco = await client.get(f"/projects/{project_id}/export/coco", headers=auth_headers(admin_token))
         project_csv = await client.get(f"/projects/{project_id}/export/csv", headers=auth_headers(admin_token))
@@ -881,9 +1040,16 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
         scan_yolo = await client.get(f"/scans/{scan['id']}/export/yolo", headers=auth_headers(admin_token))
         forbidden_coco = await client.get(f"/projects/{project_id}/export/coco", headers=auth_headers(outside_admin_token))
         forbidden_csv = await client.get(f"/projects/{project_id}/export/csv", headers=auth_headers(outside_admin_token))
+        forbidden_stats = await client.get(f"/projects/{project_id}/stats", headers=auth_headers(outside_admin_token))
         forbidden_yolo = await client.get(f"/scans/{scan['id']}/export/yolo", headers=auth_headers(outside_admin_token))
 
         assert created.status_code == 201
+        assert workspace_users.status_code == 200
+        assert {user["email"] for user in workspace_users.json()} == {"admin@test.local", "annotator@test.local", "reviewer@test.local"}
+        assert created.json()["assigned_to_user_id"] == user_by_email["annotator@test.local"]["id"]
+        assert reassigned.status_code == 200
+        assert reassigned.json()["assigned_to_user_id"] == user_by_email["reviewer@test.local"]["id"]
+        assert rejected_assignment.status_code == 400
         assert polygon.status_code == 201
         assert approved_polygon.status_code == 201
         assert forbidden_review.status_code == 403
@@ -895,6 +1061,17 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
         assert reviewed_approved_polygon.json()["review_status"] == "approved"
         assert exported.status_code == 200
         assert exported.json()["approved_count"] >= 1
+        assert project_stats.status_code == 200
+        assert project_stats.json()["total_annotations"] == 4
+        assert project_stats.json()["approved_count"] == 2
+        assert project_stats.json()["pending_count"] == 1
+        assert project_stats.json()["needs_changes_count"] == 1
+        assert project_stats.json()["review_completion_rate"] == 0.75
+        assert project_stats.json()["scan_count"] == 3
+        assert project_stats.json()["label_count"] == 1
+        assert scan_stats.status_code == 200
+        assert scan_stats.json()["annotations_by_status"] == {"pending": 1, "approved": 2, "rejected": 0, "needs_changes": 1}
+        assert scan_stats.json()["radiologists_involved"] == ["Annotator User"]
         assert all(annotation["review_status"] == "approved" for scan_export in exported.json()["scans"] for annotation in scan_export["annotations"])
         assert needs_changes_search.status_code == 200
         assert polygon.json()["id"] in {annotation["id"] for annotation in needs_changes_search.json()}
@@ -933,4 +1110,5 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
         assert scan_yolo.json()["files"] == project_yolo.json()["files"]
         assert forbidden_coco.status_code == 404
         assert forbidden_csv.status_code == 404
+        assert forbidden_stats.status_code == 404
         assert forbidden_yolo.status_code == 404

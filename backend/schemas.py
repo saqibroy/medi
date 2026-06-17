@@ -219,6 +219,7 @@ class AnnotationBase(BaseModel):
     reviewer: str | None = Field(None, min_length=1, max_length=120)
     reviewed_at: datetime | None = None
     notes: str | None = Field(None, max_length=500)
+    assigned_to_user_id: UUID | None = None
 
 
 class AnnotationCreate(AnnotationBase):
@@ -244,6 +245,7 @@ class AnnotationUpdate(BaseModel):
     reviewer: str | None = Field(None, min_length=1, max_length=120)
     reviewed_at: datetime | None = None
     notes: str | None = Field(None, max_length=500)
+    assigned_to_user_id: UUID | None = None
 
 
 class AnnotationReviewUpdate(BaseModel):
@@ -323,6 +325,7 @@ class ExportAnnotationRead(BaseModel):
     slice_index: int
     confidence_score: float | None
     created_by: str
+    assigned_to_user_id: UUID | None = None
     review_status: ReviewStatus
 
 
@@ -465,12 +468,30 @@ class SegmentationExportRead(BaseModel):
     masks: list[SegmentationMaskManifestItemRead]
 
 
-class ScanStatsRead(BaseModel):
-    """Aggregate annotation health metrics for one scan."""
+class AnnotationReviewStatsRead(BaseModel):
+    """Aggregate annotation health and QA metrics for a scan or project."""
 
     total_annotations: int
+    approved_count: int
+    pending_count: int
+    rejected_count: int
+    needs_changes_count: int
+    review_completion_rate: float
     annotations_by_label: dict[str, int]
     annotations_by_type: dict[str, int]
     annotations_by_status: dict[str, int]
     slices_with_annotations: list[int]
     radiologists_involved: list[str]
+
+
+class ScanStatsRead(AnnotationReviewStatsRead):
+    """Aggregate annotation health metrics for one scan."""
+
+
+class ProjectStatsRead(AnnotationReviewStatsRead):
+    """Aggregate annotation health metrics across a project."""
+
+    project_id: UUID
+    project_name: str
+    scan_count: int
+    label_count: int

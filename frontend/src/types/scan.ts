@@ -64,3 +64,24 @@ export interface ScanMetadata {
   window_width: number | null;
   metadata: Record<string, unknown> | null;
 }
+
+export interface ReviewStats {
+  total_annotations: number;
+  approved_count: number;
+  pending_count: number;
+  rejected_count: number;
+  needs_changes_count: number;
+  review_completion_rate: number;
+  annotations_by_label: Record<string, number>;
+  annotations_by_type: Record<string, number>;
+  annotations_by_status: Record<string, number>;
+  slices_with_annotations: number[];
+  radiologists_involved: string[];
+}
+
+export interface ProjectReviewStats extends ReviewStats {
+  project_id: string;
+  project_name: string;
+  scan_count: number;
+  label_count: number;
+}
