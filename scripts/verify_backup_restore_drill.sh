@@ -53,15 +53,22 @@ cleanup() {
 trap cleanup EXIT
 docker compose up -d db >/dev/null
 database_ready=false
-for _ in $(seq 1 30); do
-  if docker compose exec -T db pg_isready -U postgres -d postgres >/dev/null 2>&1; then
-    database_ready=true
-    break
+consecutive_ready_checks=0
+for _ in $(seq 1 60); do
+  if docker compose exec -T db psql -At -v ON_ERROR_STOP=1 -U postgres -d postgres \
+    -c 'SELECT 1' 2>/dev/null | grep -qx '1'; then
+    consecutive_ready_checks=$((consecutive_ready_checks + 1))
+    if [[ "$consecutive_ready_checks" -ge 3 ]]; then
+      database_ready=true
+      break
+    fi
+  else
+    consecutive_ready_checks=0
   fi
   sleep 1
 done
 if [[ "$database_ready" != true ]]; then
-  echo "Recovery PostgreSQL did not become ready within 30 seconds." >&2
+  echo "Recovery PostgreSQL did not remain queryable for three consecutive checks within 60 seconds." >&2
   exit 2
 fi
 drop_database "$restore_database"

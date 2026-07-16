@@ -340,7 +340,9 @@ Useful primary references:
     versioned retention, legal hold, source withdrawal, two-person project/scan
     deletion, every-version purge, and verified receipts. Target infrastructure,
     organization deletion, and policy approvals remain in
-    `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
+    `DATA_LIFECYCLE_RECOVERY_PLAN.md`. The drill requires a sustained queryable
+    PostgreSQL state before starting so bootstrap restarts cannot produce a
+    false-ready CI race.
 11. [x] Complete the repository boundary for external-AI egress denial,
     approved-provider and dataset-flow governance, and value-free decisions.
 12. [~] Repository boundary complete: versioned processing/DPIA evidence and

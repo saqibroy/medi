@@ -63,6 +63,9 @@ Local evidence:
 - The encrypted PostgreSQL/synthetic-object recovery drill restored migration
   `20260716_0013`; the CloudFormation template passed `cfn-lint 1.53.0`, and the
   external-AI static egress policy remained green.
+- The recovery drill now requires three consecutive successful SQL queries
+  before destructive rehearsal steps, preventing the transient PostgreSQL
+  bootstrap shutdown from being mistaken for stable readiness in CI.
 - Rebuilt database, Redis, backend, and frontend containers are healthy. Backend
   readiness reports the database reachable and the frontend returns HTTP 200.
 - An authenticated synthetic-only smoke created processing/request evidence,
