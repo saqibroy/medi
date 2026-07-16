@@ -7,7 +7,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -45,8 +45,10 @@ def create_access_token(db: Session, user_id: UUID) -> tuple[str, datetime]:
 
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=get_settings().session_ttl_minutes)
-    db.add(UserSession(user_id=user_id, token_digest=_token_digest(token), expires_at=expires_at))
+    user_session = UserSession(user_id=user_id, token_digest=_token_digest(token), expires_at=expires_at)
+    db.add(user_session)
     db.commit()
+    db.info["authenticated_session_id"] = user_session.id
     return token, expires_at
 
 
@@ -54,22 +56,30 @@ def _token_digest(token: str) -> str:
     return hmac.new(get_settings().token_secret.encode("utf-8"), token.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def resolve_access_token(db: Session, token: str) -> User | None:
-    """Resolve one non-expired, non-revoked session into an active user."""
+def resolve_access_session(db: Session, token: str) -> UserSession | None:
+    """Resolve a raw bearer token to its active session without exposing it."""
 
-    session = db.scalar(
+    user_session = db.scalar(
         select(UserSession).where(
             UserSession.token_digest == _token_digest(token),
             UserSession.revoked_at.is_(None),
             UserSession.expires_at > datetime.now(timezone.utc),
         )
     )
-    if session is None or not session.user.is_active:
+    if user_session is None or not user_session.user.is_active:
         return None
-    return session.user
+    return user_session
+
+
+def resolve_access_token(db: Session, token: str) -> User | None:
+    """Resolve one non-expired, non-revoked session into an active user."""
+
+    user_session = resolve_access_session(db, token)
+    return user_session.user if user_session is not None else None
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -77,17 +87,21 @@ async def get_current_user(
 
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
-    user = resolve_access_token(db, credentials.credentials)
-    if user is None:
+    user_session = resolve_access_session(db, credentials.credentials)
+    if user_session is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired bearer token")
-    return user
+    from .services.audit_service import mark_request_actor
+
+    mark_request_actor(request, user_session.user, user_session.id)
+    return user_session.user
 
 
-def revoke_access_token(db: Session, token: str) -> None:
+def revoke_access_token(db: Session, token: str) -> UserSession | None:
     session = db.scalar(select(UserSession).where(UserSession.token_digest == _token_digest(token), UserSession.revoked_at.is_(None)))
     if session is not None:
         session.revoked_at = datetime.now(timezone.utc)
         db.commit()
+    return session
 
 
 def require_role(current_user: User, allowed_roles: set[str]) -> User:

@@ -17,6 +17,7 @@ DEVELOPMENT_CORS_ORIGINS = (
     "http://127.0.0.1:8080",
 )
 DEVELOPMENT_TOKEN_SECRET = "dev-token-secret-change-before-production"
+DEVELOPMENT_AUDIT_SIGNING_KEY = "dev-audit-signing-key-change-before-production"
 DEVELOPMENT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/medical_annotations"
 
 
@@ -31,6 +32,7 @@ class Settings:
     environment: str
     database_url: str
     token_secret: str
+    audit_signing_key: str
     cors_origins: tuple[str, ...]
     seed_demo_data: bool
     session_ttl_minutes: int
@@ -101,6 +103,7 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
 
     database_url = values.get("DATABASE_URL", DEVELOPMENT_DATABASE_URL).strip()
     token_secret = values.get("TOKEN_SECRET", DEVELOPMENT_TOKEN_SECRET).strip()
+    audit_signing_key = values.get("AUDIT_SIGNING_KEY", DEVELOPMENT_AUDIT_SIGNING_KEY).strip()
     default_origins = ",".join(DEVELOPMENT_CORS_ORIGINS)
     cors_origins = _read_origins(values.get("CORS_ORIGINS", default_origins))
     seed_demo_data = _read_boolean(values.get("SEED_DEMO_DATA", "false" if app_environment == "production" else "true"), "SEED_DEMO_DATA")
@@ -129,6 +132,13 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
             raise ConfigurationError("production requires a non-development DATABASE_URL")
         if "TOKEN_SECRET" not in values or token_secret == DEVELOPMENT_TOKEN_SECRET or len(token_secret) < 32:
             raise ConfigurationError("production requires a unique TOKEN_SECRET of at least 32 characters")
+        if (
+            "AUDIT_SIGNING_KEY" not in values
+            or audit_signing_key == DEVELOPMENT_AUDIT_SIGNING_KEY
+            or len(audit_signing_key) < 32
+            or audit_signing_key == token_secret
+        ):
+            raise ConfigurationError("production requires a distinct AUDIT_SIGNING_KEY of at least 32 characters")
         if "CORS_ORIGINS" not in values:
             raise ConfigurationError("production requires explicit CORS_ORIGINS")
         if seed_demo_data:
@@ -142,6 +152,7 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
         environment=app_environment,
         database_url=database_url,
         token_secret=token_secret,
+        audit_signing_key=audit_signing_key,
         cors_origins=cors_origins,
         seed_demo_data=seed_demo_data,
         session_ttl_minutes=session_ttl_minutes,

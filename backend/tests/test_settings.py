@@ -23,12 +23,21 @@ def test_development_defaults_are_local_and_seed_demo_data() -> None:
                 "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
                 "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
             },
+            "AUDIT_SIGNING_KEY",
+        ),
+        (
+            {
+                "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
+                "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+                "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
+            },
             "CORS_ORIGINS",
         ),
         (
             {
                 "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
                 "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+                "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
                 "CORS_ORIGINS": "https://medi.example.org",
                 "SEED_DEMO_DATA": "true",
             },
@@ -49,6 +58,7 @@ def test_production_accepts_explicit_safe_settings() -> None:
             "APP_ENV": "production",
             "DATABASE_URL": "postgresql+psycopg://medi_app:strong-password@db:5432/medi",
             "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+            "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
             "CORS_ORIGINS": "https://medi.example.org,https://review.medi.example.org",
             "SEED_DEMO_DATA": "false",
             "SCAN_STORAGE_BACKEND": "s3",
@@ -71,6 +81,7 @@ def test_production_rejects_local_or_unencrypted_storage() -> None:
         "APP_ENV": "production",
         "DATABASE_URL": "postgresql+psycopg://medi_app:strong-password@db:5432/medi",
         "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+        "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
         "CORS_ORIGINS": "https://medi.example.org",
         "SEED_DEMO_DATA": "false",
     }

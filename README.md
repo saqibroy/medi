@@ -81,7 +81,8 @@ migrations, seeds synthetic demo users, and stores uploaded scan files in the
 you need to override its local settings.
 
 For production, set `APP_ENV=production`, a non-development `DATABASE_URL`, a
-unique `TOKEN_SECRET` of at least 32 characters, exact comma-separated HTTPS
+unique `TOKEN_SECRET` of at least 32 characters, a separate secret
+`AUDIT_SIGNING_KEY` of at least 32 characters, exact comma-separated HTTPS
 `CORS_ORIGINS`, and `SEED_DEMO_DATA=false`. The backend validates these before
 migrations run and refuses unsafe startup. Keep real values in the deployment
 secret manager, never in `.env.example`, images, or Git.
@@ -102,6 +103,14 @@ Bearer sessions are opaque, stored only as keyed token digests, expire after
 single-process safety baseline. A horizontally scaled production deployment
 still requires shared rate-limit enforcement at the ingress or application
 layer.
+
+Security-relevant authentication, imaging, export, annotation, and
+administrative operations are written to an append-only audit table. Each row
+has a keyed integrity hash derived from `AUDIT_SIGNING_KEY`; keep that key in the
+deployment secret manager and separate from `TOKEN_SECRET`. Application code
+and database triggers reject audit-row updates and deletes. Independent WORM
+export and an approved retention policy remain production deployment gates in
+`SECURITY_AUDIT_PLAN.md`.
 
 ## PostgreSQL Migration Safety
 

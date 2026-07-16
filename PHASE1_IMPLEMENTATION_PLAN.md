@@ -383,12 +383,21 @@ CI verification:
   quarantine first, neutralizes filenames, records value-free decisions, and
   blocks unsafe scans from pixels, signed URLs, annotations, masks, statistics,
   and exports. Validated OCR/defacing and transformation remain Phase 4 gates.
+- Append-only, tenant-scoped security events now cover authentication,
+  medical-image intake, sensitive reads, signed URLs, exports, administration,
+  annotations, reviews, masks, and deletions. Events use allowlisted fields,
+  keyed integrity hashes, admin-only reads, and ORM/database mutation guards.
+  WORM export, retention approval, safe network context, and annotation-history
+  tombstoning remain Phase 4 gates.
 
 ## Next Engineering Priorities
 
-1. Next: add immutable security audit events for authentication, medical-image
-   intake decisions, object access, exports, and administrative changes.
-2. Complete target-account storage controls: private bucket policy, lifecycle,
-   versioning/retention, backup/restore, and customer-deletion evidence.
+1. Completed: add append-only security audit events for authentication,
+   medical-image intake decisions, object access, exports, and administrative
+   changes. Remaining WORM/retention work is tracked in
+   `SECURITY_AUDIT_PLAN.md`.
+2. Next: complete target-account storage controls: private bucket policy,
+   lifecycle, versioning/retention, backup/restore, and customer-deletion
+   evidence.
 3. Replace process-local rate limits with shared production enforcement and move
    browser sessions to Secure, HttpOnly cookies with CSRF protection.
