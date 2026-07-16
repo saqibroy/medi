@@ -381,6 +381,5 @@ CI verification:
 
 ## Next Engineering Priorities
 
-1. Separate development and production configuration, including demo seeding,
-   secrets, and exact CORS origins.
-2. Define and test the production PostgreSQL migration and rollback procedure.
+1. Add expiring sessions and rate limiting for sensitive endpoints.
+2. Introduce private object storage and organization-safe access controls.

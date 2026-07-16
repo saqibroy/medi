@@ -60,8 +60,8 @@ Not production-ready yet:
 - Dataset releases and annotation snapshots are not versioned.
 - Backup, restore, retention, legal-hold, and verified deletion procedures are
   not implemented.
-- Structured security logging, rate limiting, monitoring, and error tracking are
-  absent.
+- Request logging is structured and payload-safe, but security audit records,
+  rate limiting, monitoring, and error tracking remain absent.
 
 ## Medical Image Intake And De-identification
 
