@@ -92,6 +92,9 @@ Goal: support useful research datasets rather than generated placeholder slices.
 
 Goal: make the product efficient for real labeling work.
 
+Status: complete. Inter-annotator agreement metrics are deferred to a later
+analytics iteration and are not part of the Phase 3 exit criteria.
+
 - [x] Editable bounding boxes.
 - [x] Polygon drawing and editing.
 - [x] Segmentation mask workflow.
@@ -179,5 +182,5 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Split viewer toolbar into explicit modes: pan, box, polygon, mask, select.
-2. Add icon buttons and tooltips for annotation tools.
+1. Prepare Phase 4 production operations plan and checklist.
+2. Define production PostgreSQL configuration and migration procedure.

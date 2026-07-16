@@ -4,7 +4,9 @@ This plan upgrades Medi from a useful imaging review MVP into a faster,
 production-minded annotation workspace. Phase 3 focuses on editing, reviewer
 efficiency, richer geometry, and ML export formats.
 
-Status: in progress.
+Status: complete.
+
+Frontend QA protocol: `PHASE3_FRONTEND_QA_CHECKLIST.md`.
 
 ## Current State
 
@@ -92,8 +94,8 @@ image labels quickly enough for real research dataset preparation.
 
 ## Frontend Plan
 
-- [ ] Split viewer toolbar into explicit modes: pan, box, polygon, mask, select.
-- [ ] Add icon buttons and tooltips for annotation tools.
+- [x] Split viewer toolbar into explicit modes: pan, box, polygon, mask, select.
+- [x] Add icon buttons and tooltips for annotation tools.
 - [x] Add selected annotation styling.
 - [x] Add keyboard shortcut handling.
 - [x] Add annotation edit panel for label/status/notes.
@@ -124,11 +126,14 @@ Backend tests:
 
 Frontend/manual checks:
 
-- [ ] Draw, select, move, resize, and delete a bounding box.
-- [ ] Draw and edit a polygon.
-- [ ] Switch labels without losing draft geometry.
-- [ ] Use keyboard shortcuts without triggering browser conflicts.
-- [ ] Verify overlays align with parsed image pixels at multiple scan sizes.
+- [x] Add a repeatable Phase 3 frontend QA checklist with setup, steps,
+  expected results, and evidence fields.
+- [x] Draw, select, move, resize, and delete a bounding box.
+- [x] Draw and edit a polygon.
+- [x] Switch labels without losing draft geometry.
+- [x] Use keyboard shortcuts without triggering browser conflicts.
+- [x] Verify overlay alignment at multiple viewport sizes and zoom levels;
+  parsed-image bounds remain covered by backend imaging fixture tests.
 
 ## First Implementation Sequence
 
@@ -163,7 +168,10 @@ Frontend/manual checks:
 29. [x] Add reusable geometry validators.
 30. [x] Add permission tests for edit, delete, review, and export workflows.
 31. [x] Keep all annotation queries organization-scoped.
-32. [ ] Split viewer toolbar into explicit modes: pan, box, polygon, mask, select.
+32. [x] Split viewer toolbar into explicit modes: pan, box, polygon, mask, select.
+33. [x] Add icon buttons and tooltips for annotation tools.
+34. [x] Add Phase 3 frontend QA checklist.
+35. [x] Execute Phase 3 frontend QA checklist and record evidence.
 
 ## Phase 3 Exit Criteria
 

@@ -10,7 +10,7 @@ import { getMe, listUsers, login } from "./api/authApi";
 import { createProject, createProjectLabel, deleteProjectLabel, getProjectStats, listProjectLabels, listProjects, updateProject, updateProjectLabel } from "./api/projectsApi";
 import { createScan, getScanStats, uploadScan } from "./api/scansApi";
 import { AnnotationList } from "./components/AnnotationList";
-import { AnnotationTools } from "./components/AnnotationTools";
+import { AnnotationTools, type ViewerTool } from "./components/AnnotationTools";
 import { ExportPanel } from "./components/ExportPanel";
 import { LabelManager } from "./components/LabelManager";
 import { ProjectManager } from "./components/ProjectManager";
@@ -22,7 +22,6 @@ import { SliceNavigator } from "./components/SliceNavigator";
 import { WindowLevelControls } from "./components/WindowLevelControls";
 import { useAnnotations } from "./hooks/useAnnotations";
 import { useScan } from "./hooks/useScan";
-import type { AnnotationType } from "./types/annotation";
 import type { Label, Project, ProjectPayload } from "./types/project";
 import type { ProjectReviewStats, ReviewStats, ScanCreate, ScanUpload } from "./types/scan";
 import type { User } from "./types/user";
@@ -48,7 +47,7 @@ export default function App() {
   const [labels, setLabels] = useState<Label[]>([]);
   const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
   const [selectedLabelId, setSelectedLabelId] = useState("");
-  const [annotationType, setAnnotationType] = useState<AnnotationType>("bounding_box");
+  const [viewerTool, setViewerTool] = useState<ViewerTool>("select");
   const [loginEmail, setLoginEmail] = useState("admin@medi.local");
   const [loginPassword, setLoginPassword] = useState("password");
   const [authError, setAuthError] = useState<string | null>(null);
@@ -196,6 +195,12 @@ export default function App() {
   }, [defaultWindowCenter, defaultWindowWidth, selectedScan?.id]);
 
   useEffect(() => {
+    if (!selectedLabel && (viewerTool === "bounding_box" || viewerTool === "polygon" || viewerTool === "segmentation")) {
+      setViewerTool("select");
+    }
+  }, [selectedLabel, viewerTool]);
+
+  useEffect(() => {
     if (!annotations.some((annotation) => annotation.id === selectedAnnotationId)) {
       setSelectedAnnotationId(null);
     }
@@ -310,14 +315,29 @@ export default function App() {
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
 
       const selectedAnnotation = annotations.find((annotation) => annotation.id === selectedAnnotationId);
+      if (event.key === "v" || event.key === "V") {
+        event.preventDefault();
+        setViewerTool("select");
+        return;
+      }
+      if (event.key === "h" || event.key === "H") {
+        event.preventDefault();
+        setViewerTool("pan");
+        return;
+      }
       if (event.key === "b" || event.key === "B") {
         event.preventDefault();
-        setAnnotationType("bounding_box");
+        setViewerTool("bounding_box");
         return;
       }
       if (event.key === "p" || event.key === "P") {
         event.preventDefault();
-        setAnnotationType("polygon");
+        setViewerTool("polygon");
+        return;
+      }
+      if (event.key === "m" || event.key === "M") {
+        event.preventDefault();
+        setViewerTool("segmentation");
         return;
       }
       if (event.key === "[") {
@@ -383,8 +403,8 @@ export default function App() {
   }
 
   return (
-    <div className="grid h-full grid-cols-[280px_1fr_320px] overflow-hidden">
-      <aside className="h-full overflow-y-auto border-r border-slate-200 bg-white">
+    <div className="grid min-h-full grid-cols-1 overflow-y-auto lg:h-full lg:grid-cols-[240px_minmax(0,1fr)_280px] lg:overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)_320px]">
+      <aside className="border-r border-slate-200 bg-white lg:h-full lg:overflow-y-auto">
         <div className="border-b border-slate-200 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -442,14 +462,14 @@ export default function App() {
         <ScanManager projectId={selectedProject?.id} canCreate={canManageWorkspace} defaultModality={selectedProject?.modality} onCreateScan={handleCreateScan} onUploadScan={handleUploadScan} />
         <ScanList scans={scans} selectedScanId={selectedScan?.id} isLoading={isScansLoading} hasProject={Boolean(selectedProject)} onSelectScan={selectScan} />
       </aside>
-      <div className="flex min-w-0 flex-col">
+      <div className="flex min-h-[42rem] min-w-0 flex-col lg:min-h-0">
         <AnnotationTools
           labels={labels}
           selectedLabelId={selectedLabel?.id ?? ""}
-          annotationType={annotationType}
+          viewerTool={viewerTool}
           createdBy={user.full_name}
           onLabelChange={setSelectedLabelId}
-          onAnnotationTypeChange={setAnnotationType}
+          onViewerToolChange={setViewerTool}
         />
         {error ? <div className="bg-red-50 p-2 text-sm text-red-700">{error}</div> : null}
         {authError ? <div className="bg-red-50 p-2 text-sm text-red-700">{authError}</div> : null}
@@ -463,7 +483,7 @@ export default function App() {
             label={selectedLabel?.name ?? "unlabeled"}
             labelId={selectedLabel?.id}
             projectId={selectedProject?.id}
-            annotationType={annotationType}
+            viewerTool={viewerTool}
             createdBy={user.full_name}
             canAnnotate={canDrawAnnotations}
             canDeleteAnnotation={canManageWorkspace}
@@ -488,7 +508,7 @@ export default function App() {
         }} />
         <SliceNavigator sliceIndex={sliceIndex} maxSliceIndex={Math.max((selectedScan?.num_slices ?? 1) - 1, 0)} onSliceChange={setSliceIndex} />
       </div>
-      <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white">
+      <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white lg:h-full">
         <ScanMetadataPanel scanId={selectedScan?.id} token={token} />
         <ExportPanel projectId={selectedProject?.id} scanId={selectedScan?.id} token={token} />
         <AnnotationList

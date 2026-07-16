@@ -9,6 +9,7 @@
 import { MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useViewer } from "../hooks/useViewer";
+import type { ViewerTool } from "./AnnotationTools";
 import type { Annotation, AnnotationCreate, AnnotationUpdate, BoundingBoxCoordinates, PolygonCoordinates, PolygonPoint, SegmentationMaskImage } from "../types/annotation";
 import type { Scan, SliceImage } from "../types/scan";
 
@@ -20,7 +21,7 @@ interface ViewerPanelProps {
   label: string;
   labelId?: string;
   projectId?: string;
-  annotationType: AnnotationCreate["annotation_type"];
+  viewerTool: ViewerTool;
   createdBy: string;
   canAnnotate: boolean;
   canDeleteAnnotation: boolean;
@@ -78,7 +79,6 @@ export function ViewerPanel(props: ViewerPanelProps) {
   const panStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [isPanMode, setIsPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [polygonPoints, setPolygonPoints] = useState<PolygonPoint[]>([]);
   const [polygonPreviewPoint, setPolygonPreviewPoint] = useState<PolygonPoint | null>(null);
@@ -114,6 +114,11 @@ export function ViewerPanel(props: ViewerPanelProps) {
   const canvasWidth = props.scan?.width ?? 512;
   const canvasHeight = props.scan?.height ?? 512;
   const zoomPercent = Math.round(zoom * 100);
+  const isPanMode = props.viewerTool === "pan";
+  const isSelectTool = props.viewerTool === "select";
+  const isBoxTool = props.viewerTool === "bounding_box";
+  const isPolygonTool = props.viewerTool === "polygon";
+  const isMaskTool = props.viewerTool === "segmentation";
   const previousSliceIndex = selectedAnnotation ? selectedAnnotation.slice_index - 1 : -1;
   const nextSliceIndex = selectedAnnotation ? selectedAnnotation.slice_index + 1 : -1;
   const canCopySelectedAnnotation = Boolean(props.canAnnotate && props.scan && selectedAnnotation && selectedAnnotation.annotation_type !== "segmentation");
@@ -130,7 +135,6 @@ export function ViewerPanel(props: ViewerPanelProps) {
 
   function resetViewport(): void {
     setZoom(1);
-    setIsPanMode(false);
     setIsPanning(false);
     panStartRef.current = null;
     if (viewportRef.current) {
@@ -518,7 +522,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
       const isRedo = ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") || ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "z");
       if (isUndo) {
         event.preventDefault();
-        if (props.annotationType === "segmentation") {
+        if (isMaskTool) {
           undoMaskEdit();
           return;
         }
@@ -527,7 +531,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
       }
       if (isRedo) {
         event.preventDefault();
-        if (props.annotationType === "segmentation") {
+        if (isMaskTool) {
           redoMaskEdit();
           return;
         }
@@ -541,7 +545,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
         setPolygonPreviewPoint(null);
         props.onSelectAnnotation(null);
       }
-      if (event.key === "Enter" && props.annotationType === "polygon" && polygonPoints.length >= 3) {
+      if (event.key === "Enter" && isPolygonTool && polygonPoints.length >= 3) {
         event.preventDefault();
         void finishPolygon(polygonPoints);
       }
@@ -549,12 +553,12 @@ export function ViewerPanel(props: ViewerPanelProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [finishPolygon, polygonPoints, props, redoGeometryEdit, redoMaskEdit, undoGeometryEdit, undoMaskEdit]);
+  }, [finishPolygon, isMaskTool, isPolygonTool, polygonPoints, props, redoGeometryEdit, redoMaskEdit, undoGeometryEdit, undoMaskEdit]);
 
   useEffect(() => {
     setPolygonPoints([]);
     setPolygonPreviewPoint(null);
-  }, [props.annotationType, props.scan?.id, props.sliceIndex]);
+  }, [props.scan?.id, props.sliceIndex, props.viewerTool]);
 
   useEffect(() => {
     setUndoStack([]);
@@ -577,7 +581,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
   }, [canvasHeight, canvasWidth, props.scan?.id, props.sliceIndex]);
 
   useEffect(() => {
-    if (props.annotationType !== "segmentation") return;
+    if (!isMaskTool) return;
     let isCancelled = false;
 
     if (!selectedSegmentationAnnotation) {
@@ -624,7 +628,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
     return () => {
       isCancelled = true;
     };
-  }, [canvasHeight, canvasWidth, props.annotationType, props.onLoadMask, props.sliceIndex, selectedSegmentationAnnotation]);
+  }, [canvasHeight, canvasWidth, isMaskTool, props.onLoadMask, props.sliceIndex, selectedSegmentationAnnotation]);
 
   useEffect(() => {
     /** Draw the current slice and overlays whenever source data changes. */
@@ -639,7 +643,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
       context.filter = "none";
       const maskCanvas = maskCanvasRef.current;
-      if (maskCanvas && props.annotationType === "segmentation") {
+      if (maskCanvas && isMaskTool) {
         context.save();
         context.globalAlpha = maskOpacity;
         context.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
@@ -685,7 +689,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
       }
     };
     image.src = `data:image/png;base64,${props.sliceImage.image_base64}`;
-  }, [brightness, contrast, props.sliceImage, currentSliceAnnotations, interaction, maskOpacity, maskRevision, polygonPoints, polygonPreviewPoint, props.annotationType, props.selectedAnnotationId]);
+  }, [brightness, contrast, props.sliceImage, currentSliceAnnotations, interaction, isMaskTool, maskOpacity, maskRevision, polygonPoints, polygonPreviewPoint, props.selectedAnnotationId]);
 
   function canvasPoint(event: MouseEvent<HTMLCanvasElement>) {
     /** Convert browser coordinates into canvas coordinates used by annotation JSON. */
@@ -740,9 +744,9 @@ export function ViewerPanel(props: ViewerPanelProps) {
   async function handleMouseDown(event: MouseEvent<HTMLCanvasElement>): Promise<void> {
     /** Select existing annotations or start a new annotation draft. */
     if (isPanMode) return;
-    if (!props.canAnnotate) return;
     const point = canvasPoint(event);
-    if (props.annotationType === "segmentation") {
+    if (isMaskTool) {
+      if (!props.canAnnotate) return;
       if (props.selectedAnnotationId && !selectedSegmentationAnnotation) {
         props.onSelectAnnotation(null);
       }
@@ -754,19 +758,25 @@ export function ViewerPanel(props: ViewerPanelProps) {
       drawMaskPoint(point);
       return;
     }
-    const selectedAnnotation = [...currentSliceAnnotations].reverse().find((annotation) => {
-      if (annotation.annotation_type === "bounding_box") {
-        const box = boundingBoxFor(annotation);
-        return box ? pointInBox(box, point) || handleAtPoint(box, point) !== null : false;
-      }
-      if (annotation.annotation_type === "polygon") {
-        const points = polygonFor(annotation);
-        return points ? vertexIndexAtPoint(points, point) !== null || pointInPolygon(points, point) : false;
-      }
-      return false;
-    });
+    const selectedAnnotation = isSelectTool
+      ? [...currentSliceAnnotations].reverse().find((annotation) => {
+          if (annotation.annotation_type === "bounding_box") {
+            const box = boundingBoxFor(annotation);
+            return box ? pointInBox(box, point) || handleAtPoint(box, point) !== null : false;
+          }
+          if (annotation.annotation_type === "polygon") {
+            const points = polygonFor(annotation);
+            return points ? vertexIndexAtPoint(points, point) !== null || pointInPolygon(points, point) : false;
+          }
+          return false;
+        })
+      : undefined;
     if (selectedAnnotation && polygonPoints.length === 0) {
       props.onSelectAnnotation(selectedAnnotation.id);
+      if (!props.canAnnotate) {
+        setInteraction(null);
+        return;
+      }
       if (selectedAnnotation.annotation_type === "polygon") {
         const points = polygonFor(selectedAnnotation);
         const vertexIndex = points ? vertexIndexAtPoint(points, point) : null;
@@ -794,7 +804,15 @@ export function ViewerPanel(props: ViewerPanelProps) {
       });
       return;
     }
-    if (props.annotationType === "polygon") {
+    if (isSelectTool) {
+      props.onSelectAnnotation(null);
+      setPolygonPoints([]);
+      setPolygonPreviewPoint(null);
+      setInteraction(null);
+      return;
+    }
+    if (!props.canAnnotate) return;
+    if (isPolygonTool) {
       props.onSelectAnnotation(null);
       setInteraction(null);
       if (polygonPoints.length >= 3 && isNearPoint(point, polygonPoints[0])) {
@@ -805,6 +823,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
       setPolygonPreviewPoint(null);
       return;
     }
+    if (!isBoxTool) return;
     props.onSelectAnnotation(null);
     setPolygonPoints([]);
     setPolygonPreviewPoint(null);
@@ -815,7 +834,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
     /** Update width and height as the user drags across the image. */
     if (isPanMode) return;
     const point = canvasPoint(event);
-    if (props.annotationType === "segmentation" && isMaskDrawing) {
+    if (isMaskTool && isMaskDrawing) {
       drawMaskPoint(point);
       return;
     }
@@ -872,7 +891,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
       recordGeometryEdit(annotationId, before, after);
       return;
     }
-    if (props.annotationType !== "bounding_box" || !interaction.box) return;
+    if (!interaction.box) return;
     const coordinates = normalizedBox(interaction.box);
     if (coordinates.width < 4 || coordinates.height < 4) return;
     if ((mode === "move" || mode === "resize") && annotationId) {
@@ -882,12 +901,13 @@ export function ViewerPanel(props: ViewerPanelProps) {
       }
       return;
     }
+    if (!isBoxTool) return;
     await props.onSaveAnnotation({
       scan_id: props.scan.id,
       project_id: props.projectId ?? props.scan.project_id,
       label_id: props.labelId ?? null,
       label: props.label,
-      annotation_type: props.annotationType,
+      annotation_type: "bounding_box",
       coordinates: { ...coordinates },
       slice_index: props.sliceIndex,
       created_by: props.createdBy,
@@ -895,6 +915,15 @@ export function ViewerPanel(props: ViewerPanelProps) {
   }
 
   const maskSaveLabel = maskStatus === "saving" ? "Saving..." : maskStatus === "loading" ? "Loading..." : maskStatus === "saved" ? "Saved" : maskStatus === "error" ? "Retry save" : "Save";
+  const canvasCursorClass = isPanMode
+    ? isPanning
+      ? "cursor-grabbing"
+      : "cursor-grab"
+    : isMaskTool || isBoxTool || isPolygonTool
+      ? props.canAnnotate
+        ? "cursor-crosshair"
+        : "cursor-not-allowed"
+      : "cursor-default";
 
   return (
     <main className="flex min-h-0 flex-1 flex-col bg-slate-950">
@@ -903,18 +932,15 @@ export function ViewerPanel(props: ViewerPanelProps) {
         {props.scan && props.sliceImage ? (
           <>
             <div className="absolute bottom-6 right-6 z-20 flex items-center gap-1 rounded-md border border-slate-700 bg-slate-950/90 p-1 text-xs text-white shadow-sm">
-              <button className="h-8 min-w-8 rounded border border-slate-600 px-2 font-semibold hover:bg-slate-800" onClick={() => changeZoom(-0.25)} type="button">
+              <button aria-label="Zoom out" className="h-8 min-w-8 rounded border border-slate-600 px-2 font-semibold hover:bg-slate-800" onClick={() => changeZoom(-0.25)} type="button">
                 -
               </button>
               <span className="min-w-12 text-center font-medium">{zoomPercent}%</span>
-              <button className="h-8 min-w-8 rounded border border-slate-600 px-2 font-semibold hover:bg-slate-800" onClick={() => changeZoom(0.25)} type="button">
+              <button aria-label="Zoom in" className="h-8 min-w-8 rounded border border-slate-600 px-2 font-semibold hover:bg-slate-800" onClick={() => changeZoom(0.25)} type="button">
                 +
               </button>
-              <button className="h-8 rounded border border-slate-600 px-2 font-medium hover:bg-slate-800" onClick={resetViewport} type="button">
+              <button aria-label="Reset viewport" className="h-8 rounded border border-slate-600 px-2 font-medium hover:bg-slate-800" onClick={resetViewport} type="button">
                 Reset
-              </button>
-              <button className={`h-8 rounded border px-2 font-medium ${isPanMode ? "border-teal-400 bg-teal-500 text-white" : "border-slate-600 hover:bg-slate-800"}`} onClick={() => setIsPanMode((current) => !current)} type="button">
-                Pan
               </button>
             </div>
             {props.annotationBlockedMessage ? (
@@ -923,6 +949,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
               </div>
             ) : null}
             <div
+              data-viewer-viewport
               ref={viewportRef}
               className={`h-full w-full overflow-auto rounded-md border border-slate-800 bg-slate-900 ${isPanMode ? (isPanning ? "cursor-grabbing" : "cursor-grab") : ""}`}
               onMouseDown={handlePanMouseDown}
@@ -970,7 +997,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
                       {copyError ? <p className="w-full rounded-md bg-white/95 px-2 py-1 text-right text-xs text-red-700 shadow-sm">{copyError}</p> : null}
                     </div>
                   ) : null}
-                  {props.annotationType === "polygon" && polygonPoints.length > 0 ? (
+                  {isPolygonTool && polygonPoints.length > 0 ? (
                     <div className="absolute left-3 top-3 z-10 flex gap-2">
                       <button
                         className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -992,7 +1019,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
                       </button>
                     </div>
                   ) : null}
-                  {props.annotationType === "segmentation" ? (
+                  {isMaskTool ? (
                     <div className="absolute left-3 top-3 z-10 flex max-w-[min(28rem,calc(100vw-2rem))] flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
                       <button
                         className={`rounded-md border px-2 py-1 font-medium ${maskTool === "brush" ? "border-sky-500 bg-sky-50 text-sky-700" : "border-slate-300 text-slate-600 hover:bg-slate-50"}`}
@@ -1059,7 +1086,7 @@ export function ViewerPanel(props: ViewerPanelProps) {
                     ref={canvasRef}
                     width={canvasWidth}
                     height={canvasHeight}
-                    className={`rounded-md border border-slate-700 bg-black ${isPanMode ? (isPanning ? "cursor-grabbing" : "cursor-grab") : props.canAnnotate ? "cursor-crosshair" : "cursor-not-allowed"}`}
+                    className={`rounded-md border border-slate-700 bg-black ${canvasCursorClass}`}
                     style={{ width: canvasWidth * zoom, height: canvasHeight * zoom }}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}

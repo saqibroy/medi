@@ -364,8 +364,17 @@ CI verification:
 - Annotation list, search, and direct fetch now scope through the scan's
   project organization, including legacy annotations without a direct
   `project_id`.
+- Viewer interactions now use explicit Select, Pan, Box, Polygon, and Mask
+  tools instead of mixing pan and drawing state.
+- Annotation tools now use icon buttons with accessible labels and hover/focus
+  tooltips for the active viewer modes.
+- Phase 3 frontend QA checklist added with browser setup, role accounts,
+  workflow steps, expected results, and evidence fields.
+- Phase 3 browser QA completed for box and polygon editing, draft label
+  switching, keyboard safety, responsive layout, zoom, pan, and overlay
+  alignment.
 
 ## Next Engineering Priorities
 
-1. Split viewer toolbar into explicit modes: pan, box, polygon, mask, select.
-2. Add icon buttons and tooltips for annotation tools.
+1. Prepare Phase 4 production operations plan and checklist.
+2. Define production PostgreSQL configuration and migration procedure.

@@ -96,6 +96,7 @@ Start with `PRODUCT_ROADMAP.md`, then read:
 - `PHASE1_IMPLEMENTATION_PLAN.md` for the current MVP build sequence.
 - `PHASE2_IMAGING_PLAN.md` for the real DICOM/NIfTI ingestion plan.
 - `PHASE3_ANNOTATION_TOOLS_PLAN.md` for advanced annotation workflows.
+- `PHASE3_FRONTEND_QA_CHECKLIST.md` for the browser QA pass before Phase 3 exit.
 - `PRODUCTION_STORAGE_PLAN.md` for object storage and signed URL planning.
 - `BACKGROUND_INGESTION_PLAN.md` for large-study worker planning.
 - `BUSINESS_PRICING_MODEL.md` for the first research-team pricing strategy.

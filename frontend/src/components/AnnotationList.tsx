@@ -160,6 +160,7 @@ export function AnnotationList({
         {visibleAnnotations.map((annotation) => (
           <article
             key={annotation.id}
+            data-annotation-id={annotation.id}
             className={`cursor-pointer rounded-md border p-3 text-sm ${annotation.id === selectedAnnotationId ? "border-orange-500 bg-orange-50" : annotation.slice_index === currentSlice ? "border-teal-500 bg-teal-50" : "border-slate-200"}`}
             onClick={() => onSelectAnnotation(annotation.id)}
             onKeyDown={(event) => {
