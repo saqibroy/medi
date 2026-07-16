@@ -131,6 +131,7 @@ Status: in progress. Detailed gates: `PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
 - Structured logging.
 - Error tracking.
 - [x] Database-aware backend readiness/liveness and frontend health checks.
+- [x] PostgreSQL migration/rollback runbook and isolated CI rehearsal.
 - Rate limiting.
 - Backups and restore documentation.
 - Admin tools for organizations, users, and projects.

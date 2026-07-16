@@ -230,8 +230,8 @@ Useful primary references:
 - [ ] Add per-user, per-organization, and endpoint-sensitive rate limits.
 - [ ] Add database connection-pool settings, statement timeouts, and slow-query
   visibility.
-- [ ] Define migration preflight, backup, forward deployment, and rollback
-  procedures for PostgreSQL.
+- [x] Define migration preflight, backup/restore rehearsal, forward deployment,
+  and rollback procedures for PostgreSQL in `POSTGRES_MIGRATION_RUNBOOK.md`.
 - [ ] Remove automatic demo seeding from production startup.
 - [ ] Pin and scan runtime images, run containers as non-root, and use read-only
   filesystems where possible.
@@ -244,7 +244,8 @@ Useful primary references:
 2. [x] Separate development and production configuration; production startup
    rejects demo seeding, development database defaults, missing/weak token
    secrets, and implicit CORS origins.
-3. [ ] Document and test the PostgreSQL migration/rollback procedure.
+3. [x] Document and test the PostgreSQL migration/rollback procedure with an
+   isolated upgrade/downgrade/upgrade cycle in CI.
 4. [ ] Add structured logging, request IDs, redaction, and error boundaries.
 5. [ ] Add expiring sessions, exact CORS configuration, and rate limiting.
 6. [ ] Introduce the storage abstraction and private object-storage backend.

@@ -84,6 +84,14 @@ unique `TOKEN_SECRET` of at least 32 characters, exact comma-separated HTTPS
 migrations run and refuses unsafe startup. Keep real values in the deployment
 secret manager, never in `.env.example`, images, or Git.
 
+## PostgreSQL Migration Safety
+
+Use [POSTGRES_MIGRATION_RUNBOOK.md](POSTGRES_MIGRATION_RUNBOOK.md) for the
+required preflight, encrypted backup/restore rehearsal, forward deployment, and
+rollback procedure. A local disposable PostgreSQL migration cycle can be run
+with `bash scripts/verify_postgres_migrations.sh`; it is not a production
+rollback command.
+
 ## Run Quality Checks
 
 Use these before pushing production-minded changes:
