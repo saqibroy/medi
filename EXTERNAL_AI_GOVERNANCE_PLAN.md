@@ -1,7 +1,7 @@
 # External AI Governance Plan
 
-Status: repository implementation and local verification complete on
-2026-07-16; pull-request checks remain pending.
+Status: repository implementation, local verification, and pull-request checks
+complete on 2026-07-16.
 
 This increment establishes a deny-by-default repository boundary before any
 external model integration exists. It does not approve a real provider,
@@ -41,7 +41,8 @@ payloads are sent outside the application.
 - [x] Static egress policy and infrastructure lint pass.
 - [x] Rebuilt Compose services are healthy with external AI disabled and a live
   dry-run decision is denied without making a network call.
-- [ ] GitHub pull-request checks pass before merge.
+- [x] GitHub pull-request #13 checks pass before merge, including static egress
+  policy, encrypted recovery, and PostgreSQL rollback rehearsal.
 
 ## Deployment Gates
 
