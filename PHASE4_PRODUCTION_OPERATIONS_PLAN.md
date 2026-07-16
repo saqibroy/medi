@@ -225,7 +225,8 @@ Useful primary references:
 - [x] Add database-aware backend readiness, process liveness, frontend health,
   and Compose health dependencies.
 - [ ] Add health probes to deployment manifests and alert on sustained failure.
-- [ ] Add structured JSON logs with correlation IDs and safe redaction.
+- [x] Add structured JSON request logs with server-issued correlation IDs and an
+  allowlist that excludes bodies, headers, query values, and exception text.
 - [ ] Add error tracking that strips sensitive request bodies and metadata.
 - [ ] Add per-user, per-organization, and endpoint-sensitive rate limits.
 - [ ] Add database connection-pool settings, statement timeouts, and slow-query
@@ -246,7 +247,8 @@ Useful primary references:
    secrets, and implicit CORS origins.
 3. [x] Document and test the PostgreSQL migration/rollback procedure with an
    isolated upgrade/downgrade/upgrade cycle in CI.
-4. [ ] Add structured logging, request IDs, redaction, and error boundaries.
+4. [x] Add structured request logging, request IDs, and redaction. Error
+   tracking remains a separate controlled integration.
 5. [ ] Add expiring sessions, exact CORS configuration, and rate limiting.
 6. [ ] Introduce the storage abstraction and private object-storage backend.
 7. [ ] Add quarantine plus the versioned DICOM/NIfTI de-identification gate.

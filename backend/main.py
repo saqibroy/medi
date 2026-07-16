@@ -8,6 +8,7 @@ changes are owned by Alembic migrations.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .observability import RequestLoggingMiddleware, configure_logging
 from .routers import annotations, auth, health, projects, scans, users
 from .settings import get_settings
 
@@ -20,6 +21,7 @@ def create_app() -> FastAPI:
     """
 
     settings = get_settings()
+    configure_logging()
     app = FastAPI(
         title="Medical Image Annotation Learning API",
         description="Educational FastAPI backend for scan metadata and annotations.",
@@ -35,6 +37,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RequestLoggingMiddleware)
 
     app.include_router(auth.router)
     app.include_router(health.router)
