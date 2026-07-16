@@ -128,7 +128,7 @@ Status: in progress. Detailed gates: `PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
 - [x] CI for backend tests and frontend builds.
 - Production PostgreSQL configuration.
 - Object storage configuration.
-- Structured logging.
+- [x] Structured JSON request logging, correlation IDs, and payload-safe redaction.
 - Error tracking.
 - [x] Database-aware backend readiness/liveness and frontend health checks.
 - [x] PostgreSQL migration/rollback runbook and isolated CI rehearsal.
@@ -190,5 +190,5 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Define and test the production PostgreSQL migration and rollback procedure.
-2. Add structured logging, request IDs, redaction, and error boundaries.
+1. Add expiring sessions and rate limiting for sensitive endpoints.
+2. Introduce private object storage and organization-safe access controls.
