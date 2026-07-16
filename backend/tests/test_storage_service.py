@@ -1,6 +1,8 @@
 """Tests for tenant-safe private object keys and local storage."""
 
+import hashlib
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -10,9 +12,14 @@ from backend.services.storage_service import LocalPrivateStorage, S3PrivateStora
 class FakeBody:
     def __init__(self, content: bytes) -> None:
         self.content = content
+        self.offset = 0
 
-    def read(self) -> bytes:
-        return self.content
+    def read(self, size: int = -1) -> bytes:
+        if size < 0:
+            size = len(self.content) - self.offset
+        chunk = self.content[self.offset : self.offset + size]
+        self.offset += len(chunk)
+        return chunk
 
 
 class FakePaginator:
@@ -34,8 +41,8 @@ class FakeS3Client:
         self.last_put = arguments
         self.objects[str(arguments["Key"])] = arguments["Body"]  # type: ignore[assignment]
 
-    def get_object(self, **arguments: object) -> dict[str, FakeBody]:
-        return {"Body": FakeBody(self.objects[str(arguments["Key"])])}
+    def get_object(self, **arguments: object) -> dict[str, Any]:
+        return {"Body": FakeBody(self.objects[str(arguments["Key"])]), "VersionId": "s3-version-42"}
 
     def head_object(self, **arguments: object) -> None:
         if str(arguments["Key"]) not in self.objects:
@@ -68,6 +75,11 @@ def test_local_private_storage_round_trip_and_prefix_delete(tmp_path: Path) -> N
 
     assert storage.exists(key)
     assert storage.get_bytes(key) == b"synthetic"
+    snapshot = storage.snapshot(key)
+    expected_checksum = hashlib.sha256(b"synthetic").hexdigest()
+    assert snapshot.checksum_sha256 == expected_checksum
+    assert snapshot.version_id == f"local-sha256:{expected_checksum}"
+    assert snapshot.byte_size == len(b"synthetic")
     assert storage.local_path(key).is_relative_to(tmp_path)
     storage.delete_prefix(prefix)
     assert not storage.exists(key)
@@ -99,6 +111,10 @@ def test_s3_storage_requires_kms_on_write_and_generates_short_lived_get_url() ->
     url = storage.signed_get_url(key, 300)
 
     assert storage.get_bytes(key) == b"png"
+    snapshot = storage.snapshot(key)
+    assert snapshot.checksum_sha256 == hashlib.sha256(b"png").hexdigest()
+    assert snapshot.version_id == "s3-version-42"
+    assert snapshot.byte_size == len(b"png")
     assert client.last_put["ServerSideEncryption"] == "aws:kms"
     assert client.last_put["SSEKMSKeyId"] == "kms-key-id"
     assert client.last_put["BucketKeyEnabled"] is True

@@ -6,9 +6,10 @@ PostgreSQL, Alembic, expiring database-backed cookie sessions, signed CSRF
 protection, Redis-backed shared rate limits, role checks, and a local/S3
 private-storage boundary. Real DICOM/NIfTI parsing, KMS-encrypted S3
 writes, signed derived previews, a versioned quarantine gate, and a dedicated
-append-only security-event ledger are implemented. Independent WORM export,
-retention approval, and broader compliance operations remain explicit Phase 4
-gates.
+append-only security-event ledger are implemented. Immutable dataset releases
+also freeze approved training-data inputs and their deterministic evidence.
+Independent WORM export, retention approval, and broader compliance operations
+remain explicit Phase 4 gates.
 
 ## Medical Data Safety Boundary
 
@@ -52,7 +53,7 @@ The detailed implementation and release evidence are tracked in
 +----------------------+                          +----------------------+
 | Viewer state hooks   |                          | PostgreSQL           |
 | useScan              |                          | scans table          |
-| useAnnotations       |                          | annotations + audit  |
+| useAnnotations       |                          | annotations/releases |
 +----------------------+                          +----------+-----------+
                                                              |
                                                   +----------+-----------+
@@ -129,6 +130,25 @@ The detailed implementation and release evidence are tracked in
 13. `useAnnotations()` appends the saved annotation to local state.
 14. `ViewerPanel.tsx` redraws overlays for the current slice, and
    `AnnotationList.tsx` shows the saved annotation in the right panel.
+
+## Freezing A Dataset Release
+
+Administrators use `POST /projects/{project_id}/releases` to freeze one
+project's ready scans and approved annotations. The service reads each original
+and approved segmentation mask through the private-storage boundary, records
+its object version, SHA-256, and byte size, then writes a canonical manifest
+with a stable release ID and monotonic project version. The manifest includes
+safe annotation geometry and lineage digests but excludes filenames, storage
+keys, annotation/review notes, creator names, patient metadata, and pixels.
+
+Release and lifecycle rows are append-only in both SQLAlchemy and the database.
+A newer release appends a superseding event, while revocation appends a
+controlled reason; neither operation rewrites the frozen manifest. Any signed-in
+organization member may list or inspect its releases, but only administrators
+may create or revoke them. These routes also write data-minimized security audit
+events. The browser surface is `DatasetReleasePanel.tsx`; the service and schema
+contract live in `backend/services/dataset_release_service.py` and
+`backend/schemas.py`.
 
 ## ML Team Consumption
 

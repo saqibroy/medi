@@ -118,6 +118,8 @@ class RequestRateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if request.method == "POST" and path == "/auth/login":
             return self.login_rule
+        if request.method == "POST" and (path.endswith("/releases") or path.endswith("/revoke")):
+            return self.sensitive_rule
         if request.method in {"POST", "PATCH", "DELETE"} and ("/upload" in path or "/reprocess" in path or "/export" in path):
             return self.sensitive_rule
         if request.method == "GET" and "/export" in path:

@@ -15,6 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field
 Modality = Literal["MRI", "CT", "PET", "Ultrasound", "XRAY"]
 AnnotationType = Literal["bounding_box", "polygon", "segmentation"]
 ReviewStatus = Literal["pending", "approved", "rejected", "needs_changes"]
+DatasetReleaseStatus = Literal["active", "superseded", "revoked"]
+DatasetReleaseAction = Literal["created", "superseded", "revoked"]
+DatasetReleaseReason = Literal["quality_issue", "source_withdrawn", "policy_change", "superseded", "other"]
 UserRole = Literal["admin", "annotator", "reviewer"]
 SourceFormat = Literal["synthetic", "nifti", "dicom", "dicom_zip", "unknown"]
 IngestionStatus = Literal["pending", "processing", "ready", "failed", "quarantined"]
@@ -113,6 +116,46 @@ class ProjectRead(ProjectBase):
     id: UUID
     organization_id: UUID
     created_at: datetime
+
+
+class DatasetReleaseEventRead(BaseModel):
+    """Append-only lifecycle fact attached to a dataset release."""
+
+    id: UUID
+    action: DatasetReleaseAction
+    reason_code: DatasetReleaseReason | None
+    related_release_id: UUID | None
+    actor_user_id: UUID
+    occurred_at: datetime
+
+
+class DatasetReleaseSummaryRead(BaseModel):
+    """Release metadata safe for project release lists."""
+
+    id: UUID
+    organization_id: UUID
+    project_id: UUID
+    version: int
+    schema_version: str
+    content_sha256: str
+    manifest_sha256: str
+    supersedes_release_id: UUID | None
+    created_by_user_id: UUID
+    created_at: datetime
+    status: DatasetReleaseStatus
+    lifecycle: list[DatasetReleaseEventRead]
+
+
+class DatasetReleaseRead(DatasetReleaseSummaryRead):
+    """Immutable release metadata and its deterministic manifest."""
+
+    manifest: dict[str, Any]
+
+
+class DatasetReleaseRevoke(BaseModel):
+    """Controlled revocation reason without a free-text PHI channel."""
+
+    reason_code: Literal["quality_issue", "source_withdrawn", "policy_change", "other"]
 
 
 class LabelBase(BaseModel):

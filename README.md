@@ -129,6 +129,18 @@ and database triggers reject audit-row updates and deletes. Independent WORM
 export and an approved retention policy remain production deployment gates in
 `SECURITY_AUDIT_PLAN.md`.
 
+Administrators can freeze a project through
+`POST /projects/{project_id}/releases`. Each immutable release has a stable ID,
+monotonic project version, deterministic manifest/content checksums, private
+object-version evidence, approved annotation lineage, and append-only
+superseding/revocation events. Organization members can list releases at
+`GET /projects/{project_id}/releases` and inspect one at
+`GET /dataset-releases/{release_id}`; administrators revoke through
+`POST /dataset-releases/{release_id}/revoke`. Manifests exclude filenames,
+storage paths, notes, creator names, patient metadata, and pixels. Target S3
+VersionId evidence, retained artifact/WORM packaging, and retention approval
+remain gates in `DATASET_RELEASE_PLAN.md`.
+
 ## PostgreSQL Migration Safety
 
 Use [POSTGRES_MIGRATION_RUNBOOK.md](POSTGRES_MIGRATION_RUNBOOK.md) for the
@@ -162,6 +174,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
 - `PHASE3_FRONTEND_QA_CHECKLIST.md` for the browser QA pass before Phase 3 exit.
 - `PHASE4_PRODUCTION_OPERATIONS_PLAN.md` for production, medical-data security,
   privacy, backup, audit, versioning, and external-AI release gates.
+- `DATASET_RELEASE_PLAN.md` for immutable release boundaries, verified evidence,
+  and remaining deployment gates.
 - `IMAGING_DEIDENTIFICATION_PLAN.md` for the versioned upload quarantine,
   metadata-screening profile, threat model, and human-review boundary.
 - `PRODUCTION_STORAGE_PLAN.md` for object storage and signed URL planning.
@@ -169,7 +183,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
 - `BUSINESS_PRICING_MODEL.md` for the first research-team pricing strategy.
 - `PRODUCT_DEMO_SCRIPT.md` for the short buyer-facing demo flow.
 - `backend/routers/auth.py` for login/session endpoints.
-- `backend/routers/projects.py` for projects, project scans, labels, and export.
+- `backend/routers/projects.py` for projects, project scans, labels, releases,
+  and export.
 - `backend/routers/scans.py` for scan and slice endpoints.
 - `backend/routers/annotations.py` for annotation CRUD.
 - `frontend/src/hooks/useScan.ts` for scan data flow.

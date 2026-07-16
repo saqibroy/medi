@@ -209,5 +209,12 @@ Definition of done:
    SameSite browser sessions and signed, session-bound CSRF protection.
    Production TLS/managed-Redis evidence remains in
    `SESSION_AND_RATE_LIMIT_PLAN.md`.
-4. Next: add immutable dataset releases with scan object versions, checksums,
-   label snapshots, and approved annotation revision manifests.
+4. Completed repository boundary: immutable, monotonic project dataset
+   releases now freeze ready scan object versions/checksums, label taxonomy,
+   approved annotation lineage, and segmentation masks. Superseding and
+   revocation append lifecycle events; tenant-safe APIs, admin controls, audit
+   coverage, and checksum-stability tests are implemented. Target S3 VersionId,
+   retained artifact/WORM, and retention approval remain deployment gates in
+   `DATASET_RELEASE_PLAN.md`.
+5. Next: automate encrypted backup/restore drills and define enforceable
+   retention, legal-hold, source-withdrawal, and verified-deletion behavior.

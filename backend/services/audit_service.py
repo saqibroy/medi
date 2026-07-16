@@ -23,6 +23,7 @@ SAFE_DETAIL_KEYS = {
     "deidentification_status",
     "export_format",
     "ingestion_status",
+    "release_version",
     "slice_index",
     "source_format",
 }
@@ -42,6 +43,10 @@ AUDITED_ROUTES: dict[tuple[str, str], AuditRoute] = {
     ("GET", "/audit-events"): AuditRoute("audit.list", "organization"),
     ("POST", "/projects"): AuditRoute("project.create", "project"),
     ("PUT", "/projects/{project_id}"): AuditRoute("project.update", "project", "project_id"),
+    ("GET", "/projects/{project_id}/releases"): AuditRoute("dataset_release.list", "project", "project_id"),
+    ("POST", "/projects/{project_id}/releases"): AuditRoute("dataset_release.create", "dataset_release"),
+    ("GET", "/dataset-releases/{release_id}"): AuditRoute("dataset_release.read", "dataset_release", "release_id"),
+    ("POST", "/dataset-releases/{release_id}/revoke"): AuditRoute("dataset_release.revoke", "dataset_release", "release_id"),
     ("POST", "/projects/{project_id}/labels"): AuditRoute("label.create", "label"),
     ("PUT", "/labels/{label_id}"): AuditRoute("label.update", "label", "label_id"),
     ("DELETE", "/labels/{label_id}"): AuditRoute("label.delete", "label", "label_id"),
