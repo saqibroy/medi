@@ -1,7 +1,7 @@
 # Data Lifecycle And Recovery Plan
 
-Status: repository implementation and local verification complete; pull-request
-checks remain pending.
+Status: repository implementation, local verification, and pull-request checks
+complete on 2026-07-16.
 
 This increment adds repository-controlled recovery evidence and deletion
 governance without inventing medical-data retention periods or granting the web
@@ -69,7 +69,8 @@ approved operators, and customer authorization remain deployment gates.
   value-free deletion-request/cancellation, audit, migration-head, and disabled
   operator checks. Legal-hold/approval/execution paths use isolated automated
   tests so the persistent demo dataset is not destructively changed.
-- [ ] GitHub pull-request checks pass before merge.
+- [x] GitHub pull-request #12 checks pass before merge, including the fresh-
+  volume encrypted recovery drill.
 
 ## Remaining Deployment Gates
 
