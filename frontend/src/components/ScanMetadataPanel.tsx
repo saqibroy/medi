@@ -5,7 +5,7 @@ import type { ScanMetadata } from "../types/scan";
 
 interface ScanMetadataPanelProps {
   scanId?: string;
-  token: string;
+  csrfToken: string;
 }
 
 function formatList(values: number[] | null): string {
@@ -16,13 +16,13 @@ function formatNumber(value: number | null): string {
   return value === null ? "Not parsed" : String(value);
 }
 
-export function ScanMetadataPanel({ scanId, token }: ScanMetadataPanelProps) {
+export function ScanMetadataPanel({ scanId, csrfToken }: ScanMetadataPanelProps) {
   const [metadata, setMetadata] = useState<ScanMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!scanId || !token) {
+    if (!scanId || !csrfToken) {
       setMetadata(null);
       setError(null);
       return;
@@ -30,7 +30,7 @@ export function ScanMetadataPanel({ scanId, token }: ScanMetadataPanelProps) {
     let isMounted = true;
     setIsLoading(true);
     setError(null);
-    getScanMetadata(scanId, token)
+    getScanMetadata(scanId, csrfToken)
       .then((response) => {
         if (isMounted) setMetadata(response);
       })
@@ -43,7 +43,7 @@ export function ScanMetadataPanel({ scanId, token }: ScanMetadataPanelProps) {
     return () => {
       isMounted = false;
     };
-  }, [scanId, token]);
+  }, [scanId, csrfToken]);
 
   return (
     <section className="border-b border-slate-200 bg-white p-4">

@@ -42,13 +42,18 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=255)
 
 
-class AuthTokenRead(BaseModel):
-    """Bearer token response used by the browser during Phase 1."""
+class AuthSessionRead(BaseModel):
+    """Browser-safe session response; the opaque credential stays in a cookie."""
 
-    access_token: str
-    token_type: str = "bearer"
     expires_at: datetime
+    csrf_token: str
     user: UserRead
+
+
+class CsrfTokenRead(BaseModel):
+    """Signed double-submit token that browser JavaScript may echo in a header."""
+
+    csrf_token: str
 
 
 class SecurityAuditEventRead(BaseModel):

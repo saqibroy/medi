@@ -2,8 +2,9 @@
 
 This repository is a production-minded research MVP. It uses
 React, TypeScript, Tailwind CSS, Cornerstone3D, FastAPI, Pydantic, SQLAlchemy,
-PostgreSQL, Alembic, expiring database-backed bearer sessions, role checks, and
-a local/S3 private-storage boundary. Real DICOM/NIfTI parsing, KMS-encrypted S3
+PostgreSQL, Alembic, expiring database-backed cookie sessions, signed CSRF
+protection, Redis-backed shared rate limits, role checks, and a local/S3
+private-storage boundary. Real DICOM/NIfTI parsing, KMS-encrypted S3
 writes, signed derived previews, a versioned quarantine gate, and a dedicated
 append-only security-event ledger are implemented. Independent WORM export,
 retention approval, and broader compliance operations remain explicit Phase 4
@@ -53,6 +54,11 @@ The detailed implementation and release evidence are tracked in
 | useScan              |                          | scans table          |
 | useAnnotations       |                          | annotations + audit  |
 +----------------------+                          +----------+-----------+
+                                                             |
+                                                  +----------+-----------+
+                                                  | Redis                |
+                                                  | Hashed rate keys     |
+                                                  +----------+-----------+
                                                              |
                                                              v
                                                   +----------------------+

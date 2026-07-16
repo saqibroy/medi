@@ -106,8 +106,9 @@ Keep `label` as a denormalized snapshot for early export compatibility, but use
 - [x] `POST /auth/login`
 - [x] `GET /auth/me`
 
-Use a simple bearer token or session-like token in Phase 1. Password hashing
-should use a standard library such as Passlib.
+The Phase 1 token evolved into a database-backed opaque session. Browser
+credentials now use an HttpOnly cookie with signed CSRF protection; explicit
+bearer headers remain available for non-browser API clients.
 
 ### Users
 
@@ -138,7 +139,8 @@ validation should ensure objects belong to the expected project.
 
 Status:
 
-- [x] Existing scan and annotation endpoints require bearer auth.
+- [x] Existing scan and annotation endpoints require an authenticated cookie or
+  explicit API bearer session.
 - [x] Scan and annotation access is organization-scoped through projects.
 - [x] Annotation creation validates scan and label project consistency.
 - [x] Role-based authorization enforces admin, annotator, and reviewer mutation rules.
@@ -248,7 +250,7 @@ CI verification:
 - Product roadmap and Phase 1 plan created.
 - README repositioned around Medi as a product.
 - User, organization, project, label, scan, and annotation domain model added.
-- Demo auth, bearer tokens, seeded users, and seeded product data added.
+- Demo auth, opaque sessions, seeded users, and seeded product data added.
 - Project workspace UI added with login, project selector, stats, labels, scans,
   viewer, review list, and export.
 - Label management UI added for creating, editing, selecting, and deleting
@@ -394,6 +396,11 @@ CI verification:
   data-class lifecycle tagging, a read-only verifier, CI linting, and backup/
   restore/deletion procedures. Target-account deployment, approved retention,
   independent backup automation, and drill evidence remain production gates.
+- Browser authentication now keeps opaque credentials in HttpOnly, SameSite
+  cookies, requires signed session-bound CSRF tokens for state changes, and
+  removes browser token storage. Redis provides shared, hashed rate counters
+  with fail-closed production behavior; target TLS and managed-Redis evidence
+  remains tracked in `SESSION_AND_RATE_LIMIT_PLAN.md`.
 
 ## Next Engineering Priorities
 
@@ -405,5 +412,9 @@ CI verification:
    controls, lifecycle tagging, read-only verification, and backup/restore/
    deletion procedures. Cloud deployment and drill evidence remain dependent
    on an approved AWS account, retention values, and operators.
-3. Next: replace process-local rate limits with shared production enforcement
-   and move browser sessions to Secure, HttpOnly cookies with CSRF protection.
+3. Completed repository boundary: shared Redis rate enforcement plus HttpOnly,
+   SameSite browser sessions and signed, session-bound CSRF protection.
+   Production TLS/managed-Redis evidence remains in
+   `SESSION_AND_RATE_LIMIT_PLAN.md`.
+4. Next: add immutable dataset releases with scan object versions, checksums,
+   label snapshots, and approved annotation revision manifests.

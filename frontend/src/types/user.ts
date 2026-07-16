@@ -11,8 +11,11 @@ export interface User {
 }
 
 export interface AuthResponse {
-  access_token: string;
-  token_type: "bearer";
   expires_at: string;
+  csrf_token: string;
   user: User;
+}
+
+export interface CsrfResponse {
+  csrf_token: string;
 }
