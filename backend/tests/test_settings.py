@@ -1,0 +1,68 @@
+"""Tests for the development/production configuration boundary."""
+
+import pytest
+
+from backend.settings import ConfigurationError, DEVELOPMENT_CORS_ORIGINS, get_settings
+
+
+def test_development_defaults_are_local_and_seed_demo_data() -> None:
+    settings = get_settings({})
+
+    assert settings.environment == "development"
+    assert settings.cors_origins == DEVELOPMENT_CORS_ORIGINS
+    assert settings.seed_demo_data is True
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({}, "DATABASE_URL"),
+        ({"DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi"}, "TOKEN_SECRET"),
+        (
+            {
+                "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
+                "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+            },
+            "CORS_ORIGINS",
+        ),
+        (
+            {
+                "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
+                "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+                "CORS_ORIGINS": "https://medi.example.org",
+                "SEED_DEMO_DATA": "true",
+            },
+            "SEED_DEMO_DATA",
+        ),
+    ],
+)
+def test_production_fails_closed_for_missing_or_unsafe_settings(changes: dict[str, str], message: str) -> None:
+    environment = {"APP_ENV": "production", **changes}
+
+    with pytest.raises(ConfigurationError, match=message):
+        get_settings(environment)
+
+
+def test_production_accepts_explicit_safe_settings() -> None:
+    settings = get_settings(
+        {
+            "APP_ENV": "production",
+            "DATABASE_URL": "postgresql+psycopg://medi_app:strong-password@db:5432/medi",
+            "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+            "CORS_ORIGINS": "https://medi.example.org,https://review.medi.example.org",
+            "SEED_DEMO_DATA": "false",
+        }
+    )
+
+    assert settings.is_production is True
+    assert settings.seed_demo_data is False
+    assert settings.cors_origins == ("https://medi.example.org", "https://review.medi.example.org")
+
+
+@pytest.mark.parametrize(
+    "origins",
+    ["*", "https://medi.example.org/path", "https://medi.example.org?preview=true", "ftp://medi.example.org"],
+)
+def test_cors_origins_must_be_exact_http_origins(origins: str) -> None:
+    with pytest.raises(ConfigurationError, match="CORS_ORIGINS"):
+        get_settings({"CORS_ORIGINS": origins})

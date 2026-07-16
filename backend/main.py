@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import annotations, auth, health, projects, scans, users
+from .settings import get_settings
 
 
 def create_app() -> FastAPI:
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
     app without importing a process-global ASGI object.
     """
 
+    settings = get_settings()
     app = FastAPI(
         title="Medical Image Annotation Learning API",
         description="Educational FastAPI backend for scan metadata and annotations.",
@@ -26,16 +28,9 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        # Vite uses 5173 by default and moves to 5174 if the first dev server is
-        # already running, so both origins are allowed for local interview demos.
-        allow_origins=[
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:5174",
-            "http://127.0.0.1:5174",
-            "http://localhost:8080",
-            "http://127.0.0.1:8080",
-        ],
+        # Development defaults are deliberately local-only. Production must set
+        # an exact, reviewed origin list through CORS_ORIGINS.
+        allow_origins=list(settings.cors_origins),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

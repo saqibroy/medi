@@ -189,6 +189,5 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Separate development and production configuration, including demo seeding,
-   secrets, and exact CORS origins.
-2. Define and test the production PostgreSQL migration and rollback procedure.
+1. Define and test the production PostgreSQL migration and rollback procedure.
+2. Add structured logging, request IDs, redaction, and error boundaries.
