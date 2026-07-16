@@ -259,7 +259,7 @@ async def test_scan_upload_is_admin_only(tmp_path: Path) -> None:
         assert created.json()["ingestion_status"] == "ready"
         assert created.json()["depth"] == 1
         assert_scan_response_hides_storage_paths(created.json())
-        assert (private_scan_root(tmp_path, project_id, created.json()["id"]) / "original" / "uploaded.dcm").exists()
+        assert (private_scan_root(tmp_path, project_id, created.json()["id"]) / "original" / "original.dcm").exists()
 
 
 @pytest.mark.anyio
@@ -339,6 +339,7 @@ async def test_dicom_upload_reports_phi_warning_without_raw_values(tmp_path: Pat
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
         admin_token = await login(client, "admin@test.local")
         project_id = (await client.get("/projects", headers=auth_headers(admin_token))).json()[0]["id"]
+        label_id = (await client.get(f"/projects/{project_id}/labels", headers=auth_headers(admin_token))).json()[0]["id"]
         fixture_path = write_synthetic_dicom(
             tmp_path / "phi-upload.dcm",
             width=6,
@@ -346,20 +347,90 @@ async def test_dicom_upload_reports_phi_warning_without_raw_values(tmp_path: Pat
             patient_name="Jane^Patient",
             patient_id="MRN-12345",
             accession_number="ACC-999",
+            patient_birth_date="19700101",
+            institution_name="Private Hospital",
+            referring_physician="Doctor^Private",
+            private_value="private subject value",
         )
         data = {"project_id": project_id, "name": "DICOM With PHI", "modality": "CT"}
-        files = {"file": ("phi-upload.dcm", fixture_path.read_bytes(), "application/dicom")}
+        files = {"file": ("Jane-MRN-12345.dcm", fixture_path.read_bytes(), "application/dicom")}
 
         created = await client.post("/scans/upload", data=data, files=files, headers=auth_headers(admin_token))
-        metadata_response = await client.get(f"/scans/{created.json()['id']}/metadata", headers=auth_headers(admin_token))
+        scan_id = created.json()["id"]
+        metadata_response = await client.get(f"/scans/{scan_id}/metadata", headers=auth_headers(admin_token))
+        slice_response = await client.get(f"/scans/{scan_id}/slice/0", headers=auth_headers(admin_token))
+        signed_url_response = await client.get(f"/scans/{scan_id}/slice/0/url", headers=auth_headers(admin_token))
+        slice_metadata_response = await client.get(f"/scans/{scan_id}/slice/0/metadata", headers=auth_headers(admin_token))
+        scan_annotations_response = await client.get(f"/scans/{scan_id}/annotations", headers=auth_headers(admin_token))
+        filtered_annotations_response = await client.get(f"/annotations?scan_id={scan_id}", headers=auth_headers(admin_token))
+        create_annotation_response = await client.post(
+            "/annotations",
+            json={
+                "scan_id": scan_id,
+                "project_id": project_id,
+                "label_id": label_id,
+                "label": "lesion",
+                "annotation_type": "bounding_box",
+                "coordinates": {"x": 0, "y": 0, "width": 2, "height": 2},
+                "slice_index": 0,
+                "created_by": "Admin",
+            },
+            headers=auth_headers(admin_token),
+        )
+        protected_responses = [
+            await client.get(f"/scans/{scan_id}/export", headers=auth_headers(admin_token)),
+            await client.get(f"/scans/{scan_id}/export/coco", headers=auth_headers(admin_token)),
+            await client.get(f"/scans/{scan_id}/export/csv", headers=auth_headers(admin_token)),
+            await client.get(f"/scans/{scan_id}/export/yolo", headers=auth_headers(admin_token)),
+            await client.get(f"/scans/{scan_id}/export/segmentation", headers=auth_headers(admin_token)),
+            await client.get(f"/scans/{scan_id}/stats", headers=auth_headers(admin_token)),
+        ]
+        project_export = await client.get(f"/projects/{project_id}/export", headers=auth_headers(admin_token))
 
         metadata = metadata_response.json()["metadata"]
         assert created.status_code == 201
-        assert metadata["phi_warnings"] == ["AccessionNumber", "PatientName", "PatientID"]
-        assert metadata["deidentification_status"] == "phi_warning_detected"
+        assert metadata["phi_warnings"] == [
+            "AccessionNumber",
+            "InstitutionName",
+            "ReferringPhysicianName",
+            "PatientName",
+            "PatientID",
+            "PatientBirthDate",
+        ]
+        assert created.json()["ingestion_status"] == "quarantined"
+        assert created.json()["deidentification_status"] == "quarantined"
+        assert created.json()["deidentification_profile_version"] == "medi-deid-screening-v1"
+        assert metadata["deidentification_status"] == "quarantined"
+        assert created.json()["deidentification_evidence"]["risk_flags"] == [
+            "AccessionNumber",
+            "InstitutionName",
+            "PatientBirthDate",
+            "PatientID",
+            "PatientName",
+            "PrivateDataElement",
+            "ReferringPhysicianName",
+        ]
+        assert slice_response.status_code == 409
+        assert signed_url_response.status_code == 409
+        assert slice_metadata_response.status_code == 409
+        assert scan_annotations_response.status_code == 409
+        assert filtered_annotations_response.status_code == 200
+        assert filtered_annotations_response.json() == []
+        assert create_annotation_response.status_code == 409
+        assert all(response.status_code == 409 for response in protected_responses)
+        assert scan_id not in {scan["scan_id"] for scan in project_export.json()["scans"]}
+        scan_root = private_scan_root(tmp_path, project_id, scan_id)
+        assert (scan_root / "quarantine" / "original" / "original.dcm").exists()
+        assert not (scan_root / "original").exists()
+        assert not (scan_root / "derived" / "preview").exists()
         assert "Jane" not in str(metadata)
         assert "MRN-12345" not in str(metadata)
         assert "ACC-999" not in str(metadata)
+        assert "19700101" not in str(metadata)
+        assert "Private Hospital" not in str(metadata)
+        assert "Doctor" not in str(metadata)
+        assert "private subject value" not in str(metadata)
+        assert "Jane-MRN-12345.dcm" not in str(created.json())
 
 
 @pytest.mark.anyio
@@ -405,7 +476,7 @@ async def test_failed_upload_can_be_reprocessed_by_admin(tmp_path: Path) -> None
 
         created = await client.post("/scans/upload", data=data, files=files, headers=auth_headers(admin_token))
         body = created.json()
-        original_path = private_scan_root(tmp_path, project_id, body["id"]) / "original" / "broken.nii.gz"
+        original_path = private_scan_root(tmp_path, project_id, body["id"]) / "quarantine" / "original" / "original.nii.gz"
         valid_fixture = write_synthetic_nifti(tmp_path / "valid-retry.nii.gz", width=6, height=5, depth=2)
         original_path.write_bytes(valid_fixture.read_bytes())
 
@@ -422,6 +493,8 @@ async def test_failed_upload_can_be_reprocessed_by_admin(tmp_path: Path) -> None
         assert reprocessed.json()["ingestion_status"] == "ready"
         assert reprocessed.json()["source_format"] == "nifti"
         assert reprocessed.json()["num_slices"] == 2
+        assert (private_scan_root(tmp_path, project_id, body["id"]) / "original" / "original.nii.gz").exists()
+        assert not original_path.exists()
         preview_root = private_scan_root(tmp_path, project_id, body["id"]) / "derived" / "preview"
         assert sorted(path.name for path in preview_root.glob("*.png")) == ["000000.png", "000001.png"]
         assert ready_slice.status_code == 200

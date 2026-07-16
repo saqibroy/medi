@@ -2,10 +2,11 @@
 
 This repository is a production-minded research MVP. It uses
 React, TypeScript, Tailwind CSS, Cornerstone3D, FastAPI, Pydantic, SQLAlchemy,
-PostgreSQL, Alembic, bearer authentication, role checks, and local-file storage.
-Real DICOM/NIfTI parsing is implemented, while private object storage,
-production sessions, immutable security auditing, and compliance operations
-remain explicit Phase 4 gates.
+PostgreSQL, Alembic, expiring database-backed bearer sessions, role checks, and
+a local/S3 private-storage boundary. Real DICOM/NIfTI parsing, KMS-encrypted S3
+writes, signed derived previews, and a versioned quarantine gate are
+implemented, while immutable security auditing and broader compliance
+operations remain explicit Phase 4 gates.
 
 ## Medical Data Safety Boundary
 
@@ -16,7 +17,8 @@ private tags, free text, or burned-in pixels.
 
 The production architecture must enforce these boundaries:
 
-- quarantine before de-identification checks and normal viewer availability;
+- quarantine-first storage before versioned metadata checks and normal viewer
+  availability;
 - allowlisted metadata projection rather than raw header persistence;
 - encryption for transport, databases, objects, and backups;
 - tenant and role authorization before every scan, mask, export, and signed URL;
@@ -53,9 +55,9 @@ The detailed implementation and release evidence are tracked in
                                                              |
                                                              v
                                                   +----------------------+
-                                                  | Local file storage   |
-                                                  | backend/data/...     |
-                                                  | Simulates S3 keys    |
+                                                  | Private storage      |
+                                                  | Local Compose / S3   |
+                                                  | Tenant-scoped keys   |
                                                   +----------------------+
 ```
 

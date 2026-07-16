@@ -6,7 +6,8 @@
 
 export type Modality = "MRI" | "CT" | "PET" | "Ultrasound" | "XRAY";
 export type SourceFormat = "synthetic" | "nifti" | "dicom" | "dicom_zip" | "unknown";
-export type IngestionStatus = "pending" | "processing" | "ready" | "failed";
+export type IngestionStatus = "pending" | "processing" | "ready" | "failed" | "quarantined";
+export type DeidentificationStatus = "synthetic" | "passed" | "quarantined" | "not_evaluated" | "legacy_unverified";
 
 export interface Scan {
   id: string;
@@ -17,6 +18,10 @@ export interface Scan {
   source_format: SourceFormat;
   ingestion_status: IngestionStatus;
   ingestion_error: string | null;
+  deidentification_status: DeidentificationStatus;
+  deidentification_profile_version: string | null;
+  deidentification_checked_at: string | null;
+  deidentification_evidence: Record<string, unknown> | null;
   imaging_metadata: Record<string, unknown> | null;
   width: number | null;
   height: number | null;
@@ -55,6 +60,10 @@ export interface ScanMetadata {
   source_format: SourceFormat;
   ingestion_status: IngestionStatus;
   ingestion_error: string | null;
+  deidentification_status: DeidentificationStatus;
+  deidentification_profile_version: string | null;
+  deidentification_checked_at: string | null;
+  deidentification_evidence: Record<string, unknown> | null;
   num_slices: number;
   width: number | null;
   height: number | null;

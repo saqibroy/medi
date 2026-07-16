@@ -85,8 +85,20 @@ def test_build_nifti_scan_profile_writes_preview_slices(tmp_path: Path) -> None:
     assert profile["height"] == 4
     assert profile["depth"] == 3
     assert profile["imaging_metadata"]["parser_status"] == "parsed"
-    assert profile["imaging_metadata"]["deidentification_status"] == "user_supplied_deidentified_required"
+    assert profile["imaging_metadata"]["deidentification_status"] == "passed"
+    assert profile["deidentification_profile_version"] == "medi-deid-screening-v1"
     assert sorted(path.name for path in preview_root.glob("*.png")) == ["000000.png", "000001.png", "000002.png"]
+
+
+def test_nifti_text_header_is_quarantined_without_retaining_value(tmp_path: Path) -> None:
+    fixture_path = write_synthetic_nifti(tmp_path / "unsafe.nii.gz", description="Patient Jane MRN-12345")
+
+    profile = build_nifti_scan_profile(fixture_path.name, fixture_path.read_bytes(), "MRI", "storage/key", tmp_path / "preview")
+
+    assert profile["ingestion_status"] == "quarantined"
+    assert profile["deidentification_evidence"]["risk_flags"] == ["NiftiDescription"]
+    assert "Jane" not in str(profile)
+    assert "MRN-12345" not in str(profile)
 
 
 def test_parse_nifti_volume_rejects_unsupported_header(tmp_path: Path) -> None:
@@ -133,6 +145,23 @@ def test_parse_dicom_image_warns_about_phi_without_exposing_values(tmp_path: Pat
     assert "ACC-999" not in str(image)
 
 
+def test_dicom_private_data_and_unknown_burned_in_status_are_quarantined(tmp_path: Path) -> None:
+    fixture_path = write_synthetic_dicom(
+        tmp_path / "unsafe.dcm",
+        private_value="private patient value",
+        burned_in_annotation=None,
+    )
+
+    image = parse_dicom_image(fixture_path.read_bytes())
+    profile = build_dicom_scan_profile(fixture_path.read_bytes(), "CT", "storage/key", tmp_path / "preview")
+
+    assert image.private_tag_detected is True
+    assert image.burned_in_annotation == "missing"
+    assert profile["ingestion_status"] == "quarantined"
+    assert profile["deidentification_evidence"]["risk_flags"] == ["BurnedInAnnotationUnknown", "PrivateDataElement"]
+    assert "private patient value" not in str(profile)
+
+
 def test_parse_dicom_image_rejects_large_image(tmp_path: Path) -> None:
     payload = bytearray(b"\0" * 128 + b"DICM")
     payload += _dicom_element(0x0028, 0x0010, b"US", struct.pack("<H", 2048))
@@ -161,7 +190,8 @@ def test_build_dicom_scan_profile_writes_preview_slice(tmp_path: Path) -> None:
     assert profile["height"] == 4
     assert profile["depth"] == 1
     assert profile["imaging_metadata"]["parser_status"] == "parsed"
-    assert profile["imaging_metadata"]["deidentification_status"] == "no_phi_tags_detected"
+    assert profile["imaging_metadata"]["deidentification_status"] == "passed"
+    assert profile["deidentification_status"] == "passed"
     assert profile["imaging_metadata"]["phi_warnings"] == []
     assert sorted(path.name for path in preview_root.glob("*.png")) == ["000000.png"]
 
@@ -190,7 +220,7 @@ def test_build_dicom_zip_scan_profile_writes_preview_slices(tmp_path: Path) -> N
     assert profile["height"] == 4
     assert profile["depth"] == 3
     assert profile["imaging_metadata"]["parser_status"] == "parsed"
-    assert profile["imaging_metadata"]["deidentification_status"] == "no_phi_tags_detected"
+    assert profile["imaging_metadata"]["deidentification_status"] == "passed"
     assert profile["imaging_metadata"]["preview_slice_count"] == 3
     assert sorted(path.name for path in preview_root.glob("*.png")) == ["000000.png", "000001.png", "000002.png"]
 
@@ -207,6 +237,20 @@ def test_parse_dicom_zip_rejects_unsafe_paths(tmp_path: Path) -> None:
         assert "unsafe path" in str(error)
     else:
         raise AssertionError("Expected unsafe zip member to be rejected")
+
+
+def test_dicom_zip_identifying_member_name_is_quarantined_without_retaining_name(tmp_path: Path) -> None:
+    dicom_path = write_synthetic_dicom(tmp_path / "slice.dcm")
+    zip_path = tmp_path / "identifying-name.zip"
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("Patient-Jane-MRN-12345.dcm", dicom_path.read_bytes())
+
+    profile = build_dicom_zip_scan_profile(zip_path.read_bytes(), "CT", "storage/key", tmp_path / "preview")
+
+    assert profile["ingestion_status"] == "quarantined"
+    assert profile["deidentification_evidence"]["risk_flags"] == ["ArchiveMemberName"]
+    assert "Patient-Jane" not in str(profile)
+    assert "MRN-12345" not in str(profile)
 
 
 def test_parse_dicom_zip_rejects_too_many_files(tmp_path: Path) -> None:

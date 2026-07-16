@@ -50,6 +50,11 @@ export function useScan(projectId?: string, token?: string) {
   useEffect(() => {
     /** Every scan or slice change fetches a new image for the viewer. */
     if (!selectedScan || !token) return;
+    if (selectedScan.ingestion_status !== "ready") {
+      setSliceImage(null);
+      setError(null);
+      return;
+    }
     let isMounted = true;
     setIsLoading(true);
     setError(null);

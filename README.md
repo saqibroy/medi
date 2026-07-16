@@ -43,8 +43,10 @@ Seeded demo users:
 
 Seeded scans are synthetic placeholder records with `data_safety="synthetic"`;
 the repository does not ship patient imaging files. Uploaded DICOM/NIfTI files
-should be de-identified before import, and parser metadata flags likely
-PHI-bearing DICOM tags without returning raw patient identifiers.
+should be de-identified before import. Uploaded originals enter quarantine
+first; `medi-deid-screening-v1` promotes only files that pass the supported
+DICOM/NIfTI metadata checks and never returns detected patient values. This is
+not a substitute for validated pixel OCR/defacing or legal anonymization.
 
 ## Run The Frontend
 
@@ -134,6 +136,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
 - `PHASE3_FRONTEND_QA_CHECKLIST.md` for the browser QA pass before Phase 3 exit.
 - `PHASE4_PRODUCTION_OPERATIONS_PLAN.md` for production, medical-data security,
   privacy, backup, audit, versioning, and external-AI release gates.
+- `IMAGING_DEIDENTIFICATION_PLAN.md` for the versioned upload quarantine,
+  metadata-screening profile, threat model, and human-review boundary.
 - `PRODUCTION_STORAGE_PLAN.md` for object storage and signed URL planning.
 - `BACKGROUND_INGESTION_PLAN.md` for large-study worker planning.
 - `BUSINESS_PRICING_MODEL.md` for the first research-team pricing strategy.

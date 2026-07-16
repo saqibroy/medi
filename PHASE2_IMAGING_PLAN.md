@@ -4,16 +4,19 @@ This plan upgrades Medi from placeholder slice generation to real research-file
 ingestion and rendering. Phase 2 should still target de-identified,
 non-diagnostic research workflows; it should not claim clinical decision support.
 
-Status: core implementation complete. Remaining storage and worker work is
-tracked in `PRODUCTION_STORAGE_PLAN.md` and `BACKGROUND_INGESTION_PLAN.md`.
+Status: core synchronous implementation and quarantine gate complete. Remaining
+worker work and target-account storage evidence are tracked in
+`BACKGROUND_INGESTION_PLAN.md` and `PRODUCTION_STORAGE_PLAN.md`.
 
 ## Current State
 
-- Uploaded scan files are stored under the configured scan storage root.
+- Uploaded scan files enter tenant-scoped quarantine in the configured local or
+  S3 backend and are promoted only after the versioned screening gate passes.
 - Uploads parse NIfTI, single DICOM, and zipped DICOM series for Phase 2.
 - Derived preview PNGs are generated from parsed imaging pixels.
 - `GET /scans/{scan_id}/slice/{slice_index}` returns derived previews for ready
-  scans and useful errors for pending, failed, and out-of-range requests.
+  scans and useful errors for pending, quarantined, failed, and out-of-range
+  requests.
 - `GET /scans/{scan_id}/metadata` returns safe parsed metadata.
 - The frontend viewer renders parsed previews to canvas and overlays
   annotations in image pixel space.
@@ -85,7 +88,8 @@ Add these fields to `scans` with an Alembic migration:
 - [x] `storage_key`: stable path or object key root for scan assets.
 - [x] `source_format`: `synthetic`, `nifti`, `dicom`, `dicom_zip`, or
   `unknown`.
-- [x] `ingestion_status`: `pending`, `processing`, `ready`, `failed`.
+- [x] `ingestion_status`: `pending`, `processing`, `ready`, `failed`, or
+  `quarantined`.
 - [x] `ingestion_error`: nullable failure detail safe to show admins.
 - [x] `metadata`: JSON summary of parsed imaging metadata.
 - [x] `width`: pixel width.
@@ -106,9 +110,10 @@ Keep `num_slices` for API compatibility at first, but set it from parsed `depth`
 5. [x] Backend validates file size, emptiness, supported format, and project
    access.
 6. [x] Parser extracts metadata and volume dimensions.
-7. [x] Preview generator normalizes each slice to 8-bit PNG.
-8. [x] Scan is updated with parsed metadata, dimensions, `num_slices`, and
-   `ingestion_status="ready"`.
+7. [x] Preview generator normalizes each slice to temporary 8-bit PNGs; previews
+   are persisted only after the versioned intake profile passes.
+8. [x] Scan is updated with parsed metadata, dimensions, `num_slices`, and a
+   versioned `ready` or `quarantined` decision.
 9. [x] On parser failure, scan becomes `ingestion_status="failed"` with a safe
    error message.
 
@@ -163,8 +168,9 @@ Cornerstone imageIds can come after the preview pipeline is trustworthy.
 - [x] Enforce upload size limits.
 - [x] Restrict accepted file extensions and MIME hints.
 - [x] Never display raw patient names, accession numbers, or IDs.
-- [x] Add a parser-side PHI warning when DICOM tags likely contain identifying
-  fields.
+- [x] Quarantine DICOM/NIfTI uploads when the versioned screening profile finds
+  identifying fields, private data, unsafe burned-in declarations, or supported
+  NIfTI text-header risks.
 - [x] Store sample files as synthetic or explicitly de-identified.
 - [x] Keep original upload paths out of public API responses once object storage
   is introduced.
@@ -179,7 +185,10 @@ Backend tests:
 - [x] DICOM parser extracts safe metadata from a synthetic fixture.
 - [x] Upload rejects empty and oversized files.
 - [x] Upload rejects unsupported files once the allowlist is enabled.
-- [x] DICOM parser warns about PHI-bearing tags without returning raw values.
+- [x] DICOM parser quarantines PHI-bearing/private tags without returning raw
+  values, and NIfTI text-header fixtures prove the same value-free behavior.
+- [x] Quarantined scans cannot return slices, signed URLs, annotations,
+  statistics, or scan/project export content.
 - [x] Slice endpoint returns derived preview pixels for ready scans.
 - [x] Slice endpoint returns useful errors for pending, failed, and out-of-range
   scans.

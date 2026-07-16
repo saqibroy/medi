@@ -379,11 +379,15 @@ CI verification:
   retention/deletion, GDPR, and external-AI egress as production gates.
 - Database-aware backend readiness/liveness and frontend health checks are
   implemented for Docker Compose.
+- Versioned `medi-deid-screening-v1` intake now stores uploaded originals in
+  quarantine first, neutralizes filenames, records value-free decisions, and
+  blocks unsafe scans from pixels, signed URLs, annotations, masks, statistics,
+  and exports. Validated OCR/defacing and transformation remain Phase 4 gates.
 
 ## Next Engineering Priorities
 
-1. Next: quarantine uploaded DICOM/NIfTI objects until a versioned
-   de-identification policy has inspected them and approved safe derived data.
+1. Next: add immutable security audit events for authentication, medical-image
+   intake decisions, object access, exports, and administrative changes.
 2. Complete target-account storage controls: private bucket policy, lifecycle,
    versioning/retention, backup/restore, and customer-deletion evidence.
 3. Replace process-local rate limits with shared production enforcement and move

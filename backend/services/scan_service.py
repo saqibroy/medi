@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from ..models import Annotation, Project, Scan, User
 from ..schemas import ScanCreate
 from ..settings import get_settings
-from .imaging_service import ImagingIngestionError, build_dicom_scan_profile, build_dicom_zip_scan_profile, build_initial_scan_profile, build_nifti_scan_profile, detect_source_format, validate_upload_hint, validate_upload_size
+from .imaging_service import ImagingIngestionError, SourceFormat, build_dicom_scan_profile, build_dicom_zip_scan_profile, build_initial_scan_profile, build_nifti_scan_profile, deidentification_fields, detect_source_format, validate_upload_hint, validate_upload_size
 from .storage_service import PrivateStorage, get_private_storage, scan_prefix
 
 
@@ -35,6 +35,32 @@ def _storage() -> PrivateStorage:
 def _store_generated_previews(storage: PrivateStorage, preview_prefix: str, preview_root: Path) -> None:
     for preview_path in preview_root.glob("*.png"):
         storage.put_bytes(f"{preview_prefix}/{preview_path.name}", preview_path.read_bytes())
+
+
+def _neutral_original_name(source_format: SourceFormat, original_filename: str) -> str:
+    """Never retain a potentially identifying client filename in object storage."""
+
+    if source_format == "dicom":
+        return "original.dcm"
+    if source_format == "dicom_zip":
+        return "series.zip"
+    if source_format == "nifti":
+        return "original.nii.gz" if original_filename.lower().endswith(".gz") else "original.nii"
+    return "original.bin"
+
+
+def require_scan_ready(scan: Scan) -> Scan:
+    """Deny pixels, annotations, masks, and exports until intake is approved."""
+
+    if scan.ingestion_status == "quarantined":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is quarantined by the medical-image intake policy")
+    if scan.ingestion_status in {"pending", "processing"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan ingestion is not ready yet")
+    if scan.ingestion_status == "failed":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=scan.ingestion_error or "Scan ingestion failed")
+    if scan.ingestion_status != "ready":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not available")
+    return scan
 
 
 def list_scans(db: Session, project_id: UUID | None = None, current_user: User | None = None) -> list[Scan]:
@@ -78,9 +104,8 @@ def create_scan(db: Session, payload: ScanCreate, organization_id: UUID) -> Scan
     """Create fake scan metadata and a placeholder local file."""
 
     scan_id = uuid4()
-    safe_name = payload.file_name.replace("/", "_")
     prefix = scan_prefix(organization_id, payload.project_id or "unassigned", scan_id)
-    original_key = f"{prefix}/original/{safe_name}"
+    original_key = f"{prefix}/original/synthetic-placeholder.bin"
     _storage().put_bytes(original_key, b"synthetic volumetric scan placeholder\n")
     scan_profile = build_initial_scan_profile("synthetic", payload.modality, payload.num_slices, prefix)
 
@@ -113,6 +138,7 @@ def _build_failed_scan_profile(source_format: str, modality: str, num_slices: in
     """Return safe metadata for an upload that was stored but could not parse."""
 
     return {
+        **deidentification_fields("not_evaluated"),
         "storage_key": storage_key,
         "source_format": source_format,
         "ingestion_status": "failed",
@@ -123,7 +149,7 @@ def _build_failed_scan_profile(source_format: str, modality: str, num_slices: in
             "parser_status": "failed",
             "parser_error": str(error),
             "data_safety": "uploaded",
-            "deidentification_status": "user_supplied_deidentified_required",
+            "deidentification_status": "not_evaluated",
         },
         "width": None,
         "height": None,
@@ -185,29 +211,38 @@ def create_uploaded_scan_for_user(
         raise HTTPException(status_code=status_code, detail=str(error)) from error
 
     scan_id = uuid4()
-    safe_original_name = Path(original_filename or "uploaded-scan").name.replace("/", "_")
     prefix = scan_prefix(project.organization_id, project_id, scan_id)
-    original_key = f"{prefix}/original/{safe_original_name}"
+    source_format = detect_source_format(original_filename, content)
+    neutral_original_name = _neutral_original_name(source_format, original_filename)
+    quarantine_key = f"{prefix}/quarantine/original/{neutral_original_name}"
+    approved_key = f"{prefix}/original/{neutral_original_name}"
     preview_prefix = f"{prefix}/derived/preview"
     storage = _storage()
-    storage.put_bytes(original_key, content)
+    storage.put_bytes(quarantine_key, content)
     with TemporaryDirectory(prefix="medi-preview-") as temporary_directory:
         preview_root = Path(temporary_directory)
         scan_profile = _build_uploaded_scan_profile(
-            safe_original_name,
+            neutral_original_name,
             content,
             modality,
             num_slices,
             Path(prefix),
             preview_root,
         )
-        _store_generated_previews(storage, preview_prefix, preview_root)
+        if scan_profile["ingestion_status"] == "ready":
+            storage.put_bytes(approved_key, content)
+            storage.delete(quarantine_key)
+            _store_generated_previews(storage, preview_prefix, preview_root)
+            stored_original_key = approved_key
+        else:
+            storage.delete_prefix(preview_prefix)
+            stored_original_key = quarantine_key
 
     scan = Scan(
         id=scan_id,
         project_id=project_id,
         name=name,
-        file_path=original_key,
+        file_path=stored_original_key,
         modality=modality,
         num_slices=scan_profile["depth"] or num_slices,
         **scan_profile,
@@ -231,17 +266,30 @@ def reprocess_scan_for_user(db: Session, scan_id: UUID, current_user: User) -> S
     content = storage.get_bytes(scan.file_path)
     preview_prefix = f"{scan.storage_key}/derived/preview"
     storage.delete_prefix(preview_prefix)
+    source_format = detect_source_format(PurePosixPath(scan.file_path).name, content)
+    neutral_original_name = _neutral_original_name(source_format, PurePosixPath(scan.file_path).name)
+    quarantine_key = f"{scan.storage_key}/quarantine/original/{neutral_original_name}"
+    approved_key = f"{scan.storage_key}/original/{neutral_original_name}"
     with TemporaryDirectory(prefix="medi-preview-") as temporary_directory:
         preview_root = Path(temporary_directory)
         scan_profile = _build_uploaded_scan_profile(
-            PurePosixPath(scan.file_path).name,
+            neutral_original_name,
             content,
             scan.modality,
             scan.num_slices,
             Path(scan.storage_key),
             preview_root,
         )
-        _store_generated_previews(storage, preview_prefix, preview_root)
+        if scan_profile["ingestion_status"] == "ready":
+            storage.put_bytes(approved_key, content)
+            _store_generated_previews(storage, preview_prefix, preview_root)
+            stored_original_key = approved_key
+        else:
+            storage.put_bytes(quarantine_key, content)
+            stored_original_key = quarantine_key
+    if scan.file_path != stored_original_key:
+        storage.delete(scan.file_path)
+    scan.file_path = stored_original_key
     for field_name, value in scan_profile.items():
         setattr(scan, field_name, value)
     scan.num_slices = scan_profile["depth"] or scan.num_slices
@@ -280,10 +328,7 @@ def _generate_placeholder_slice_base64(scan: Scan, slice_index: int) -> str:
 def _get_slice_image_base64(scan: Scan, slice_index: int) -> str:
     """Return a derived preview slice or generated fallback image."""
 
-    if scan.ingestion_status in {"pending", "processing"}:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan ingestion is not ready yet")
-    if scan.ingestion_status == "failed":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=scan.ingestion_error or "Scan ingestion failed")
+    require_scan_ready(scan)
     if slice_index < 0 or slice_index >= scan.num_slices:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slice index out of range")
     return _read_derived_preview_base64(scan, slice_index) or _generate_placeholder_slice_base64(scan, slice_index)
@@ -305,7 +350,8 @@ def get_slice_signed_url_for_user(db: Session, scan_id: UUID, slice_index: int, 
     """Authorize one derived preview and return a short-lived S3 GET URL."""
 
     scan = get_scan_for_user_or_404(db, scan_id, current_user)
-    if scan.ingestion_status != "ready" or slice_index < 0 or slice_index >= scan.num_slices:
+    require_scan_ready(scan)
+    if slice_index < 0 or slice_index >= scan.num_slices:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview not found")
     if not scan.storage_key or not scan.storage_key.startswith(f"org/{current_user.organization_id}/"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview not found")
@@ -333,7 +379,7 @@ def get_slice_dicom_metadata(db: Session, scan_id: UUID, slice_index: int) -> di
     metadata shape engineers see when integrating pydicom or WADO-RS later.
     """
 
-    scan = get_scan_or_404(db, scan_id)
+    scan = require_scan_ready(get_scan_or_404(db, scan_id))
     if slice_index < 0 or slice_index >= scan.num_slices:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slice index out of range")
 
@@ -368,6 +414,10 @@ def get_scan_metadata(scan: Scan) -> dict:
         "source_format": scan.source_format,
         "ingestion_status": scan.ingestion_status,
         "ingestion_error": scan.ingestion_error,
+        "deidentification_status": scan.deidentification_status,
+        "deidentification_profile_version": scan.deidentification_profile_version,
+        "deidentification_checked_at": scan.deidentification_checked_at,
+        "deidentification_evidence": scan.deidentification_evidence,
         "num_slices": scan.num_slices,
         "width": scan.width,
         "height": scan.height,
@@ -388,7 +438,7 @@ def export_scan_annotations(db: Session, scan_id: UUID) -> dict:
     labels the team decided should not influence model training.
     """
 
-    scan = get_scan_or_404(db, scan_id)
+    scan = require_scan_ready(get_scan_or_404(db, scan_id))
     annotations = list(db.scalars(select(Annotation).where(Annotation.scan_id == scan_id).order_by(Annotation.slice_index, Annotation.created_at)))
     approved_annotations = [annotation for annotation in annotations if annotation.review_status == "approved"]
     status_counts = Counter(annotation.review_status for annotation in annotations)
@@ -422,7 +472,7 @@ def export_scan_annotations(db: Session, scan_id: UUID) -> dict:
 def export_scan_coco(db: Session, scan_id: UUID) -> dict:
     """Return approved scan bounding boxes in COCO format."""
 
-    scan = get_scan_or_404(db, scan_id)
+    scan = require_scan_ready(get_scan_or_404(db, scan_id))
     from .export_service import build_coco_export
 
     return build_coco_export(db, [scan], project_id=scan.project_id, scan_id=scan.id)
@@ -431,7 +481,7 @@ def export_scan_coco(db: Session, scan_id: UUID) -> dict:
 def export_scan_csv(db: Session, scan_id: UUID) -> dict:
     """Return scan annotations as spreadsheet-friendly CSV."""
 
-    scan = get_scan_or_404(db, scan_id)
+    scan = require_scan_ready(get_scan_or_404(db, scan_id))
     from .export_service import build_csv_export
 
     return build_csv_export(db, [scan], project_id=scan.project_id, scan_id=scan.id)
@@ -440,7 +490,7 @@ def export_scan_csv(db: Session, scan_id: UUID) -> dict:
 def export_scan_yolo(db: Session, scan_id: UUID) -> dict:
     """Return approved scan bounding boxes in YOLO format."""
 
-    scan = get_scan_or_404(db, scan_id)
+    scan = require_scan_ready(get_scan_or_404(db, scan_id))
     from .export_service import build_yolo_export
 
     return build_yolo_export(db, [scan], project_id=scan.project_id, scan_id=scan.id)
@@ -449,7 +499,7 @@ def export_scan_yolo(db: Session, scan_id: UUID) -> dict:
 def export_scan_segmentation(db: Session, scan_id: UUID) -> dict:
     """Return approved scan segmentations as a mask manifest."""
 
-    scan = get_scan_or_404(db, scan_id)
+    scan = require_scan_ready(get_scan_or_404(db, scan_id))
     from .export_service import build_segmentation_export
 
     return build_segmentation_export(db, [scan], project_id=scan.project_id, scan_id=scan.id)
@@ -463,7 +513,7 @@ def get_scan_annotation_stats(db: Session, scan_id: UUID) -> dict:
     progress across radiologists, labels, geometry types, and review states.
     """
 
-    get_scan_or_404(db, scan_id)
+    require_scan_ready(get_scan_or_404(db, scan_id))
     annotations = list(db.scalars(select(Annotation).where(Annotation.scan_id == scan_id)))
     status_counts = Counter(annotation.review_status for annotation in annotations)
     reviewed_count = status_counts.get("approved", 0) + status_counts.get("rejected", 0) + status_counts.get("needs_changes", 0)

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..models import Annotation, AnnotationHistory, Label, Project, Scan, User
 from ..schemas import AnnotationCreate, AnnotationReviewUpdate, AnnotationUpdate, AnnotationType, ReviewStatus
 from .geometry_validation import validate_annotation_geometry
-from .scan_service import get_scan_or_404
+from .scan_service import get_scan_or_404, require_scan_ready
 
 
 AUDITED_UPDATE_FIELDS = (
@@ -64,7 +64,7 @@ def _organization_scoped_annotations(current_user: User) -> Select[tuple[Annotat
         select(Annotation)
         .join(Scan, Annotation.scan_id == Scan.id)
         .join(Project, Scan.project_id == Project.id)
-        .where(Project.organization_id == current_user.organization_id)
+        .where(Project.organization_id == current_user.organization_id, Scan.ingestion_status == "ready")
     )
 
 
@@ -146,7 +146,7 @@ def list_annotations_for_user(db: Session, current_user: User, scan_id: UUID | N
 def create_annotation(db: Session, payload: AnnotationCreate) -> Annotation:
     """Validate the scan exists, then persist a new annotation row."""
 
-    scan = get_scan_or_404(db, payload.scan_id)
+    scan = require_scan_ready(get_scan_or_404(db, payload.scan_id))
     validate_annotation_geometry(scan, payload.annotation_type, payload.coordinates, payload.slice_index)
     if payload.project_id is not None and scan.project_id is not None and payload.project_id != scan.project_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Annotation project does not match scan project")
@@ -194,7 +194,7 @@ def update_annotation(db: Session, annotation_id: UUID, payload: AnnotationUpdat
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Label does not belong to annotation project")
     if "assigned_to_user_id" in updates:
         _validate_assigned_user(db, updates["assigned_to_user_id"], _annotation_project_id(db, annotation))
-    scan = get_scan_or_404(db, annotation.scan_id)
+    scan = require_scan_ready(get_scan_or_404(db, annotation.scan_id))
     validate_annotation_geometry(
         scan,
         updates.get("annotation_type", annotation.annotation_type),

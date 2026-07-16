@@ -84,8 +84,12 @@ export default function App() {
   const canManageWorkspace = user?.role === "admin";
   const canAnnotate = user?.role === "admin" || user?.role === "annotator";
   const canReview = user?.role === "admin" || user?.role === "reviewer";
-  const canDrawAnnotations = canAnnotate && Boolean(selectedLabel);
-  const annotationBlockedMessage = canAnnotate && selectedProject && selectedScan && !isLabelsLoading && !selectedLabel ? "Add a project label before drawing annotations." : null;
+  const canDrawAnnotations = canAnnotate && Boolean(selectedLabel) && selectedScan?.ingestion_status === "ready";
+  const annotationBlockedMessage = selectedScan?.ingestion_status === "quarantined"
+    ? "This scan is quarantined and cannot be viewed or annotated. Upload a remediated de-identified copy."
+    : canAnnotate && selectedProject && selectedScan && !isLabelsLoading && !selectedLabel
+      ? "Add a project label before drawing annotations."
+      : null;
   const workspaceStats = useMemo(
     () => ({
       scans: scans.length,
@@ -104,6 +108,8 @@ export default function App() {
         ? "Add at least one label before annotation begins."
         : selectedScan?.ingestion_status === "pending" || selectedScan?.ingestion_status === "processing"
           ? "Scan ingestion is still processing."
+          : selectedScan?.ingestion_status === "quarantined"
+            ? "Scan quarantined by the medical-image intake policy. Upload a remediated de-identified copy."
           : selectedScan?.ingestion_status === "failed"
             ? selectedScan.ingestion_error ?? "Scan ingestion failed."
             : "Loading selected scan...";
@@ -176,7 +182,7 @@ export default function App() {
   }, [annotations, selectedProject, token]);
 
   useEffect(() => {
-    if (!token || !selectedScan) {
+    if (!token || !selectedScan || selectedScan.ingestion_status !== "ready") {
       setScanReviewStats(null);
       return;
     }

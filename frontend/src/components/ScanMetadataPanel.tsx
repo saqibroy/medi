@@ -60,6 +60,10 @@ export function ScanMetadataPanel({ scanId, token }: ScanMetadataPanelProps) {
             </p>
           </div>
           {metadata.ingestion_error ? <p className="rounded-md bg-red-50 p-2 text-red-700">{metadata.ingestion_error}</p> : null}
+          <div className="rounded-md bg-slate-50 p-2 text-slate-700">
+            <p>Intake decision: {metadata.deidentification_status}</p>
+            <p>Profile: {metadata.deidentification_profile_version ?? "Not evaluated"}</p>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <p className="text-slate-500">Dimensions</p>
