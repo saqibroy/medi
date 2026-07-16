@@ -47,10 +47,12 @@ Already present:
 
 Not production-ready yet:
 
-- Demo seed execution and known demo credentials are part of container startup.
+- Development Compose intentionally seeds synthetic demo data; production
+  deployment must set `SEED_DEMO_DATA=false` and now fails startup if it does not.
 - Bearer tokens have no expiry, revocation, session inventory, or secure-cookie
   transport.
-- CORS origins and the development token secret are hardcoded defaults.
+- Production configuration now requires an explicit token secret and exact CORS
+  origins; local-only defaults remain available only for development.
 - Uploaded originals and previews use local volumes without encryption policy.
 - PHI detection warns but does not provide a validated de-identification gate.
 - Annotation history is append-oriented but not immutable; cascade deletion can
@@ -239,8 +241,9 @@ Useful primary references:
 ## Implementation Sequence
 
 1. [x] Establish liveness/readiness and verify Compose startup.
-2. [ ] Separate development and production configuration; remove production
-   demo seeding and insecure defaults.
+2. [x] Separate development and production configuration; production startup
+   rejects demo seeding, development database defaults, missing/weak token
+   secrets, and implicit CORS origins.
 3. [ ] Document and test the PostgreSQL migration/rollback procedure.
 4. [ ] Add structured logging, request IDs, redaction, and error boundaries.
 5. [ ] Add expiring sessions, exact CORS configuration, and rate limiting.

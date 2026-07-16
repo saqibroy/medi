@@ -4,7 +4,6 @@ import base64
 import hashlib
 import hmac
 import secrets
-from os import getenv
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -14,9 +13,9 @@ from sqlalchemy.orm import Session
 
 from .database import get_db
 from .models import User
+from .settings import get_settings
 
 
-TOKEN_SECRET = getenv("TOKEN_SECRET", "dev-token-secret-change-before-production")
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
@@ -44,7 +43,7 @@ def create_access_token(user_id: UUID) -> str:
     """Create a signed bearer token containing only the user id."""
 
     payload = str(user_id)
-    signature = hmac.new(TOKEN_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    signature = hmac.new(get_settings().token_secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
     token_bytes = f"{payload}.{signature}".encode("utf-8")
     return base64.urlsafe_b64encode(token_bytes).decode("ascii")
 
@@ -55,7 +54,7 @@ def parse_access_token(token: str) -> UUID | None:
     try:
         decoded = base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
         payload, signature = decoded.rsplit(".", 1)
-        expected = hmac.new(TOKEN_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        expected = hmac.new(get_settings().token_secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(signature, expected):
             return None
         return UUID(payload)

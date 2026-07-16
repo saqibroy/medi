@@ -73,8 +73,16 @@ Then open:
 - Backend readiness: `http://localhost:8000/health/ready`
 - Backend liveness: `http://localhost:8000/health/live`
 
-The backend container runs migrations, seeds demo users, and stores uploaded scan
-files in the `scan_storage` Docker volume.
+The default Compose profile is explicitly **development-only**: it runs
+migrations, seeds synthetic demo users, and stores uploaded scan files in the
+`scan_storage` Docker volume. Copy `.env.example` to a local ignored `.env` if
+you need to override its local settings.
+
+For production, set `APP_ENV=production`, a non-development `DATABASE_URL`, a
+unique `TOKEN_SECRET` of at least 32 characters, exact comma-separated HTTPS
+`CORS_ORIGINS`, and `SEED_DEMO_DATA=false`. The backend validates these before
+migrations run and refuses unsafe startup. Keep real values in the deployment
+secret manager, never in `.env.example`, images, or Git.
 
 ## Run Quality Checks
 

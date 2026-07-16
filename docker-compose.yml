@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: medical_annotations
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d medical_annotations"]
       interval: 5s
@@ -20,8 +20,11 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/medical_annotations
-      TOKEN_SECRET: change-this-before-production
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/medical_annotations}
+      TOKEN_SECRET: ${TOKEN_SECRET:-dev-token-secret-change-before-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:8080,http://127.0.0.1:8080}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
     depends_on:
       db:
         condition: service_healthy
