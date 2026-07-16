@@ -159,6 +159,14 @@ def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def private_scan_root(storage_root: Path, project_id: str, scan_id: str) -> Path:
+    """Resolve one tenant-scoped scan root without exposing it through the API."""
+
+    matches = list(storage_root.glob(f"org/*/project/{project_id}/scan/{scan_id}"))
+    assert len(matches) == 1
+    return matches[0]
+
+
 def assert_scan_response_hides_storage_paths(scan: dict) -> None:
     assert "file_path" not in scan
     assert "storage_key" not in scan
@@ -251,7 +259,7 @@ async def test_scan_upload_is_admin_only(tmp_path: Path) -> None:
         assert created.json()["ingestion_status"] == "ready"
         assert created.json()["depth"] == 1
         assert_scan_response_hides_storage_paths(created.json())
-        assert (tmp_path / project_id / created.json()["id"] / "original" / "uploaded.dcm").exists()
+        assert (private_scan_root(tmp_path, project_id, created.json()["id"]) / "original" / "uploaded.dcm").exists()
 
 
 @pytest.mark.anyio
@@ -275,7 +283,7 @@ async def test_nifti_upload_parses_dimensions_and_generates_previews(tmp_path: P
         assert body["depth"] == 4
         assert body["spacing"] == [0.800000011920929, 0.8999999761581421, 1.600000023841858]
         assert_scan_response_hides_storage_paths(body)
-        preview_root = tmp_path / project_id / body["id"] / "derived" / "preview"
+        preview_root = private_scan_root(tmp_path, project_id, body["id"]) / "derived" / "preview"
         assert sorted(path.name for path in preview_root.glob("*.png")) == ["000000.png", "000001.png", "000002.png", "000003.png"]
 
         slice_response = await client.get(f"/scans/{body['id']}/slice/2", headers=auth_headers(admin_token))
@@ -318,7 +326,7 @@ async def test_dicom_upload_parses_metadata_and_generates_preview(tmp_path: Path
         assert body["window_center"] == 40.0
         assert body["window_width"] == 400.0
         assert_scan_response_hides_storage_paths(body)
-        preview_root = tmp_path / project_id / body["id"] / "derived" / "preview"
+        preview_root = private_scan_root(tmp_path, project_id, body["id"]) / "derived" / "preview"
         assert sorted(path.name for path in preview_root.glob("*.png")) == ["000000.png"]
 
         metadata_response = await client.get(f"/scans/{body['id']}/metadata", headers=auth_headers(admin_token))
@@ -375,7 +383,7 @@ async def test_dicom_zip_upload_parses_series_and_generates_previews(tmp_path: P
         assert body["depth"] == 3
         assert body["spacing"] == [0.7, 0.9, 2.0]
         assert_scan_response_hides_storage_paths(body)
-        preview_root = tmp_path / project_id / body["id"] / "derived" / "preview"
+        preview_root = private_scan_root(tmp_path, project_id, body["id"]) / "derived" / "preview"
         assert sorted(path.name for path in preview_root.glob("*.png")) == ["000000.png", "000001.png", "000002.png"]
 
         slice_response = await client.get(f"/scans/{body['id']}/slice/1", headers=auth_headers(admin_token))
@@ -397,7 +405,7 @@ async def test_failed_upload_can_be_reprocessed_by_admin(tmp_path: Path) -> None
 
         created = await client.post("/scans/upload", data=data, files=files, headers=auth_headers(admin_token))
         body = created.json()
-        original_path = tmp_path / project_id / body["id"] / "original" / "broken.nii.gz"
+        original_path = private_scan_root(tmp_path, project_id, body["id"]) / "original" / "broken.nii.gz"
         valid_fixture = write_synthetic_nifti(tmp_path / "valid-retry.nii.gz", width=6, height=5, depth=2)
         original_path.write_bytes(valid_fixture.read_bytes())
 
@@ -414,7 +422,8 @@ async def test_failed_upload_can_be_reprocessed_by_admin(tmp_path: Path) -> None
         assert reprocessed.json()["ingestion_status"] == "ready"
         assert reprocessed.json()["source_format"] == "nifti"
         assert reprocessed.json()["num_slices"] == 2
-        assert sorted(path.name for path in (tmp_path / project_id / body["id"] / "derived" / "preview").glob("*.png")) == ["000000.png", "000001.png"]
+        preview_root = private_scan_root(tmp_path, project_id, body["id"]) / "derived" / "preview"
+        assert sorted(path.name for path in preview_root.glob("*.png")) == ["000000.png", "000001.png"]
         assert ready_slice.status_code == 200
 
 

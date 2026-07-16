@@ -1,5 +1,10 @@
 # Production Storage Plan
 
+Status: in progress. The path-safe `LocalPrivateStorage` boundary and
+organization/project/scan key layout are implemented for originals, previews,
+reprocessing, and segmentation masks. S3, signed preview URLs, encryption
+configuration, lifecycle controls, and cloud integration tests remain.
+
 Medi currently stores scan originals and derived preview PNGs on the local
 filesystem so the product can run simply in development and Docker Compose. For
 production, scan assets should move behind an object-storage abstraction with
@@ -110,12 +115,12 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
 
 ## Migration Path
 
-1. Add `storage_service.py` with local implementation and unit tests.
-2. Move upload original writes, preview reads, preview deletion, and reprocess
+1. [x] Add `storage_service.py` with local implementation and unit tests.
+2. [x] Move upload original writes, preview reads, preview deletion, and reprocess
    reads behind the storage interface.
-3. Add S3 implementation using `boto3`.
-4. Add signed preview URL endpoint.
-5. Keep current base64 slice endpoint as compatibility fallback.
+3. [ ] Add S3 implementation using `boto3`.
+4. [ ] Add signed preview URL endpoint.
+5. [x] Keep current base64 slice endpoint as compatibility fallback.
 6. Add lifecycle rules for derived previews and retained originals.
 7. Document backup, restore, and customer deletion processes.
 

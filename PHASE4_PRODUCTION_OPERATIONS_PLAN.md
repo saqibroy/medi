@@ -258,7 +258,10 @@ Useful primary references:
    reprocessing, and export routes. Shared multi-instance enforcement, idle
    timeout, active-session inventory, and secure-cookie transport remain
    explicit production gates above.
-6. [ ] Introduce the storage abstraction and private object-storage backend.
+6. [ ] In progress: introduce the storage abstraction and private object-storage
+   backend. Completed locally: tenant-scoped keys, traversal-safe local storage,
+   and original/preview/reprocess/mask integration. Remaining: S3 implementation,
+   signed preview URLs, encryption configuration, runtime verification, and merge.
 7. [ ] Add quarantine plus the versioned DICOM/NIfTI de-identification gate.
 8. [ ] Add immutable security audit events.
 9. [ ] Add dataset releases and annotation revision manifests.

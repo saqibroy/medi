@@ -382,6 +382,9 @@ CI verification:
 
 ## Next Engineering Priorities
 
-1. Introduce private object storage and organization-safe access controls.
+1. In progress: introduce a private storage abstraction and organization-safe
+   object access. Completed locally: tenant-scoped object keys, a path-safe local
+   backend, and scan/mask integration. Remaining: S3 backend, signed preview
+   URLs, runtime verification, and PR merge.
 2. Replace process-local rate limits with shared production enforcement and move
    browser sessions to Secure, HttpOnly cookies with CSRF protection.
