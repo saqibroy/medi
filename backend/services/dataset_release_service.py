@@ -295,7 +295,11 @@ def create_release(db: Session, project_id: UUID, current_user: User) -> dict[st
 
     project = db.scalar(
         select(Project)
-        .where(Project.id == project_id, Project.organization_id == current_user.organization_id)
+        .where(
+            Project.id == project_id,
+            Project.organization_id == current_user.organization_id,
+            Project.lifecycle_status != "deleted",
+        )
         .with_for_update()
     )
     if project is None:

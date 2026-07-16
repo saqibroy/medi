@@ -216,5 +216,11 @@ Definition of done:
    coverage, and checksum-stability tests are implemented. Target S3 VersionId,
    retained artifact/WORM, and retention approval remain deployment gates in
    `DATASET_RELEASE_PLAN.md`.
-5. Next: automate encrypted backup/restore drills and define enforceable
-   retention, legal-hold, source-withdrawal, and verified-deletion behavior.
+5. Completed repository boundary: encrypted PostgreSQL/synthetic-object restore
+   drills, versioned retention/RPO/RTO policy, append-only legal holds,
+   source-withdrawal release revocation, two-person project/scan deletion,
+   every-version operator purge, and checksum receipts. Target infrastructure,
+   organization deletion, and approved policy values remain deployment gates in
+   `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
+6. Next: enforce external-AI egress denial and approved-provider governance,
+   then implement the repository-controlled GDPR/privacy operations boundary.

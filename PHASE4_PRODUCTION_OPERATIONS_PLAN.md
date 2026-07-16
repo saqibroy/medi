@@ -65,8 +65,9 @@ Not production-ready yet:
 - Dataset releases are immutable and reproducible in the application database;
   target S3 VersionId evidence, retained portable artifacts, and independent
   WORM replication remain deployment gates.
-- Backup/restore/deletion procedures are documented, but automated drills,
-  approved retention, legal hold, and verified target-account evidence remain
+- Encrypted disposable restore drills, versioned policy, legal holds, and
+  project/scan deletion evidence are implemented, but approved values,
+  organization deletion, target backup/vault controls, and signed drills remain
   incomplete.
 - Request logging is structured and payload-safe, append-only security audit
   records exist, and Redis provides shared rate enforcement with hashed keys.
@@ -217,20 +218,26 @@ model is implemented. Target-account deployment evidence is still required.
 
 ## Backup, Restore, Retention, And Deletion
 
-- [ ] Define recovery point and recovery time objectives for PostgreSQL and
-  object storage.
+- [x] Store explicit versioned recovery point/time objectives per organization;
+  approved target values remain a deployment gate.
 - [ ] Automate encrypted backups with separate credentials and failure alerts.
-- [ ] Run and record restore drills; a backup is not accepted until restoration
-  has been tested.
-- [ ] Define retention by data class and customer agreement, including audit
-  records and superseded dataset releases.
+- [x] Run and record encrypted disposable PostgreSQL plus synthetic-object
+  restore drills in CI; signed target-vault drills remain open.
+- [x] Store versioned retention by medical-data class, audit events, backups,
+  and dataset releases without assuming production durations.
 - [ ] Add organization/project/scan deletion workflows that enumerate database
   rows, object versions, previews, masks, exports, queues, caches, and backups.
-- [ ] Support legal holds and prevent deletion while a valid hold applies.
-- [ ] Produce a deletion receipt containing identifiers and completion state,
+- [x] Support append-only organization/project/scan legal holds and prevent
+  approval or execution while a valid hold applies.
+- [x] Produce an append-only checksum receipt containing identifiers and state,
   never deleted PHI.
 - [x] Document how deletion propagates into expiring backups and how exceptions
   are communicated.
+
+Project and scan requests, exact-prefix purge, database cleanup/tombstoning,
+release revocation, and receipts are implemented. Organization-wide execution,
+queue/cache/retained-export enumeration, and target backup evidence keep the
+combined deletion gate open.
 
 ## GDPR And Privacy Operations
 
@@ -321,7 +328,11 @@ Useful primary references:
 9. [x] Add immutable dataset releases and approved annotation revision
    manifests. Target S3, retained artifact/WORM, and retention gates remain in
    `DATASET_RELEASE_PLAN.md`.
-10. [ ] Implement backup/restore drills, retention, legal hold, and deletion.
+10. [x] Complete the repository boundary for encrypted recovery drills,
+    versioned retention, legal hold, source withdrawal, two-person project/scan
+    deletion, every-version purge, and verified receipts. Target infrastructure,
+    organization deletion, and policy approvals remain in
+    `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
 11. [ ] Complete GDPR/DPIA/processor evidence for the target deployment.
 12. [ ] Run a production-readiness review and close every applicable gate.
 
@@ -329,14 +340,18 @@ Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
 Current repository increment complete: immutable dataset releases and
 annotation manifests are evidenced in `DATASET_RELEASE_PLAN.md`.
-Next repository increment: backup/restore automation plus retention,
-legal-hold, source-withdrawal, and verified-deletion enforcement.
+Current repository increment complete: backup/restore automation plus
+retention, legal-hold, source-withdrawal, and verified project/scan deletion are
+evidenced in `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
+Next repository increment: external-AI egress denial/provider governance and
+the repository-controlled GDPR/privacy operations boundary.
 
 ## Phase 4 Exit Criteria
 
 - [ ] Production configuration fails closed on missing secrets and unsafe
   defaults.
-- [ ] PostgreSQL migrations, backup, restore, and rollback are rehearsed.
+- [x] PostgreSQL migrations, encrypted disposable backup/restore, and rollback
+  are rehearsed. Target managed-backup evidence remains a gate above.
 - [ ] Private encrypted storage and tenant-safe access are implemented.
 - [ ] Health, logs, alerts, error tracking, and rate limits are operational.
 - [x] Supported DICOM/NIfTI intake is quarantined until the versioned v1

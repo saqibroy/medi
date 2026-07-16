@@ -31,6 +31,15 @@ class StorageObjectSnapshot:
     byte_size: int
 
 
+@dataclass(frozen=True)
+class StoragePurgeResult:
+    """Value-free evidence returned by an exact-prefix operator purge."""
+
+    object_count: int
+    object_versions_deleted: int
+    delete_markers_deleted: int
+
+
 def _stream_sha256(stream: object, chunk_size: int = 1024 * 1024) -> tuple[str, int]:
     """Hash an object incrementally so large medical volumes stay bounded."""
 
@@ -81,6 +90,7 @@ class PrivateStorage(Protocol):
     def delete_prefix(self, prefix: str) -> None: ...
     def signed_get_url(self, key: str, expires_seconds: int) -> str: ...
     def snapshot(self, key: str) -> StorageObjectSnapshot: ...
+    def purge_prefix_versions(self, prefix: str) -> StoragePurgeResult: ...
 
 
 class LocalPrivateStorage:
@@ -111,6 +121,21 @@ class LocalPrivateStorage:
             shutil.rmtree(path)
         elif path.exists():
             path.unlink()
+
+    def purge_prefix_versions(self, prefix: str) -> StoragePurgeResult:
+        path = self.local_path(prefix)
+        if path.is_dir():
+            object_count = sum(1 for item in path.rglob("*") if item.is_file())
+        else:
+            object_count = 1 if path.is_file() else 0
+        self.delete_prefix(prefix)
+        if path.exists():
+            raise RuntimeError("Local deletion verification failed")
+        return StoragePurgeResult(
+            object_count=object_count,
+            object_versions_deleted=object_count,
+            delete_markers_deleted=0,
+        )
 
     def local_path(self, key: str) -> Path:
         """Resolve a key below root, accepting only contained legacy paths."""
@@ -203,6 +228,45 @@ class S3PrivateStorage:
             objects = [{"Key": item["Key"]} for item in page.get("Contents", [])]
             if objects:
                 self.client.delete_objects(Bucket=self.bucket, Delete={"Objects": objects, "Quiet": True})  # type: ignore[attr-defined]
+
+    def purge_prefix_versions(self, prefix: str) -> StoragePurgeResult:
+        """Delete every version and marker below one trusted operator scope."""
+
+        safe_prefix = _validate_object_key(prefix).rstrip("/") + "/"
+        paginator = self.client.get_paginator("list_object_versions")  # type: ignore[attr-defined]
+        object_versions = 0
+        delete_markers = 0
+        object_keys: set[str] = set()
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=safe_prefix):
+            batch: list[dict[str, str]] = []
+            for item in page.get("Versions", []):
+                key = str(item["Key"])
+                if not key.startswith(safe_prefix):
+                    raise RuntimeError("S3 version listing escaped the deletion prefix")
+                object_keys.add(key)
+                object_versions += 1
+                batch.append({"Key": key, "VersionId": str(item["VersionId"])})
+            for item in page.get("DeleteMarkers", []):
+                key = str(item["Key"])
+                if not key.startswith(safe_prefix):
+                    raise RuntimeError("S3 delete-marker listing escaped the deletion prefix")
+                object_keys.add(key)
+                delete_markers += 1
+                batch.append({"Key": key, "VersionId": str(item["VersionId"])})
+            for offset in range(0, len(batch), 1000):
+                self.client.delete_objects(  # type: ignore[attr-defined]
+                    Bucket=self.bucket,
+                    Delete={"Objects": batch[offset : offset + 1000], "Quiet": True},
+                )
+
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=safe_prefix):
+            if page.get("Versions") or page.get("DeleteMarkers"):
+                raise RuntimeError("S3 version deletion verification failed")
+        return StoragePurgeResult(
+            object_count=len(object_keys),
+            object_versions_deleted=object_versions,
+            delete_markers_deleted=delete_markers,
+        )
 
     def signed_get_url(self, key: str, expires_seconds: int) -> str:
         return self.client.generate_presigned_url(  # type: ignore[attr-defined]

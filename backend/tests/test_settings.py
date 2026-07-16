@@ -11,6 +11,7 @@ def test_development_defaults_are_local_and_seed_demo_data() -> None:
     assert settings.environment == "development"
     assert settings.cors_origins == DEVELOPMENT_CORS_ORIGINS
     assert settings.seed_demo_data is True
+    assert settings.data_deletion_operator_enabled is False
 
 
 @pytest.mark.parametrize(
@@ -89,6 +90,7 @@ def test_production_accepts_explicit_safe_settings() -> None:
     assert settings.scan_storage_sse == "aws:kms"
     assert settings.session_cookie_secure is True
     assert settings.rate_limit_backend == "redis"
+    assert settings.data_deletion_operator_enabled is False
 
 
 def test_production_rejects_local_or_unencrypted_storage() -> None:
@@ -129,7 +131,12 @@ def test_cors_origins_must_be_exact_http_origins(origins: str) -> None:
 
 @pytest.mark.parametrize(
     ("variable_name", "value"),
-    [("SESSION_TTL_MINUTES", "four"), ("LOGIN_RATE_LIMIT_PER_MINUTE", "0"), ("SENSITIVE_RATE_LIMIT_PER_MINUTE", "10001")],
+    [
+        ("SESSION_TTL_MINUTES", "four"),
+        ("LOGIN_RATE_LIMIT_PER_MINUTE", "0"),
+        ("SENSITIVE_RATE_LIMIT_PER_MINUTE", "10001"),
+        ("DATA_DELETION_OPERATOR_ENABLED", "sometimes"),
+    ],
 )
 def test_session_and_rate_limit_settings_reject_invalid_values(variable_name: str, value: str) -> None:
     with pytest.raises(ConfigurationError, match=variable_name):

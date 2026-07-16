@@ -52,6 +52,7 @@ class Settings:
     scan_storage_signed_url_ttl_seconds: int
     scan_storage_sse: str
     scan_storage_kms_key_id: str | None
+    data_deletion_operator_enabled: bool
 
     @property
     def is_production(self) -> bool:
@@ -139,6 +140,10 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
     if storage_sse not in {"AES256", "aws:kms"}:
         raise ConfigurationError("SCAN_STORAGE_SSE must be AES256 or aws:kms")
     storage_kms_key_id = values.get("SCAN_STORAGE_KMS_KEY_ID", "").strip() or None
+    deletion_operator_enabled = _read_boolean(
+        values.get("DATA_DELETION_OPERATOR_ENABLED", "false"),
+        "DATA_DELETION_OPERATOR_ENABLED",
+    )
     if storage_backend == "s3" and (storage_bucket is None or storage_region is None):
         raise ConfigurationError("S3 storage requires SCAN_STORAGE_BUCKET and SCAN_STORAGE_REGION")
     if storage_sse == "aws:kms" and storage_kms_key_id is None:
@@ -202,4 +207,5 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
         scan_storage_signed_url_ttl_seconds=signed_url_ttl,
         scan_storage_sse=storage_sse,
         scan_storage_kms_key_id=storage_kms_key_id,
+        data_deletion_operator_enabled=deletion_operator_enabled,
     )

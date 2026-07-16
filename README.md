@@ -141,6 +141,16 @@ storage paths, notes, creator names, patient metadata, and pixels. Target S3
 VersionId evidence, retained artifact/WORM packaging, and retention approval
 remain gates in `DATASET_RELEASE_PLAN.md`.
 
+Administrators manage versioned retention/RPO/RTO policy, legal holds, and
+two-person project/scan deletion requests under `/governance`. These records,
+their lifecycle events, and value-free deletion receipts are append-only. The
+web runtime cannot execute deletion. Execution requires the separately enabled
+`backend.data_lifecycle_cli`, a matching request-ID confirmation, and an admin
+operator distinct from requester and approver; production S3 execution also
+requires a separate workload identity allowed to remove versions. Keep
+`DATA_DELETION_OPERATOR_ENABLED=false` in normal application environments.
+See `DATA_LIFECYCLE_RECOVERY_PLAN.md` and `STORAGE_OPERATIONS_RUNBOOK.md`.
+
 ## PostgreSQL Migration Safety
 
 Use [POSTGRES_MIGRATION_RUNBOOK.md](POSTGRES_MIGRATION_RUNBOOK.md) for the
@@ -148,6 +158,10 @@ required preflight, encrypted backup/restore rehearsal, forward deployment, and
 rollback procedure. A local disposable PostgreSQL migration cycle can be run
 with `bash scripts/verify_postgres_migrations.sh`; it is not a production
 rollback command.
+
+Run `bash scripts/verify_backup_restore_drill.sh` for the encrypted disposable
+PostgreSQL plus synthetic private-object restore proof. It does not replace a
+signed target backup-vault drill.
 
 ## Run Quality Checks
 
@@ -176,6 +190,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
   privacy, backup, audit, versioning, and external-AI release gates.
 - `DATASET_RELEASE_PLAN.md` for immutable release boundaries, verified evidence,
   and remaining deployment gates.
+- `DATA_LIFECYCLE_RECOVERY_PLAN.md` for recovery automation, retention, holds,
+  deletion approval, operator boundaries, and remaining deployment evidence.
 - `IMAGING_DEIDENTIFICATION_PLAN.md` for the versioned upload quarantine,
   metadata-screening profile, threat model, and human-review boundary.
 - `PRODUCTION_STORAGE_PLAN.md` for object storage and signed URL planning.

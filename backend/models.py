@@ -25,6 +25,7 @@ class Organization(Base):
 
     users: Mapped[list["User"]] = relationship(back_populates="organization")
     projects: Mapped[list["Project"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+    retention_policies: Mapped[list["DataRetentionPolicy"]] = relationship(back_populates="organization", passive_deletes=True)
 
 
 class User(Base):
@@ -108,6 +109,8 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     modality: Mapped[str] = mapped_column(String(50), nullable=False)
+    lifecycle_status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", server_default="active")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     organization: Mapped[Organization] = relationship(back_populates="projects")
@@ -365,3 +368,226 @@ def _reject_dataset_release_mutation(*_: object) -> None:
     """Keep release manifests and lifecycle facts append-only through the ORM."""
 
     raise ValueError("dataset releases are append-only")
+
+
+class DataRetentionPolicy(Base):
+    """Immutable organization policy snapshot with explicitly approved values."""
+
+    __tablename__ = "data_retention_policies"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "version", name="uq_data_retention_policy_org_version"),
+        CheckConstraint("version > 0", name="ck_data_retention_policy_version_positive"),
+        CheckConstraint("original_minimum_days >= 0", name="ck_retention_original_days"),
+        CheckConstraint("mask_minimum_days >= 0", name="ck_retention_mask_days"),
+        CheckConstraint("metadata_minimum_days >= 0", name="ck_retention_metadata_days"),
+        CheckConstraint("dataset_release_minimum_days >= 0", name="ck_retention_release_days"),
+        CheckConstraint("audit_minimum_days >= 0", name="ck_retention_audit_days"),
+        CheckConstraint("backup_retention_days > 0", name="ck_retention_backup_days"),
+        CheckConstraint("rpo_hours > 0", name="ck_retention_rpo_hours"),
+        CheckConstraint("rto_hours > 0", name="ck_retention_rto_hours"),
+        Index("ix_data_retention_policies_org_created", "organization_id", "created_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    approval_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    original_minimum_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    mask_minimum_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    metadata_minimum_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    dataset_release_minimum_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    audit_minimum_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    backup_retention_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    rpo_hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    rto_hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    organization: Mapped[Organization] = relationship(back_populates="retention_policies")
+
+
+class LegalHold(Base):
+    """Immutable legal-hold scope; current state is derived from append-only events."""
+
+    __tablename__ = "legal_holds"
+    __table_args__ = (
+        CheckConstraint("scope_type IN ('organization', 'project', 'scan')", name="ck_legal_hold_scope"),
+        CheckConstraint(
+            "reason_code IN ('litigation', 'regulatory', 'security_incident', 'customer_request')",
+            name="ck_legal_hold_reason",
+        ),
+        Index("ix_legal_holds_org_scope", "organization_id", "scope_type", "scope_id"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    scope_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    scope_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    approval_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    events: Mapped[list["LegalHoldEvent"]] = relationship(back_populates="hold", passive_deletes=True)
+
+
+class LegalHoldEvent(Base):
+    """Append-only application or release event for one legal hold."""
+
+    __tablename__ = "legal_hold_events"
+    __table_args__ = (
+        CheckConstraint("action IN ('applied', 'released')", name="ck_legal_hold_event_action"),
+        Index("ix_legal_hold_events_hold_occurred", "hold_id", "occurred_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    hold_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("legal_holds.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    actor_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    hold: Mapped[LegalHold] = relationship(back_populates="events")
+
+
+class DataDeletionRequest(Base):
+    """Immutable governed deletion request with a value-free inventory snapshot."""
+
+    __tablename__ = "data_deletion_requests"
+    __table_args__ = (
+        CheckConstraint("scope_type IN ('project', 'scan')", name="ck_data_deletion_request_scope"),
+        CheckConstraint(
+            "reason_code IN ('erasure_request', 'source_withdrawal', 'contract_end', 'duplicate_data')",
+            name="ck_data_deletion_request_reason",
+        ),
+        Index("ix_data_deletion_requests_org_created", "organization_id", "created_at"),
+        Index("ix_data_deletion_requests_org_scope", "organization_id", "scope_type", "scope_id"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    scope_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    approval_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    retention_policy_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("data_retention_policies.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    retention_policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    inventory: Mapped[dict] = mapped_column(JSON, nullable=False)
+    earliest_execute_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    requested_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    events: Mapped[list["DataDeletionEvent"]] = relationship(back_populates="request", passive_deletes=True)
+    receipt: Mapped["DataDeletionReceipt | None"] = relationship(back_populates="request", uselist=False, passive_deletes=True)
+
+
+class DataDeletionEvent(Base):
+    """Append-only state transition for a governed deletion request."""
+
+    __tablename__ = "data_deletion_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('requested', 'approved', 'cancelled', 'executed', 'verified', 'failed')",
+            name="ck_data_deletion_event_action",
+        ),
+        Index("ix_data_deletion_events_request_occurred", "request_id", "occurred_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    request_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("data_deletion_requests.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    actor_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    request: Mapped[DataDeletionRequest] = relationship(back_populates="events")
+
+
+class DataDeletionReceipt(Base):
+    """Append-only, checksum-protected and value-free deletion evidence."""
+
+    __tablename__ = "data_deletion_receipts"
+    __table_args__ = (
+        CheckConstraint(
+            "backup_disposition IN ('expires_per_policy', 'not_applicable')",
+            name="ck_data_deletion_receipt_backup_disposition",
+        ),
+        Index("ix_data_deletion_receipts_org_completed", "organization_id", "completed_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    request_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("data_deletion_requests.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    scope_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    deleted_counts: Mapped[dict] = mapped_column(JSON, nullable=False)
+    object_versions_deleted: Mapped[int] = mapped_column(Integer, nullable=False)
+    delete_markers_deleted: Mapped[int] = mapped_column(Integer, nullable=False)
+    revoked_releases: Mapped[int] = mapped_column(Integer, nullable=False)
+    backup_disposition: Mapped[str] = mapped_column(String(30), nullable=False)
+    backup_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    operator_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    receipt_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    request: Mapped[DataDeletionRequest] = relationship(back_populates="receipt")
+
+
+@event.listens_for(DataRetentionPolicy, "before_update")
+@event.listens_for(DataRetentionPolicy, "before_delete")
+@event.listens_for(LegalHold, "before_update")
+@event.listens_for(LegalHold, "before_delete")
+@event.listens_for(LegalHoldEvent, "before_update")
+@event.listens_for(LegalHoldEvent, "before_delete")
+@event.listens_for(DataDeletionRequest, "before_update")
+@event.listens_for(DataDeletionRequest, "before_delete")
+@event.listens_for(DataDeletionEvent, "before_update")
+@event.listens_for(DataDeletionEvent, "before_delete")
+@event.listens_for(DataDeletionReceipt, "before_update")
+@event.listens_for(DataDeletionReceipt, "before_delete")
+def _reject_data_governance_mutation(*_: object) -> None:
+    """Keep lifecycle policies, decisions, and receipts append-only."""
+
+    raise ValueError("data governance records are append-only")
