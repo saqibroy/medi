@@ -382,9 +382,9 @@ CI verification:
 
 ## Next Engineering Priorities
 
-1. In progress: introduce a private storage abstraction and organization-safe
-   object access. Completed locally: tenant-scoped object keys, a path-safe local
-   backend, and scan/mask integration. Remaining: S3 backend, signed preview
-   URLs, runtime verification, and PR merge.
-2. Replace process-local rate limits with shared production enforcement and move
+1. Next: quarantine uploaded DICOM/NIfTI objects until a versioned
+   de-identification policy has inspected them and approved safe derived data.
+2. Complete target-account storage controls: private bucket policy, lifecycle,
+   versioning/retention, backup/restore, and customer-deletion evidence.
+3. Replace process-local rate limits with shared production enforcement and move
    browser sessions to Secure, HttpOnly cookies with CSRF protection.

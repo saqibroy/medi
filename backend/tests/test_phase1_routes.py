@@ -485,11 +485,13 @@ async def test_uploaded_scan_routes_are_organization_scoped(tmp_path: Path) -> N
         forbidden_project_scans = await client.get(f"/projects/{project_id}/scans", headers=auth_headers(outside_admin_token))
         forbidden_scan = await client.get(f"/scans/{scan_id}", headers=auth_headers(outside_admin_token))
         forbidden_slice = await client.get(f"/scans/{scan_id}/slice/0", headers=auth_headers(outside_admin_token))
+        forbidden_signed_url = await client.get(f"/scans/{scan_id}/slice/0/url", headers=auth_headers(outside_admin_token))
         forbidden_metadata = await client.get(f"/scans/{scan_id}/metadata", headers=auth_headers(outside_admin_token))
         forbidden_annotations = await client.get(f"/scans/{scan_id}/annotations", headers=auth_headers(outside_admin_token))
         owner_scan = await client.get(f"/scans/{scan_id}", headers=auth_headers(admin_token))
         owner_scan_list = await client.get("/scans", headers=auth_headers(admin_token))
         owner_slice = await client.get(f"/scans/{scan_id}/slice/0", headers=auth_headers(admin_token))
+        owner_signed_url = await client.get(f"/scans/{scan_id}/slice/0/url", headers=auth_headers(admin_token))
 
         assert forbidden_upload.status_code == 404
         assert created.status_code == 201
@@ -499,11 +501,13 @@ async def test_uploaded_scan_routes_are_organization_scoped(tmp_path: Path) -> N
         assert forbidden_project_scans.status_code == 404
         assert forbidden_scan.status_code == 404
         assert forbidden_slice.status_code == 404
+        assert forbidden_signed_url.status_code == 404
         assert forbidden_metadata.status_code == 404
         assert forbidden_annotations.status_code == 404
         assert_scan_response_hides_storage_paths(owner_scan.json())
         assert all("file_path" not in scan and "storage_key" not in scan for scan in owner_scan_list.json())
         assert owner_slice.status_code == 200
+        assert owner_signed_url.status_code == 409
 
 
 @pytest.mark.anyio

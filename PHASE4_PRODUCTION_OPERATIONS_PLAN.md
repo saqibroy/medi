@@ -258,11 +258,13 @@ Useful primary references:
    reprocessing, and export routes. Shared multi-instance enforcement, idle
    timeout, active-session inventory, and secure-cookie transport remain
    explicit production gates above.
-6. [ ] In progress: introduce the storage abstraction and private object-storage
-   backend. Completed locally: tenant-scoped keys, traversal-safe local storage,
-   and original/preview/reprocess/mask integration. Remaining: S3 implementation,
-   signed preview URLs, encryption configuration, runtime verification, and merge.
-7. [ ] Add quarantine plus the versioned DICOM/NIfTI de-identification gate.
+6. [x] Implement the storage abstraction and private S3 backend with
+   tenant-scoped keys, traversal-safe local storage, KMS-encrypted writes,
+   original/preview/reprocess/mask integration, and authorized short-lived
+   derived-preview URLs. Target-account bucket policy, lifecycle, backup, and
+   deletion evidence remains tracked as a deployment gate.
+7. [ ] Next: add quarantine plus the versioned DICOM/NIfTI de-identification
+   gate.
 8. [ ] Add immutable security audit events.
 9. [ ] Add dataset releases and annotation revision manifests.
 10. [ ] Implement backup/restore drills, retention, legal hold, and deletion.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from os import environ
+from pathlib import Path
 from urllib.parse import urlparse
 
 
@@ -35,6 +36,14 @@ class Settings:
     session_ttl_minutes: int
     login_rate_limit_per_minute: int
     sensitive_rate_limit_per_minute: int
+    scan_storage_backend: str
+    scan_storage_root: Path
+    scan_storage_bucket: str | None
+    scan_storage_region: str | None
+    scan_storage_endpoint_url: str | None
+    scan_storage_signed_url_ttl_seconds: int
+    scan_storage_sse: str
+    scan_storage_kms_key_id: str | None
 
     @property
     def is_production(self) -> bool:
@@ -98,6 +107,22 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
     session_ttl_minutes = _read_integer(values.get("SESSION_TTL_MINUTES", "480"), "SESSION_TTL_MINUTES", 5, 1440)
     login_rate_limit = _read_integer(values.get("LOGIN_RATE_LIMIT_PER_MINUTE", "10"), "LOGIN_RATE_LIMIT_PER_MINUTE", 1, 1000)
     sensitive_rate_limit = _read_integer(values.get("SENSITIVE_RATE_LIMIT_PER_MINUTE", "60"), "SENSITIVE_RATE_LIMIT_PER_MINUTE", 1, 10000)
+    storage_backend = values.get("SCAN_STORAGE_BACKEND", "local").strip().lower()
+    if storage_backend not in {"local", "s3"}:
+        raise ConfigurationError("SCAN_STORAGE_BACKEND must be local or s3")
+    storage_root = Path(values.get("SCAN_STORAGE_ROOT", "backend/data/sample_scan"))
+    storage_bucket = values.get("SCAN_STORAGE_BUCKET", "").strip() or None
+    storage_region = values.get("SCAN_STORAGE_REGION", "").strip() or None
+    storage_endpoint_url = values.get("SCAN_STORAGE_ENDPOINT_URL", "").strip() or None
+    signed_url_ttl = _read_integer(values.get("SCAN_STORAGE_SIGNED_URL_TTL_SECONDS", "300"), "SCAN_STORAGE_SIGNED_URL_TTL_SECONDS", 60, 900)
+    storage_sse = values.get("SCAN_STORAGE_SSE", "AES256").strip()
+    if storage_sse not in {"AES256", "aws:kms"}:
+        raise ConfigurationError("SCAN_STORAGE_SSE must be AES256 or aws:kms")
+    storage_kms_key_id = values.get("SCAN_STORAGE_KMS_KEY_ID", "").strip() or None
+    if storage_backend == "s3" and (storage_bucket is None or storage_region is None):
+        raise ConfigurationError("S3 storage requires SCAN_STORAGE_BUCKET and SCAN_STORAGE_REGION")
+    if storage_sse == "aws:kms" and storage_kms_key_id is None:
+        raise ConfigurationError("SCAN_STORAGE_KMS_KEY_ID is required for aws:kms")
 
     if app_environment == "production":
         if "DATABASE_URL" not in values or database_url == DEVELOPMENT_DATABASE_URL or "postgres:postgres@" in database_url:
@@ -108,6 +133,10 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
             raise ConfigurationError("production requires explicit CORS_ORIGINS")
         if seed_demo_data:
             raise ConfigurationError("SEED_DEMO_DATA must be false in production")
+        if storage_backend != "s3":
+            raise ConfigurationError("production requires SCAN_STORAGE_BACKEND=s3")
+        if storage_sse != "aws:kms" or storage_kms_key_id is None:
+            raise ConfigurationError("production S3 storage requires SCAN_STORAGE_SSE=aws:kms and SCAN_STORAGE_KMS_KEY_ID")
 
     return Settings(
         environment=app_environment,
@@ -118,4 +147,12 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
         session_ttl_minutes=session_ttl_minutes,
         login_rate_limit_per_minute=login_rate_limit,
         sensitive_rate_limit_per_minute=sensitive_rate_limit,
+        scan_storage_backend=storage_backend,
+        scan_storage_root=storage_root,
+        scan_storage_bucket=storage_bucket,
+        scan_storage_region=storage_region,
+        scan_storage_endpoint_url=storage_endpoint_url,
+        scan_storage_signed_url_ttl_seconds=signed_url_ttl,
+        scan_storage_sse=storage_sse,
+        scan_storage_kms_key_id=storage_kms_key_id,
     )

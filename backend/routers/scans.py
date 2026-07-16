@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import AnnotationRead, CocoExportRead, CsvExportRead, Modality, ScanCreate, ScanExportRead, ScanMetadataRead, ScanRead, ScanStatsRead, SegmentationExportRead, SliceDicomMetadataRead, SliceRead, YoloExportRead
+from ..schemas import AnnotationRead, CocoExportRead, CsvExportRead, Modality, ScanCreate, ScanExportRead, ScanMetadataRead, ScanRead, ScanStatsRead, SegmentationExportRead, SliceDicomMetadataRead, SliceRead, SliceUrlRead, YoloExportRead
 from ..security import get_current_user, require_admin
 from ..services import annotation_service, scan_service
 
@@ -51,6 +51,13 @@ async def get_scan_slice_metadata(scan_id: UUID, slice_index: int, db: Session =
 
     scan_service.get_scan_for_user_or_404(db, scan_id, current_user)
     return scan_service.get_slice_dicom_metadata(db, scan_id, slice_index)
+
+
+@router.get("/{scan_id}/slice/{slice_index}/url", response_model=SliceUrlRead)
+async def get_scan_slice_url(scan_id: UUID, slice_index: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> SliceUrlRead:
+    """Return an authorized short-lived URL for an S3-derived preview only."""
+
+    return SliceUrlRead.model_validate(scan_service.get_slice_signed_url_for_user(db, scan_id, slice_index, current_user))
 
 
 @router.get("/{scan_id}/metadata", response_model=ScanMetadataRead)

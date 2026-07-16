@@ -9,3 +9,4 @@ python-multipart==0.0.20
 alembic==1.14.0
 pytest==8.3.4
 httpx==0.28.1
+boto3==1.43.48
