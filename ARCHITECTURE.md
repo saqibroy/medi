@@ -170,5 +170,10 @@ all geometry into one awkward shape.
   bodies, credentials, filenames, DICOM values, pixels, geometry, or free text.
 - Local file storage simulates S3 paths while keeping the app easy to run on a
   laptop.
+- Production object-storage controls are expressed as linted CloudFormation:
+  KMS encryption, versioning, disabled ACLs/public access, TLS/KMS deny policy,
+  least-privilege runtime permissions, and lifecycle rules keyed by trusted
+  `medi-data-class` tags. A read-only verifier supplies deployment evidence;
+  account deployment and recovery/deletion drills remain operational gates.
 - Cornerstone3D is initialized to demonstrate real viewer lifecycle concepts,
   while canvas drawing keeps the first learning pass approachable.

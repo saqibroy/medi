@@ -1,11 +1,13 @@
 # Production Storage Plan
 
-Status: storage backend implementation complete. The path-safe local backend,
+Status: repository-controlled target-account boundary complete. The path-safe local backend,
 private S3 backend, organization/project/scan key layout, KMS-encrypted writes,
 and tenant-authorized short-lived preview URLs are implemented and tested for
 originals, previews, reprocessing, and segmentation masks. Deployment-specific
 bucket policy, lifecycle rules, cloud integration evidence, backup/restore, and
-customer-deletion drills remain production gates.
+customer-deletion drills remain production gates. This increment adds
+deployable AWS controls, lifecycle tags, read-only verification, and recovery/
+deletion procedures; cloud evidence still requires an approved target account.
 
 Medi currently stores scan originals and derived preview PNGs on the local
 filesystem so the product can run simply in development and Docker Compose. For
@@ -123,9 +125,16 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
 3. [x] Add S3 implementation using `boto3`.
 4. [x] Add signed preview URL endpoint.
 5. [x] Keep current base64 slice endpoint as compatibility fallback.
-6. [ ] Add and verify lifecycle rules for derived previews and retained
-   originals in the target cloud account.
-7. [ ] Document and rehearse backup, restore, and customer deletion processes.
+6. [x] Add data-class tags and deployable lifecycle rules for quarantine,
+   derived previews, exports, and noncurrent customer-data versions.
+7. [x] Add private-bucket, KMS, versioning, public-access-block, TLS-deny, and
+   least-privilege runtime policy as reviewed CloudFormation.
+8. [x] Add a read-only verifier for encryption, public access, ownership,
+   versioning, policy, and lifecycle controls.
+9. [x] Document backup, restore, legal-hold, and customer-deletion procedures.
+10. [ ] Deploy and verify the controls in the approved target AWS account.
+11. [ ] Configure independent backups/alerts and record restore and deletion
+    drills with synthetic evidence.
 
 ## Acceptance Criteria
 
@@ -136,3 +145,20 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
 - Cross-organization tests prove signed URLs cannot be created for another
   tenant's scans.
 - Docker Compose remains local-only and requires no cloud credentials.
+
+## Repository Verification Evidence
+
+Completed on 2026-07-16:
+
+- 92 backend tests passed, including S3 write tagging and fail-closed control
+  verification.
+- `cfn-lint 1.53.0` accepted
+  `infrastructure/aws/medi-private-storage.json`; the same pinned check now runs
+  in CI.
+- The frontend production build and PostgreSQL upgrade/rollback rehearsal
+  passed at migration `20260716_0009`.
+- Docker Compose rebuilt successfully and live readiness, authentication,
+  private slice access, and audit evidence checks passed.
+- No cloud account was mutated and no real credentials or patient data were
+  introduced. Target-account verifier output and operational drill records
+  remain required evidence.

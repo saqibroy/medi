@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path, PurePosixPath
 from typing import Protocol
+from urllib.parse import urlencode
 
 import boto3
 from botocore.exceptions import ClientError
@@ -16,6 +17,9 @@ class StorageKeyError(ValueError):
     """Raised when an object key could escape the configured private root."""
 
 
+DATA_CLASS_TAG_KEY = "medi-data-class"
+
+
 def _validate_object_key(key: str) -> str:
     if not key or "\x00" in key:
         raise StorageKeyError("Storage key is empty or invalid")
@@ -23,6 +27,25 @@ def _validate_object_key(key: str) -> str:
     if object_key.is_absolute() or ".." in object_key.parts:
         raise StorageKeyError("Storage key escapes the private root")
     return object_key.as_posix()
+
+
+def storage_data_class(key: str) -> str:
+    """Classify an object key for reviewed lifecycle and recovery policies."""
+
+    safe_key = _validate_object_key(key)
+    if "/quarantine/" in f"/{safe_key}":
+        return "quarantine"
+    if "/derived/preview/" in f"/{safe_key}":
+        return "preview"
+    if "/original/" in f"/{safe_key}":
+        return "original"
+    if "/mask/" in f"/{safe_key}":
+        return "mask"
+    if "/metadata/" in f"/{safe_key}" or safe_key.endswith(".metadata.json"):
+        return "metadata"
+    if "/export/" in f"/{safe_key}":
+        return "export"
+    return "unclassified"
 
 
 class PrivateStorage(Protocol):
@@ -103,11 +126,13 @@ class S3PrivateStorage:
         self.client = client or boto3.client("s3", region_name=region, endpoint_url=endpoint_url)
 
     def put_bytes(self, key: str, content: bytes) -> None:
+        safe_key = _validate_object_key(key)
         arguments: dict[str, object] = {
             "Bucket": self.bucket,
-            "Key": _validate_object_key(key),
+            "Key": safe_key,
             "Body": content,
             "ServerSideEncryption": self.sse,
+            "Tagging": urlencode({DATA_CLASS_TAG_KEY: storage_data_class(safe_key)}),
         }
         if self.sse == "aws:kms" and self.kms_key_id:
             arguments["SSEKMSKeyId"] = self.kms_key_id

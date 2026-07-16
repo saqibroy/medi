@@ -172,15 +172,30 @@ and annotation-history tombstoning remain open production gates.
 
 Implementation details remain in `PRODUCTION_STORAGE_PLAN.md`.
 
+Repository-controlled increment complete: deployable AWS S3/KMS controls,
+data-class lifecycle tagging, a read-only control verifier, CI linting, and
+operational runbooks are implemented without claiming target-account evidence.
+
 - [ ] Put originals, previews, masks, and export artifacts in private,
   organization-prefixed object storage.
-- [ ] Use least-privilege service identities and deny public bucket access.
-- [ ] Issue short-lived signed URLs only after object-level authorization; do
+
+Originals, previews, and masks use the private tenant-prefixed abstraction.
+Export artifacts are still response payloads rather than retained private
+objects, so the combined gate remains open.
+- [x] Define a least-privilege runtime policy and bucket policy denying public,
+  insecure, missing-KMS, and wrong-KMS writes. Target-account attachment and
+  verification remain open.
+- [x] Issue short-lived signed URLs only after object-level authorization; do
   not sign original uploads for browser access by default.
-- [ ] Encrypt objects and object versions with managed keys.
-- [ ] Log signed-URL issuance and sensitive object access.
+- [x] Require KMS encryption for production writes and define KMS default
+  encryption plus S3 Bucket Keys for object versions.
+- [x] Log signed-URL issuance and sensitive object access.
 - [ ] Define lifecycle rules separately for originals, derivatives, exports,
   quarantined objects, and deleted-data tombstones.
+
+Lifecycle tags/rules now cover originals, masks, metadata, previews, exports,
+and quarantine. Deleted-data tombstones remain open until the deletion data
+model is implemented. Target-account deployment evidence is still required.
 
 ## Backup, Restore, Retention, And Deletion
 
@@ -196,7 +211,7 @@ Implementation details remain in `PRODUCTION_STORAGE_PLAN.md`.
 - [ ] Support legal holds and prevent deletion while a valid hold applies.
 - [ ] Produce a deletion receipt containing identifiers and completion state,
   never deleted PHI.
-- [ ] Document how deletion propagates into expiring backups and how exceptions
+- [x] Document how deletion propagates into expiring backups and how exceptions
   are communicated.
 
 ## GDPR And Privacy Operations

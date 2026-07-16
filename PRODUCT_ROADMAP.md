@@ -201,8 +201,9 @@ Definition of done:
    authentication, medical-image intake decisions, object access, exports, and
    administrative/annotation changes. Remaining WORM and retention gates are
    tracked in `SECURITY_AUDIT_PLAN.md`.
-2. Next: complete target-account storage controls: private bucket policy,
-   lifecycle, versioning/retention, backup/restore, and customer-deletion
-   evidence.
-3. Replace process-local rate limits with shared production enforcement and move
-   browser sessions to Secure, HttpOnly cookies with CSRF protection.
+2. Completed repository boundary: add deployable target-account storage
+   controls, lifecycle tagging, read-only verification, and backup/restore/
+   deletion procedures. Cloud deployment and drill evidence remain dependent
+   on an approved AWS account, retention values, and operators.
+3. Next: replace process-local rate limits with shared production enforcement
+   and move browser sessions to Secure, HttpOnly cookies with CSRF protection.
