@@ -6,7 +6,7 @@
 
 import { FormEvent, Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
-import { getMe, listUsers, login } from "./api/authApi";
+import { getMe, listUsers, login, logout } from "./api/authApi";
 import { createProject, createProjectLabel, deleteProjectLabel, getProjectStats, listProjectLabels, listProjects, updateProject, updateProjectLabel } from "./api/projectsApi";
 import { createScan, getScanStats, uploadScan } from "./api/scansApi";
 import { AnnotationList } from "./components/AnnotationList";
@@ -223,15 +223,19 @@ export default function App() {
     }
   }
 
-  function handleLogout(): void {
-    window.localStorage.removeItem("medi_token");
-    setToken("");
-    setUser(null);
-    setProjects([]);
-    setSelectedProject(null);
-    setLabels([]);
-    setProjectsError(null);
-    setLabelsError(null);
+  async function handleLogout(): Promise<void> {
+    try {
+      if (token) await logout(token);
+    } finally {
+      window.localStorage.removeItem("medi_token");
+      setToken("");
+      setUser(null);
+      setProjects([]);
+      setSelectedProject(null);
+      setLabels([]);
+      setProjectsError(null);
+      setLabelsError(null);
+    }
   }
 
   function handleSelectProject(projectId: string): void {
@@ -411,7 +415,7 @@ export default function App() {
               <h1 className="text-lg font-semibold text-slate-950">Medi</h1>
               <p className="text-xs text-slate-500">{user.full_name}</p>
             </div>
-            <button className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50" onClick={handleLogout}>
+            <button className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50" onClick={() => void handleLogout()}>
               Sign out
             </button>
           </div>

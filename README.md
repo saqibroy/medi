@@ -84,6 +84,13 @@ unique `TOKEN_SECRET` of at least 32 characters, exact comma-separated HTTPS
 migrations run and refuses unsafe startup. Keep real values in the deployment
 secret manager, never in `.env.example`, images, or Git.
 
+Bearer sessions are opaque, stored only as keyed token digests, expire after
+`SESSION_TTL_MINUTES` (480 by default), and are revoked by `POST /auth/logout`.
+`LOGIN_RATE_LIMIT_PER_MINUTE` and `SENSITIVE_RATE_LIMIT_PER_MINUTE` configure the
+single-process safety baseline. A horizontally scaled production deployment
+still requires shared rate-limit enforcement at the ingress or application
+layer.
+
 ## PostgreSQL Migration Safety
 
 Use [POSTGRES_MIGRATION_RUNBOOK.md](POSTGRES_MIGRATION_RUNBOOK.md) for the

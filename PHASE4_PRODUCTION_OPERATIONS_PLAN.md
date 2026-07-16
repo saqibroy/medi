@@ -49,8 +49,8 @@ Not production-ready yet:
 
 - Development Compose intentionally seeds synthetic demo data; production
   deployment must set `SEED_DEMO_DATA=false` and now fails startup if it does not.
-- Bearer tokens have no expiry, revocation, session inventory, or secure-cookie
-  transport.
+- Bearer sessions now have absolute expiry and logout revocation, but active
+  session inventory, idle timeout, and secure-cookie transport remain absent.
 - Production configuration now requires an explicit token secret and exact CORS
   origins; local-only defaults remain available only for development.
 - Uploaded originals and previews use local volumes without encryption policy.
@@ -60,8 +60,9 @@ Not production-ready yet:
 - Dataset releases and annotation snapshots are not versioned.
 - Backup, restore, retention, legal-hold, and verified deletion procedures are
   not implemented.
-- Request logging is structured and payload-safe, but security audit records,
-  rate limiting, monitoring, and error tracking remain absent.
+- Request logging is structured and payload-safe, and process-local rate limits
+  exist; security audit records, shared rate enforcement, monitoring, and error
+  tracking remain absent.
 
 ## Medical Image Intake And De-identification
 
@@ -108,12 +109,13 @@ Acceptance evidence:
 
 ## Identity, Sessions, And Authorization
 
-- [ ] Replace perpetual bearer tokens with expiring, rotatable sessions.
+- [x] Replace perpetual bearer tokens with database-backed opaque sessions that
+  store only keyed token digests and enforce configurable absolute expiry.
 - [ ] Prefer `Secure`, `HttpOnly`, `SameSite` cookies for the browser deployment,
   with CSRF protection where required.
-- [ ] Add logout revocation, user/session disablement, idle timeout, absolute
-  timeout, and active-session inventory.
-- [ ] Configure exact allowed origins from environment variables.
+- [ ] Add idle timeout and active-session inventory. Logout revocation,
+  inactive-user enforcement, and absolute expiry are implemented.
+- [x] Configure exact allowed origins from environment variables.
 - [ ] Preserve deny-by-default roles and add project-level membership if users
   must not see every project in their organization.
 - [ ] Add object-level authorization tests for every scan, mask, export, signed
@@ -228,12 +230,14 @@ Useful primary references:
 - [x] Add structured JSON request logs with server-issued correlation IDs and an
   allowlist that excludes bodies, headers, query values, and exception text.
 - [ ] Add error tracking that strips sensitive request bodies and metadata.
-- [ ] Add per-user, per-organization, and endpoint-sensitive rate limits.
+- [ ] Replace the process-local login and expensive-route limits with shared,
+  per-user, per-organization enforcement for multi-instance production.
 - [ ] Add database connection-pool settings, statement timeouts, and slow-query
   visibility.
 - [x] Define migration preflight, backup/restore rehearsal, forward deployment,
   and rollback procedures for PostgreSQL in `POSTGRES_MIGRATION_RUNBOOK.md`.
-- [ ] Remove automatic demo seeding from production startup.
+- [x] Remove automatic demo seeding from production startup; development seeding
+  remains explicit through `SEED_DEMO_DATA=true`.
 - [ ] Pin and scan runtime images, run containers as non-root, and use read-only
   filesystems where possible.
 - [ ] Add operator runbooks for deploy, rollback, degraded storage, database
@@ -249,7 +253,11 @@ Useful primary references:
    isolated upgrade/downgrade/upgrade cycle in CI.
 4. [x] Add structured request logging, request IDs, and redaction. Error
    tracking remains a separate controlled integration.
-5. [ ] Add expiring sessions, exact CORS configuration, and rate limiting.
+5. [x] Add database-backed expiring sessions, logout revocation, exact CORS, and
+   a configurable process-local rate-limit baseline for login, upload,
+   reprocessing, and export routes. Shared multi-instance enforcement, idle
+   timeout, active-session inventory, and secure-cookie transport remain
+   explicit production gates above.
 6. [ ] Introduce the storage abstraction and private object-storage backend.
 7. [ ] Add quarantine plus the versioned DICOM/NIfTI de-identification gate.
 8. [ ] Add immutable security audit events.

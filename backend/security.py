@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import secrets
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -12,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import User
+from .models import User, UserSession
 from .settings import get_settings
 
 
@@ -39,27 +40,33 @@ def verify_password(password: str, password_hash: str) -> bool:
     return hmac.compare_digest(hash_password(password, salt), f"{algorithm}${salt}${expected}")
 
 
-def create_access_token(user_id: UUID) -> str:
-    """Create a signed bearer token containing only the user id."""
+def create_access_token(db: Session, user_id: UUID) -> tuple[str, datetime]:
+    """Create a random, expiring session and store only its digest."""
 
-    payload = str(user_id)
-    signature = hmac.new(get_settings().token_secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    token_bytes = f"{payload}.{signature}".encode("utf-8")
-    return base64.urlsafe_b64encode(token_bytes).decode("ascii")
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=get_settings().session_ttl_minutes)
+    db.add(UserSession(user_id=user_id, token_digest=_token_digest(token), expires_at=expires_at))
+    db.commit()
+    return token, expires_at
 
 
-def parse_access_token(token: str) -> UUID | None:
-    """Validate a token signature and return its user id."""
+def _token_digest(token: str) -> str:
+    return hmac.new(get_settings().token_secret.encode("utf-8"), token.encode("utf-8"), hashlib.sha256).hexdigest()
 
-    try:
-        decoded = base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
-        payload, signature = decoded.rsplit(".", 1)
-        expected = hmac.new(get_settings().token_secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(signature, expected):
-            return None
-        return UUID(payload)
-    except (ValueError, UnicodeDecodeError):
+
+def resolve_access_token(db: Session, token: str) -> User | None:
+    """Resolve one non-expired, non-revoked session into an active user."""
+
+    session = db.scalar(
+        select(UserSession).where(
+            UserSession.token_digest == _token_digest(token),
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > datetime.now(timezone.utc),
+        )
+    )
+    if session is None or not session.user.is_active:
         return None
+    return session.user
 
 
 async def get_current_user(
@@ -70,13 +77,17 @@ async def get_current_user(
 
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
-    user_id = parse_access_token(credentials.credentials)
-    if user_id is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bearer token")
-    user = db.scalar(select(User).where(User.id == user_id, User.is_active.is_(True)))
+    user = resolve_access_token(db, credentials.credentials)
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired bearer token")
     return user
+
+
+def revoke_access_token(db: Session, token: str) -> None:
+    session = db.scalar(select(UserSession).where(UserSession.token_digest == _token_digest(token), UserSession.revoked_at.is_(None)))
+    if session is not None:
+        session.revoked_at = datetime.now(timezone.utc)
+        db.commit()
 
 
 def require_role(current_user: User, allowed_roles: set[str]) -> User:
