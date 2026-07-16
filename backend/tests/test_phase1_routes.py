@@ -14,9 +14,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from backend.audit_middleware import SecurityAuditMiddleware
 from backend.database import Base, get_db
 from backend.models import Annotation, Label, Organization, Project, Scan, User
-from backend.routers import annotations, auth, health, projects, scans, users
+from backend.observability import RequestLoggingMiddleware
+from backend.routers import annotations, audit_events, auth, health, projects, scans, users
 from backend.security import hash_password
 from backend.services import imaging_service, scan_service, segmentation_mask_service
 from backend.tests.fixtures.imaging import write_synthetic_dicom, write_synthetic_dicom_zip, write_synthetic_nifti
@@ -53,13 +55,17 @@ def build_test_app(storage_root: Path) -> FastAPI:
             db.close()
 
     app = FastAPI()
+    app.add_middleware(SecurityAuditMiddleware, session_factory=SessionLocal)
+    app.add_middleware(RequestLoggingMiddleware)
     app.include_router(auth.router)
+    app.include_router(audit_events.router)
     app.include_router(health.router)
     app.include_router(projects.router)
     app.include_router(scans.router)
     app.include_router(annotations.router)
     app.include_router(users.router)
     app.dependency_overrides[get_db] = override_get_db
+    app.state.test_session_factory = SessionLocal
 
     return app
 

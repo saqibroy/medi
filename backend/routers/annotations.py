@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -21,6 +21,7 @@ from ..schemas import (
 from ..security import get_current_user, require_admin, require_annotator, require_reviewer
 from ..services import annotation_service
 from ..services import segmentation_mask_service
+from ..services.audit_service import mark_request_target
 
 
 router = APIRouter(prefix="/annotations", tags=["annotations"])
@@ -127,13 +128,16 @@ async def delete_segmentation_mask(
 
 @router.post("", response_model=AnnotationRead, status_code=201)
 async def create_annotation(
+    request: Request,
     payload: AnnotationCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_annotator),
 ) -> AnnotationRead:
     """Create a new annotation after Pydantic validates the request body."""
 
-    return annotation_service.create_annotation_for_user(db, payload, current_user)
+    annotation = annotation_service.create_annotation_for_user(db, payload, current_user)
+    mark_request_target(request, annotation.id)
+    return annotation
 
 
 @router.put("/{annotation_id}", response_model=AnnotationRead)

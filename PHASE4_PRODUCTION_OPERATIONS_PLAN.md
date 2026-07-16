@@ -131,19 +131,28 @@ Acceptance evidence:
 
 ## Immutable Audit Records
 
-- [ ] Introduce a dedicated audit-event model covering authentication, reads of
-  sensitive scans, uploads, downloads, signed URLs, exports, role changes,
-  annotation changes, reviews, and deletions.
-- [ ] Store actor user/session, organization, object identifiers, action, result,
-  timestamp, request/correlation ID, and safe network context.
-- [ ] Never store tokens, removed DICOM values, raw free-text payloads, image
+- [x] Introduce a dedicated audit-event model covering every currently
+  implemented authentication, sensitive scan/mask read, upload/reprocess,
+  signed-URL, export, administrative, annotation, review, and deletion route.
+  Future role-change/download routes must join the explicit audit map when they
+  are introduced.
+- [x] Store actor user/session, organization, object identifiers, action, result,
+  timestamp, and request/correlation ID.
+- [ ] Add safe network context after trusted-proxy and privacy policies define
+  what may be retained; raw IP addresses and user agents are not stored now.
+- [x] Never store tokens, removed DICOM values, raw free-text payloads, image
   pixels, or secrets in audit events.
-- [ ] Prevent application roles from updating or deleting audit events.
+- [x] Prevent application roles from updating or deleting audit events through
+  read-only routing, ORM guards, and PostgreSQL/SQLite triggers.
 - [ ] Export audit events to append-only/WORM-capable storage with integrity
   verification and an approved retention period.
 - [ ] Replace annotation-history cascade deletion with a tombstone or retained
   audit reference before claiming immutability.
-- [ ] Add tests proving normal administrators cannot alter audit history.
+- [x] Add tests proving normal administrators cannot alter audit history.
+
+Implementation and verification evidence is recorded in
+`SECURITY_AUDIT_PLAN.md`. WORM export, retention approval, safe network context,
+and annotation-history tombstoning remain open production gates.
 
 ## Dataset And Annotation Versioning
 

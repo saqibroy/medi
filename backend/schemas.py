@@ -51,6 +51,25 @@ class AuthTokenRead(BaseModel):
     user: UserRead
 
 
+class SecurityAuditEventRead(BaseModel):
+    """Data-minimized audit event visible only to organization administrators."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID | None
+    actor_user_id: UUID | None
+    actor_session_id: UUID | None
+    action: str
+    result: Literal["succeeded", "failed", "denied", "error"]
+    target_type: str | None
+    target_id: UUID | None
+    request_id: str | None
+    details: dict[str, Any]
+    integrity_hash: str
+    occurred_at: datetime
+
+
 class OrganizationRead(BaseModel):
     """Customer workspace metadata."""
 

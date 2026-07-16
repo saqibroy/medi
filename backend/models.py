@@ -8,7 +8,7 @@ hold user-created labels tied to one scan and one slice.
 from datetime import datetime
 from uuid import UUID as PythonUUID, uuid4
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, Uuid, func
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint, Uuid, event, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -58,6 +58,44 @@ class UserSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="sessions")
+
+
+class SecurityAuditEvent(Base):
+    """Append-only, data-minimized record of a security-relevant operation."""
+
+    __tablename__ = "security_audit_events"
+    __table_args__ = (
+        CheckConstraint("result IN ('succeeded', 'failed', 'denied', 'error')", name="ck_security_audit_event_result"),
+        Index("ix_security_audit_events_org_occurred", "organization_id", "occurred_at"),
+        Index("ix_security_audit_events_action_occurred", "action", "occurred_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    # Actor identifiers intentionally do not cascade or use mutable foreign-key
+    # actions: an audit record must survive user/session lifecycle operations.
+    actor_user_id: Mapped[PythonUUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    actor_session_id: Mapped[PythonUUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    result: Mapped[str] = mapped_column(String(20), nullable=False)
+    target_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    target_id: Mapped[PythonUUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    details: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    integrity_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+@event.listens_for(SecurityAuditEvent, "before_update")
+@event.listens_for(SecurityAuditEvent, "before_delete")
+def _reject_security_audit_event_mutation(*_: object) -> None:
+    """Stop normal ORM code from rewriting or deleting audit history."""
+
+    raise ValueError("security audit events are append-only")
 
 
 class Project(Base):

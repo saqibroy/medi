@@ -4,9 +4,10 @@ This repository is a production-minded research MVP. It uses
 React, TypeScript, Tailwind CSS, Cornerstone3D, FastAPI, Pydantic, SQLAlchemy,
 PostgreSQL, Alembic, expiring database-backed bearer sessions, role checks, and
 a local/S3 private-storage boundary. Real DICOM/NIfTI parsing, KMS-encrypted S3
-writes, signed derived previews, and a versioned quarantine gate are
-implemented, while immutable security auditing and broader compliance
-operations remain explicit Phase 4 gates.
+writes, signed derived previews, a versioned quarantine gate, and a dedicated
+append-only security-event ledger are implemented. Independent WORM export,
+retention approval, and broader compliance operations remain explicit Phase 4
+gates.
 
 ## Medical Data Safety Boundary
 
@@ -42,7 +43,7 @@ The detailed implementation and release evidence are tracked in
 | React + TypeScript   | <----------------------> | FastAPI backend      |
 | Tailwind UI          |                          | Routers              |
 | Cornerstone3D init   |                          | Pydantic schemas     |
-| Canvas box overlay   |                          | Service layer        |
+| Canvas box overlay   |                          | Service + audit      |
 +----------+-----------+                          +----------+-----------+
            |                                                 |
            | local browser state                             | SQLAlchemy Session
@@ -50,7 +51,7 @@ The detailed implementation and release evidence are tracked in
 +----------------------+                          +----------------------+
 | Viewer state hooks   |                          | PostgreSQL           |
 | useScan              |                          | scans table          |
-| useAnnotations       |                          | annotations table    |
+| useAnnotations       |                          | annotations + audit  |
 +----------------------+                          +----------+-----------+
                                                              |
                                                              v
@@ -162,6 +163,11 @@ all geometry into one awkward shape.
 - Pydantic schemas define the public API contract and teach why validation
   belongs at the application boundary.
 - SQLAlchemy ORM models define persistent database structure and relationships.
+- Explicitly mapped security-sensitive routes append organization-scoped audit
+  events containing stable identifiers and allowlisted scalar details only.
+  Keyed hashes support integrity verification, while ORM guards and PostgreSQL/
+  SQLite triggers reject updates and deletes. The ledger never copies request
+  bodies, credentials, filenames, DICOM values, pixels, geometry, or free text.
 - Local file storage simulates S3 paths while keeping the app easy to run on a
   laptop.
 - Cornerstone3D is initialized to demonstrate real viewer lifecycle concepts,

@@ -6,7 +6,7 @@ selected scan, and retrieve a displayable base64 PNG for the current slice.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -14,6 +14,7 @@ from ..models import User
 from ..schemas import AnnotationRead, CocoExportRead, CsvExportRead, Modality, ScanCreate, ScanExportRead, ScanMetadataRead, ScanRead, ScanStatsRead, SegmentationExportRead, SliceDicomMetadataRead, SliceRead, SliceUrlRead, YoloExportRead
 from ..security import get_current_user, require_admin
 from ..services import annotation_service, scan_service
+from ..services.audit_service import mark_request_target
 
 
 router = APIRouter(prefix="/scans", tags=["scans"])
@@ -69,14 +70,24 @@ async def get_scan_metadata(scan_id: UUID, db: Session = Depends(get_db), curren
 
 
 @router.post("", response_model=ScanRead, status_code=201)
-async def create_scan(payload: ScanCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)) -> ScanRead:
+async def create_scan(request: Request, payload: ScanCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)) -> ScanRead:
     """Create a fake scan record and placeholder file for local-storage practice."""
 
-    return scan_service.create_scan_for_user(db, payload, current_user)
+    scan = scan_service.create_scan_for_user(db, payload, current_user)
+    mark_request_target(
+        request,
+        scan.id,
+        source_format=scan.source_format,
+        ingestion_status=scan.ingestion_status,
+        deidentification_status=scan.deidentification_status,
+        deidentification_profile_version=scan.deidentification_profile_version,
+    )
+    return scan
 
 
 @router.post("/upload", response_model=ScanRead, status_code=201)
 async def upload_scan(
+    request: Request,
     project_id: UUID = Form(...),
     name: str = Form(...),
     modality: Modality = Form(...),
@@ -88,7 +99,7 @@ async def upload_scan(
     """Upload a scan file and create project-scoped scan metadata."""
 
     content = await file.read()
-    return scan_service.create_uploaded_scan_for_user(
+    scan = scan_service.create_uploaded_scan_for_user(
         db=db,
         project_id=project_id,
         name=name,
@@ -99,13 +110,31 @@ async def upload_scan(
         content=content,
         current_user=current_user,
     )
+    mark_request_target(
+        request,
+        scan.id,
+        source_format=scan.source_format,
+        ingestion_status=scan.ingestion_status,
+        deidentification_status=scan.deidentification_status,
+        deidentification_profile_version=scan.deidentification_profile_version,
+    )
+    return scan
 
 
 @router.post("/{scan_id}/reprocess", response_model=ScanRead)
-async def reprocess_scan(scan_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_admin)) -> ScanRead:
+async def reprocess_scan(request: Request, scan_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_admin)) -> ScanRead:
     """Retry parsing a failed uploaded scan from its stored original file."""
 
-    return scan_service.reprocess_scan_for_user(db, scan_id, current_user)
+    scan = scan_service.reprocess_scan_for_user(db, scan_id, current_user)
+    mark_request_target(
+        request,
+        scan.id,
+        source_format=scan.source_format,
+        ingestion_status=scan.ingestion_status,
+        deidentification_status=scan.deidentification_status,
+        deidentification_profile_version=scan.deidentification_profile_version,
+    )
+    return scan
 
 
 @router.get("/{scan_id}/annotations", response_model=list[AnnotationRead])

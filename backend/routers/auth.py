@@ -1,6 +1,6 @@
 """Authentication endpoints for the Medi product workspace."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -9,16 +9,18 @@ from ..models import User
 from ..schemas import AuthTokenRead, LoginRequest, UserRead
 from ..security import bearer_scheme, get_current_user, revoke_access_token
 from ..services import auth_service
+from ..services.audit_service import mark_request_actor
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=AuthTokenRead)
-async def login(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthTokenRead:
+async def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)) -> AuthTokenRead:
     """Exchange demo user credentials for a bearer token."""
 
     token, user, expires_at = auth_service.authenticate_user(db, payload.email, payload.password)
+    mark_request_actor(request, user, db.info.get("authenticated_session_id"))
     return AuthTokenRead(access_token=token, expires_at=expires_at, user=UserRead.model_validate(user))
 
 
@@ -30,8 +32,10 @@ async def me(current_user: User = Depends(get_current_user)) -> UserRead:
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: Session = Depends(get_db)) -> None:
+async def logout(request: Request, credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: Session = Depends(get_db)) -> None:
     """Revoke the current bearer session without exposing its value."""
 
     if credentials is not None:
-        revoke_access_token(db, credentials.credentials)
+        user_session = revoke_access_token(db, credentials.credentials)
+        if user_session is not None:
+            mark_request_actor(request, user_session.user, user_session.id)

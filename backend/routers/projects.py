@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -10,6 +10,7 @@ from ..models import User
 from ..schemas import CocoExportRead, CsvExportRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectStatsRead, ProjectUpdate, ScanRead, SegmentationExportRead, YoloExportRead
 from ..security import get_current_user, require_admin
 from ..services import project_service, scan_service
+from ..services.audit_service import mark_request_target
 
 
 router = APIRouter(tags=["projects"])
@@ -24,13 +25,16 @@ async def list_projects(db: Session = Depends(get_db), current_user: User = Depe
 
 @router.post("/projects", response_model=ProjectRead, status_code=201)
 async def create_project(
+    request: Request,
     payload: ProjectCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> ProjectRead:
     """Create a new project workspace."""
 
-    return project_service.create_project(db, payload, current_user)
+    project = project_service.create_project(db, payload, current_user)
+    mark_request_target(request, project.id)
+    return project
 
 
 @router.get("/projects/{project_id}", response_model=ProjectRead)
@@ -110,6 +114,7 @@ async def export_project_segmentation(project_id: UUID, db: Session = Depends(ge
 
 @router.post("/projects/{project_id}/labels", response_model=LabelRead, status_code=201)
 async def create_project_label(
+    request: Request,
     project_id: UUID,
     payload: LabelCreate,
     db: Session = Depends(get_db),
@@ -117,7 +122,9 @@ async def create_project_label(
 ) -> LabelRead:
     """Create a label inside a project."""
 
-    return project_service.create_label(db, project_id, payload, current_user)
+    label = project_service.create_label(db, project_id, payload, current_user)
+    mark_request_target(request, label.id)
+    return label
 
 
 @router.put("/labels/{label_id}", response_model=LabelRead)
