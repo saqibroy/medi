@@ -167,6 +167,15 @@ class SliceRead(BaseModel):
     image_base64: str
 
 
+class SliceUrlRead(BaseModel):
+    """Short-lived authorized URL for one derived preview object."""
+
+    scan_id: UUID
+    slice_index: int
+    url: str
+    expires_in_seconds: int
+
+
 class SliceDicomMetadataRead(BaseModel):
     """Teaching response that mimics key DICOM metadata for one image slice."""
 

@@ -84,6 +84,16 @@ unique `TOKEN_SECRET` of at least 32 characters, exact comma-separated HTTPS
 migrations run and refuses unsafe startup. Keep real values in the deployment
 secret manager, never in `.env.example`, images, or Git.
 
+Production scan storage also fails closed unless it uses a private S3 bucket
+with KMS encryption. Set `SCAN_STORAGE_BACKEND=s3`, `SCAN_STORAGE_BUCKET`,
+`SCAN_STORAGE_REGION`, `SCAN_STORAGE_SSE=aws:kms`, and
+`SCAN_STORAGE_KMS_KEY_ID`. `SCAN_STORAGE_SIGNED_URL_TTL_SECONDS` defaults to 300
+and is limited to 60-900 seconds. Supply AWS credentials through workload
+identity or the deployment secret manager, not repository files. The signed URL
+endpoint authorizes the current organization before minting a derived-preview
+URL; it never signs original uploads. Local development continues to use the
+private `scan_storage` volume and returns no local file URL.
+
 Bearer sessions are opaque, stored only as keyed token digests, expire after
 `SESSION_TTL_MINUTES` (480 by default), and are revoked by `POST /auth/logout`.
 `LOGIN_RATE_LIMIT_PER_MINUTE` and `SENSITIVE_RATE_LIMIT_PER_MINUTE` configure the

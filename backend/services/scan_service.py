@@ -10,6 +10,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
@@ -19,15 +20,21 @@ from sqlalchemy.orm import Session
 
 from ..models import Annotation, Project, Scan, User
 from ..schemas import ScanCreate
+from ..settings import get_settings
 from .imaging_service import ImagingIngestionError, build_dicom_scan_profile, build_dicom_zip_scan_profile, build_initial_scan_profile, build_nifti_scan_profile, detect_source_format, validate_upload_hint, validate_upload_size
-from .storage_service import LocalPrivateStorage, scan_prefix
+from .storage_service import PrivateStorage, get_private_storage, scan_prefix
 
 
 STORAGE_ROOT = Path(__file__).resolve().parents[1] / "data" / "sample_scan"
 
 
-def _storage() -> LocalPrivateStorage:
-    return LocalPrivateStorage(STORAGE_ROOT)
+def _storage() -> PrivateStorage:
+    return get_private_storage(STORAGE_ROOT)
+
+
+def _store_generated_previews(storage: PrivateStorage, preview_prefix: str, preview_root: Path) -> None:
+    for preview_path in preview_root.glob("*.png"):
+        storage.put_bytes(f"{preview_prefix}/{preview_path.name}", preview_path.read_bytes())
 
 
 def list_scans(db: Session, project_id: UUID | None = None, current_user: User | None = None) -> list[Scan]:
@@ -184,14 +191,17 @@ def create_uploaded_scan_for_user(
     preview_prefix = f"{prefix}/derived/preview"
     storage = _storage()
     storage.put_bytes(original_key, content)
-    scan_profile = _build_uploaded_scan_profile(
-        safe_original_name,
-        content,
-        modality,
-        num_slices,
-        Path(prefix),
-        storage.local_path(preview_prefix),
-    )
+    with TemporaryDirectory(prefix="medi-preview-") as temporary_directory:
+        preview_root = Path(temporary_directory)
+        scan_profile = _build_uploaded_scan_profile(
+            safe_original_name,
+            content,
+            modality,
+            num_slices,
+            Path(prefix),
+            preview_root,
+        )
+        _store_generated_previews(storage, preview_prefix, preview_root)
 
     scan = Scan(
         id=scan_id,
@@ -221,14 +231,17 @@ def reprocess_scan_for_user(db: Session, scan_id: UUID, current_user: User) -> S
     content = storage.get_bytes(scan.file_path)
     preview_prefix = f"{scan.storage_key}/derived/preview"
     storage.delete_prefix(preview_prefix)
-    scan_profile = _build_uploaded_scan_profile(
-        PurePosixPath(scan.file_path).name,
-        content,
-        scan.modality,
-        scan.num_slices,
-        Path(scan.storage_key),
-        storage.local_path(preview_prefix),
-    )
+    with TemporaryDirectory(prefix="medi-preview-") as temporary_directory:
+        preview_root = Path(temporary_directory)
+        scan_profile = _build_uploaded_scan_profile(
+            PurePosixPath(scan.file_path).name,
+            content,
+            scan.modality,
+            scan.num_slices,
+            Path(scan.storage_key),
+            preview_root,
+        )
+        _store_generated_previews(storage, preview_prefix, preview_root)
     for field_name, value in scan_profile.items():
         setattr(scan, field_name, value)
     scan.num_slices = scan_profile["depth"] or scan.num_slices
@@ -286,6 +299,29 @@ def get_slice_image_base64_for_user(db: Session, scan_id: UUID, slice_index: int
     """Return a slice after checking scan access."""
 
     return _get_slice_image_base64(get_scan_for_user_or_404(db, scan_id, current_user), slice_index)
+
+
+def get_slice_signed_url_for_user(db: Session, scan_id: UUID, slice_index: int, current_user: User) -> dict:
+    """Authorize one derived preview and return a short-lived S3 GET URL."""
+
+    scan = get_scan_for_user_or_404(db, scan_id, current_user)
+    if scan.ingestion_status != "ready" or slice_index < 0 or slice_index >= scan.num_slices:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview not found")
+    if not scan.storage_key or not scan.storage_key.startswith(f"org/{current_user.organization_id}/"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview not found")
+    preview_key = f"{scan.storage_key}/derived/preview/{slice_index:06d}.png"
+    storage = _storage()
+    if not storage.exists(preview_key):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Preview not found")
+    settings = get_settings()
+    if settings.scan_storage_backend != "s3":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Signed preview URLs require S3 storage")
+    return {
+        "scan_id": scan.id,
+        "slice_index": slice_index,
+        "url": storage.signed_get_url(preview_key, settings.scan_storage_signed_url_ttl_seconds),
+        "expires_in_seconds": settings.scan_storage_signed_url_ttl_seconds,
+    }
 
 
 def get_slice_dicom_metadata(db: Session, scan_id: UUID, slice_index: int) -> dict:

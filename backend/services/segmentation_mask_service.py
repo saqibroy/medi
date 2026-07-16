@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Annotation, AnnotationHistory, Project, Scan, SegmentationMask, User
 from .annotation_service import get_annotation_for_user_or_404
-from .storage_service import LocalPrivateStorage, mask_key
+from .storage_service import PrivateStorage, get_private_storage, mask_key
 
 
 MASK_STORAGE_ROOT = Path("backend/data/sample_scan/segmentation_masks")
@@ -69,8 +69,8 @@ def _validate_png_mask(content: bytes, scan: Scan) -> tuple[int, int]:
     return width, height
 
 
-def _storage() -> LocalPrivateStorage:
-    return LocalPrivateStorage(MASK_STORAGE_ROOT)
+def _storage() -> PrivateStorage:
+    return get_private_storage(MASK_STORAGE_ROOT)
 
 
 def _get_existing_mask(db: Session, annotation_id: UUID, slice_index: int) -> SegmentationMask | None:
