@@ -1,8 +1,8 @@
 # Privacy Operations Plan
 
-Status: repository implementation, local verification, and pull-request checks
-complete on 2026-07-16; merge/main verification and target deployment evidence
-remain.
+Status: repository implementation, local verification, pull-request #14 merge,
+and post-merge `main` checks complete on 2026-07-16; target deployment evidence
+remains.
 
 This increment creates data-minimized operational evidence for privacy review
 and data-subject requests. It does not decide lawful basis, approve a DPIA,
@@ -48,7 +48,7 @@ system.
   infrastructure linting, and rebuilt Compose health checks.
 - [x] Record a live synthetic-only governance smoke test; do not enter a real
   patient, participant, staff, or customer identifier.
-- [~] Pull-request #14 checks passed; post-merge `main` verification remains.
+- [x] Pull-request #14 and post-merge `main` checks passed.
 
 Local evidence:
 
@@ -73,7 +73,8 @@ Local evidence:
   produced a signed audit event. Two-person and deletion execution paths stayed
   isolated to automated tests.
 - GitHub pull-request #14 passed backend, frontend, PostgreSQL migration,
-  encrypted recovery, and infrastructure jobs before merge.
+  encrypted recovery, and infrastructure jobs before merge. It was merged as
+  `5eced9d`; post-merge `main` run `29520480925` passed the same five jobs.
 
 ## Remaining Deployment Gates
 
