@@ -1,4 +1,15 @@
 services:
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   db:
     image: postgres:16-alpine
     environment:
@@ -23,12 +34,17 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/medical_annotations}
       TOKEN_SECRET: ${TOKEN_SECRET:-dev-token-secret-change-before-production}
+      CSRF_SECRET: ${CSRF_SECRET:-dev-csrf-secret-change-before-production}
       AUDIT_SIGNING_KEY: ${AUDIT_SIGNING_KEY:-dev-audit-signing-key-change-before-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:8080,http://127.0.0.1:8080}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
       SESSION_TTL_MINUTES: ${SESSION_TTL_MINUTES:-480}
       LOGIN_RATE_LIMIT_PER_MINUTE: ${LOGIN_RATE_LIMIT_PER_MINUTE:-10}
       SENSITIVE_RATE_LIMIT_PER_MINUTE: ${SENSITIVE_RATE_LIMIT_PER_MINUTE:-60}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
+      RATE_LIMIT_BACKEND: ${RATE_LIMIT_BACKEND:-redis}
+      RATE_LIMIT_REDIS_URL: ${RATE_LIMIT_REDIS_URL:-redis://redis:6379/0}
       SCAN_STORAGE_BACKEND: ${SCAN_STORAGE_BACKEND:-local}
       SCAN_STORAGE_ROOT: ${SCAN_STORAGE_ROOT:-/app/backend/data/sample_scan}
       SCAN_STORAGE_BUCKET: ${SCAN_STORAGE_BUCKET:-}
@@ -39,6 +55,8 @@ services:
       SCAN_STORAGE_KMS_KEY_ID: ${SCAN_STORAGE_KMS_KEY_ID:-}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]

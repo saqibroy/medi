@@ -46,7 +46,7 @@ class User(Base):
 
 
 class UserSession(Base):
-    """Opaque, revocable bearer session; never stores the raw credential."""
+    """Opaque, revocable session; never stores the raw credential."""
 
     __tablename__ = "user_sessions"
 

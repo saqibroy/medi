@@ -81,11 +81,13 @@ migrations, seeds synthetic demo users, and stores uploaded scan files in the
 you need to override its local settings.
 
 For production, set `APP_ENV=production`, a non-development `DATABASE_URL`, a
-unique `TOKEN_SECRET` of at least 32 characters, a separate secret
-`AUDIT_SIGNING_KEY` of at least 32 characters, exact comma-separated HTTPS
-`CORS_ORIGINS`, and `SEED_DEMO_DATA=false`. The backend validates these before
-migrations run and refuses unsafe startup. Keep real values in the deployment
-secret manager, never in `.env.example`, images, or Git.
+unique `TOKEN_SECRET` of at least 32 characters, distinct `CSRF_SECRET` and
+`AUDIT_SIGNING_KEY` values of at least 32 characters, exact comma-separated
+HTTPS `CORS_ORIGINS`, `SEED_DEMO_DATA=false`, `SESSION_COOKIE_SECURE=true`,
+`RATE_LIMIT_BACKEND=redis`, and an encrypted `rediss://` connection in
+`RATE_LIMIT_REDIS_URL`. The backend validates these before migrations run and
+refuses unsafe startup. Keep real values in the deployment secret manager,
+never in `.env.example`, images, or Git.
 
 Production scan storage also fails closed unless it uses a private S3 bucket
 with KMS encryption. Set `SCAN_STORAGE_BACKEND=s3`, `SCAN_STORAGE_BUCKET`,
@@ -103,12 +105,21 @@ backup/restore/deletion evidence procedures are in
 `STORAGE_OPERATIONS_RUNBOOK.md`. Retention parameters intentionally have no
 production defaults and require explicit approval.
 
-Bearer sessions are opaque, stored only as keyed token digests, expire after
+Browser sessions are opaque, stored only as keyed token digests in PostgreSQL
+and as `HttpOnly`, `SameSite` cookies in the browser, expire after
 `SESSION_TTL_MINUTES` (480 by default), and are revoked by `POST /auth/logout`.
-`LOGIN_RATE_LIMIT_PER_MINUTE` and `SENSITIVE_RATE_LIMIT_PER_MINUTE` configure the
-single-process safety baseline. A horizontally scaled production deployment
-still requires shared rate-limit enforcement at the ingress or application
-layer.
+State-changing cookie requests require a signed, session-bound CSRF cookie and
+header pair. Production uses `Secure`, `__Host-` cookies; the development names
+exist only because local HTTP cannot set `Secure` cookies. Explicit bearer
+headers remain supported for non-browser clients, but login never returns the
+raw credential in JSON.
+
+`LOGIN_RATE_LIMIT_PER_MINUTE` and `SENSITIVE_RATE_LIMIT_PER_MINUTE` configure
+shared Redis counters in Compose and production. Rate-limit identities are
+keyed hashes rather than raw client addresses, and protected routes fail closed
+if the shared production limiter is unavailable. Managed Redis provisioning,
+authentication, high availability, and outage evidence remain deployment gates
+in `SESSION_AND_RATE_LIMIT_PLAN.md`.
 
 Security-relevant authentication, imaging, export, annotation, and
 administrative operations are written to an append-only audit table. Each row

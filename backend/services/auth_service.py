@@ -11,7 +11,7 @@ from ..security import create_access_token, verify_password
 
 
 def authenticate_user(db: Session, email: str, password: str) -> tuple[str, User, datetime]:
-    """Validate credentials and return a bearer token plus user."""
+    """Validate credentials and return a raw session for cookie issuance."""
 
     user = db.scalar(select(User).where(User.email == email.lower(), User.is_active.is_(True)))
     if user is None or not verify_password(password, user.password_hash):

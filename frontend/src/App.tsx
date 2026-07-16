@@ -6,7 +6,7 @@
 
 import { FormEvent, Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
-import { getMe, listUsers, login, logout } from "./api/authApi";
+import { getCsrfToken, getMe, listUsers, login, logout } from "./api/authApi";
 import { createProject, createProjectLabel, deleteProjectLabel, getProjectStats, listProjectLabels, listProjects, updateProject, updateProjectLabel } from "./api/projectsApi";
 import { createScan, getScanStats, uploadScan } from "./api/scansApi";
 import { AnnotationList } from "./components/AnnotationList";
@@ -40,7 +40,7 @@ function ViewerFallback() {
 
 export default function App() {
   /** Own global page state and pass focused props down to child components. */
-  const [token, setToken] = useState(() => window.localStorage.getItem("medi_token") ?? "");
+  const [csrfToken, setCsrfToken] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -65,7 +65,7 @@ export default function App() {
   const [windowWidth, setWindowWidth] = useState(1200);
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
 
-  const { scans, selectedScan, sliceIndex, sliceImage, isLoading: isScansLoading, error, selectScan, addScan, setSliceIndex } = useScan(selectedProject?.id, token || undefined);
+  const { scans, selectedScan, sliceIndex, sliceImage, isLoading: isScansLoading, error, selectScan, addScan, setSliceIndex } = useScan(selectedProject?.id, csrfToken || undefined);
   const {
     annotations,
     annotationHistory,
@@ -79,7 +79,7 @@ export default function App() {
     saveSegmentationMask,
     loadSegmentationMask,
     removeSegmentationMask,
-  } = useAnnotations(selectedScan?.id, token, user?.full_name ?? "Reviewer");
+  } = useAnnotations(selectedScan?.id, csrfToken, user?.full_name ?? "Reviewer");
   const selectedLabel = useMemo(() => labels.find((label) => label.id === selectedLabelId) ?? labels[0] ?? null, [labels, selectedLabelId]);
   const canManageWorkspace = user?.role === "admin";
   const canAnnotate = user?.role === "admin" || user?.role === "annotator";
@@ -117,82 +117,85 @@ export default function App() {
   const defaultWindowWidth = selectedScan?.window_width ?? 1200;
 
   useEffect(() => {
-    if (!token) return;
-    getMe(token)
-      .then(setUser)
-      .catch(() => {
-        window.localStorage.removeItem("medi_token");
-        setToken("");
-      });
-  }, [token]);
+    getCsrfToken()
+      .then(async (issuedToken) => {
+        setCsrfToken(issuedToken);
+        try {
+          setUser(await getMe());
+        } catch {
+          setUser(null);
+        }
+      })
+      .catch((apiError: Error) => setAuthError(apiError.message));
+  }, []);
 
   useEffect(() => {
-    if (!token || !user) {
+    if (!csrfToken || !user) {
       setWorkspaceUsers([]);
       setUsersError(null);
       return;
     }
-    listUsers(token)
+    listUsers(csrfToken)
       .then(setWorkspaceUsers)
       .catch((apiError: Error) => setUsersError(apiError.message));
-  }, [token, user]);
+  }, [csrfToken, user]);
 
   useEffect(() => {
-    if (!token || !user) return;
+    if (!csrfToken || !user) return;
     setIsProjectsLoading(true);
     setProjectsError(null);
-    listProjects(token)
+    listProjects(csrfToken)
       .then((loadedProjects) => {
         setProjects(loadedProjects);
         setSelectedProject((current) => current ?? loadedProjects[0] ?? null);
       })
       .catch((apiError: Error) => setProjectsError(apiError.message))
       .finally(() => setIsProjectsLoading(false));
-  }, [token, user]);
+  }, [csrfToken, user]);
 
   useEffect(() => {
-    if (!token || !selectedProject) {
+    if (!csrfToken || !selectedProject) {
       setLabels([]);
       setLabelsError(null);
       return;
     }
     setIsLabelsLoading(true);
     setLabelsError(null);
-    listProjectLabels(selectedProject.id, token)
+    listProjectLabels(selectedProject.id, csrfToken)
       .then((loadedLabels) => {
         setLabels(loadedLabels);
         setSelectedLabelId(loadedLabels[0]?.id ?? "");
       })
       .catch((apiError: Error) => setLabelsError(apiError.message))
       .finally(() => setIsLabelsLoading(false));
-  }, [token, selectedProject]);
+  }, [csrfToken, selectedProject]);
 
   useEffect(() => {
-    if (!token || !selectedProject) {
+    if (!csrfToken || !selectedProject) {
       setProjectReviewStats(null);
       setReviewStatsError(null);
       return;
     }
     setIsProjectStatsLoading(true);
     setReviewStatsError(null);
-    getProjectStats(selectedProject.id, token)
+    getProjectStats(selectedProject.id, csrfToken)
       .then(setProjectReviewStats)
       .catch((apiError: Error) => setReviewStatsError(apiError.message))
       .finally(() => setIsProjectStatsLoading(false));
-  }, [annotations, selectedProject, token]);
+  }, [annotations, selectedProject, csrfToken]);
 
   useEffect(() => {
-    if (!token || !selectedScan || selectedScan.ingestion_status !== "ready") {
+    if (!csrfToken || !selectedScan || selectedScan.ingestion_status !== "ready") {
       setScanReviewStats(null);
       return;
     }
     setIsScanStatsLoading(true);
     setReviewStatsError(null);
-    getScanStats(selectedScan.id, token)
+    getScanStats(selectedScan.id, csrfToken)
       .then(setScanReviewStats)
       .catch((apiError: Error) => setReviewStatsError(apiError.message))
       .finally(() => setIsScanStatsLoading(false));
-  }, [annotations, selectedScan, token]);
+  }, [annotations, selectedScan, csrfToken]);
 
   useEffect(() => {
     setWindowCenter(defaultWindowCenter);
@@ -220,9 +223,9 @@ export default function App() {
     event.preventDefault();
     setAuthError(null);
     try {
-      const response = await login(loginEmail, loginPassword);
-      window.localStorage.setItem("medi_token", response.access_token);
-      setToken(response.access_token);
+      const loginCsrfToken = csrfToken || await getCsrfToken();
+      const response = await login(loginEmail, loginPassword, loginCsrfToken);
+      setCsrfToken(response.csrf_token);
       setUser(response.user);
     } catch (apiError) {
       setAuthError(apiError instanceof Error ? apiError.message : "Login failed");
@@ -231,16 +234,16 @@ export default function App() {
 
   async function handleLogout(): Promise<void> {
     try {
-      if (token) await logout(token);
+      if (csrfToken) await logout(csrfToken);
     } finally {
-      window.localStorage.removeItem("medi_token");
-      setToken("");
+      setCsrfToken("");
       setUser(null);
       setProjects([]);
       setSelectedProject(null);
       setLabels([]);
       setProjectsError(null);
       setLabelsError(null);
+      getCsrfToken().then(setCsrfToken).catch((apiError: Error) => setAuthError(apiError.message));
     }
   }
 
@@ -249,35 +252,35 @@ export default function App() {
   }
 
   async function handleCreateProject(payload: ProjectPayload): Promise<void> {
-    if (!token) return;
-    const created = await createProject(token, payload);
+    if (!csrfToken) return;
+    const created = await createProject(csrfToken, payload);
     setProjects((current) => [created, ...current]);
     setSelectedProject(created);
   }
 
   async function handleUpdateProject(projectId: string, payload: ProjectPayload): Promise<void> {
-    if (!token) return;
-    const updated = await updateProject(projectId, token, payload);
+    if (!csrfToken) return;
+    const updated = await updateProject(projectId, csrfToken, payload);
     setProjects((current) => current.map((project) => (project.id === updated.id ? updated : project)));
     setSelectedProject((current) => (current?.id === updated.id ? updated : current));
   }
 
   async function handleCreateLabel(payload: { name: string; color: string; description: string | null }): Promise<void> {
-    if (!selectedProject || !token) return;
-    const created = await createProjectLabel(selectedProject.id, token, payload);
+    if (!selectedProject || !csrfToken) return;
+    const created = await createProjectLabel(selectedProject.id, csrfToken, payload);
     setLabels((current) => [...current, created].sort((left, right) => left.name.localeCompare(right.name)));
     setSelectedLabelId(created.id);
   }
 
   async function handleUpdateLabel(labelId: string, payload: { name: string; color: string; description: string | null }): Promise<void> {
-    if (!token) return;
-    const updated = await updateProjectLabel(labelId, token, payload);
+    if (!csrfToken) return;
+    const updated = await updateProjectLabel(labelId, csrfToken, payload);
     setLabels((current) => current.map((label) => (label.id === updated.id ? updated : label)).sort((left, right) => left.name.localeCompare(right.name)));
   }
 
   async function handleDeleteLabel(labelId: string): Promise<void> {
-    if (!token) return;
-    await deleteProjectLabel(labelId, token);
+    if (!csrfToken) return;
+    await deleteProjectLabel(labelId, csrfToken);
     setLabels((current) => {
       const remaining = current.filter((label) => label.id !== labelId);
       if (selectedLabelId === labelId) {
@@ -288,14 +291,14 @@ export default function App() {
   }
 
   async function handleCreateScan(payload: ScanCreate): Promise<void> {
-    if (!token || !selectedProject) return;
-    const created = await createScan({ ...payload, project_id: selectedProject.id }, token);
+    if (!csrfToken || !selectedProject) return;
+    const created = await createScan({ ...payload, project_id: selectedProject.id }, csrfToken);
     addScan(created);
   }
 
   async function handleUploadScan(payload: ScanUpload): Promise<void> {
-    if (!token || !selectedProject) return;
-    const uploaded = await uploadScan({ ...payload, project_id: selectedProject.id }, token);
+    if (!csrfToken || !selectedProject) return;
+    const uploaded = await uploadScan({ ...payload, project_id: selectedProject.id }, csrfToken);
     addScan(uploaded);
   }
 
@@ -519,8 +522,8 @@ export default function App() {
         <SliceNavigator sliceIndex={sliceIndex} maxSliceIndex={Math.max((selectedScan?.num_slices ?? 1) - 1, 0)} onSliceChange={setSliceIndex} />
       </div>
       <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white lg:h-full">
-        <ScanMetadataPanel scanId={selectedScan?.id} token={token} />
-        <ExportPanel projectId={selectedProject?.id} scanId={selectedScan?.id} token={token} />
+        <ScanMetadataPanel scanId={selectedScan?.id} csrfToken={csrfToken} />
+        <ExportPanel projectId={selectedProject?.id} scanId={selectedScan?.id} csrfToken={csrfToken} />
         <AnnotationList
           annotations={annotations}
           annotationHistory={annotationHistory}

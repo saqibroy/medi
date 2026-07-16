@@ -26,9 +26,11 @@ def anyio_backend() -> str:
 async def test_audit_api_is_admin_only_tenant_scoped_and_data_minimized(tmp_path: Path) -> None:
     app = build_test_app(tmp_path)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        anonymous_csrf = (await client.get("/auth/csrf")).json()["csrf_token"]
         failed_login = await client.post(
             "/auth/login",
             json={"email": "unknown-patient@example.test", "password": "never-store-this-password"},
+            headers={"X-CSRF-Token": anonymous_csrf},
         )
         assert failed_login.status_code == 401
 

@@ -132,8 +132,8 @@ Status: in progress. Detailed gates: `PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
 - Error tracking.
 - [x] Database-aware backend readiness/liveness and frontend health checks.
 - [x] PostgreSQL migration/rollback runbook and isolated CI rehearsal.
-- [x] Configurable process-local login and expensive-route rate-limit baseline;
-  shared multi-instance enforcement remains a production gate.
+- [x] Shared Redis login and expensive-route rate enforcement with hashed
+  identities and fail-closed production behavior.
 - Backups and restore documentation.
 - Admin tools for organizations, users, and projects.
 
@@ -205,5 +205,9 @@ Definition of done:
    controls, lifecycle tagging, read-only verification, and backup/restore/
    deletion procedures. Cloud deployment and drill evidence remain dependent
    on an approved AWS account, retention values, and operators.
-3. Next: replace process-local rate limits with shared production enforcement
-   and move browser sessions to Secure, HttpOnly cookies with CSRF protection.
+3. Completed repository boundary: shared Redis rate enforcement plus HttpOnly,
+   SameSite browser sessions and signed, session-bound CSRF protection.
+   Production TLS/managed-Redis evidence remains in
+   `SESSION_AND_RATE_LIMIT_PLAN.md`.
+4. Next: add immutable dataset releases with scan object versions, checksums,
+   label snapshots, and approved annotation revision manifests.

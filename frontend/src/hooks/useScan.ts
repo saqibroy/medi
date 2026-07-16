@@ -10,7 +10,7 @@ import { listProjectScans } from "../api/projectsApi";
 import { getScanSlice } from "../api/scansApi";
 import type { Scan, SliceImage } from "../types/scan";
 
-export function useScan(projectId?: string, token?: string) {
+export function useScan(projectId?: string, csrfToken?: string) {
   /** Load scans, track selection, and fetch the current slice image. */
   const [scans, setScans] = useState<Scan[]>([]);
   const [selectedScan, setSelectedScan] = useState<Scan | null>(null);
@@ -22,7 +22,7 @@ export function useScan(projectId?: string, token?: string) {
   useEffect(() => {
     /** Initial load populates the left panel and selects the first scan. */
     let isMounted = true;
-    if (!projectId || !token) {
+    if (!projectId || !csrfToken) {
       setScans([]);
       setSelectedScan(null);
       setSliceImage(null);
@@ -33,7 +33,7 @@ export function useScan(projectId?: string, token?: string) {
     }
     setIsLoading(true);
     setError(null);
-    listProjectScans(projectId, token)
+    listProjectScans(projectId, csrfToken)
       .then((loadedScans) => {
         if (!isMounted) return;
         setScans(loadedScans);
@@ -45,11 +45,11 @@ export function useScan(projectId?: string, token?: string) {
     return () => {
       isMounted = false;
     };
-  }, [projectId, token]);
+  }, [projectId, csrfToken]);
 
   useEffect(() => {
     /** Every scan or slice change fetches a new image for the viewer. */
-    if (!selectedScan || !token) return;
+    if (!selectedScan || !csrfToken) return;
     if (selectedScan.ingestion_status !== "ready") {
       setSliceImage(null);
       setError(null);
@@ -59,7 +59,7 @@ export function useScan(projectId?: string, token?: string) {
     setIsLoading(true);
     setError(null);
     setSliceImage(null);
-    getScanSlice(selectedScan.id, sliceIndex, token)
+    getScanSlice(selectedScan.id, sliceIndex, csrfToken)
       .then((image) => {
         if (isMounted) setSliceImage(image);
       })
@@ -72,7 +72,7 @@ export function useScan(projectId?: string, token?: string) {
     return () => {
       isMounted = false;
     };
-  }, [selectedScan, sliceIndex, token]);
+  }, [selectedScan, sliceIndex, csrfToken]);
 
   const selectScan = useCallback((scan: Scan) => {
     /** Reset the slice when switching studies so the viewer starts at the front. */

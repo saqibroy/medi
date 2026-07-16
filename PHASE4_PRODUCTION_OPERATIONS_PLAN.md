@@ -49,8 +49,10 @@ Not production-ready yet:
 
 - Development Compose intentionally seeds synthetic demo data; production
   deployment must set `SEED_DEMO_DATA=false` and now fails startup if it does not.
-- Bearer sessions now have absolute expiry and logout revocation, but active
-  session inventory, idle timeout, and secure-cookie transport remain absent.
+- Database-backed sessions have absolute expiry and logout revocation. Browser
+  credentials use HttpOnly, SameSite cookies plus signed CSRF protection, and
+  production configuration requires Secure host-only cookies. Real-ingress TLS
+  evidence, active-session inventory, and idle timeout remain absent.
 - Production configuration now requires an explicit token secret and exact CORS
   origins; local-only defaults remain available only for development.
 - Production code supports private KMS-encrypted S3 storage, but target-account
@@ -63,9 +65,10 @@ Not production-ready yet:
 - Dataset releases and annotation snapshots are not versioned.
 - Backup, restore, retention, legal-hold, and verified deletion procedures are
   not implemented.
-- Request logging is structured and payload-safe, and process-local rate limits
-  exist; security audit records, shared rate enforcement, monitoring, and error
-  tracking remain absent.
+- Request logging is structured and payload-safe, append-only security audit
+  records exist, and Redis provides shared rate enforcement with hashed keys.
+  Managed-Redis deployment evidence, monitoring, and error tracking remain
+  absent.
 
 ## Medical Image Intake And De-identification
 
@@ -118,8 +121,9 @@ Acceptance evidence:
 
 - [x] Replace perpetual bearer tokens with database-backed opaque sessions that
   store only keyed token digests and enforce configurable absolute expiry.
-- [ ] Prefer `Secure`, `HttpOnly`, `SameSite` cookies for the browser deployment,
-  with CSRF protection where required.
+- [x] Use `Secure`, `HttpOnly`, `SameSite` cookies for browser sessions with
+  signed, session-bound double-submit CSRF protection. Production ingress
+  verification remains tracked in `SESSION_AND_RATE_LIMIT_PLAN.md`.
 - [ ] Add idle timeout and active-session inventory. Logout revocation,
   inactive-user enforcement, and absolute expiry are implemented.
 - [x] Configure exact allowed origins from environment variables.
@@ -128,6 +132,17 @@ Acceptance evidence:
 - [ ] Add object-level authorization tests for every scan, mask, export, signed
   URL, audit, and administrative endpoint.
 - [ ] Plan SSO/MFA for deployments handling sensitive or regulated data.
+
+## Abuse Protection
+
+- [x] Use atomic Redis counters for login and expensive upload/reprocess/export
+  routes across API instances; retain process-local memory only for tests and
+  explicit development use.
+- [x] Hash direct peer identities before storing rate keys, do not trust proxy
+  forwarding headers by default, and fail closed if production Redis is down.
+- [ ] Provision authenticated, encrypted, highly available managed Redis and
+  verify failover, alerting, capacity, and retention behavior in the target
+  environment.
 
 ## Immutable Audit Records
 
@@ -261,8 +276,10 @@ Useful primary references:
 - [x] Add structured JSON request logs with server-issued correlation IDs and an
   allowlist that excludes bodies, headers, query values, and exception text.
 - [ ] Add error tracking that strips sensitive request bodies and metadata.
-- [ ] Replace the process-local login and expensive-route limits with shared,
-  per-user, per-organization enforcement for multi-instance production.
+- [x] Replace process-local login and expensive-route limits with shared,
+  direct-peer Redis enforcement for multi-instance production.
+- [ ] Add per-user and per-organization quotas after product tiers, service
+  accounts, and trusted-proxy identity rules are approved.
 - [ ] Add database connection-pool settings, statement timeouts, and slow-query
   visibility.
 - [x] Define migration preflight, backup/restore rehearsal, forward deployment,
@@ -284,11 +301,10 @@ Useful primary references:
    isolated upgrade/downgrade/upgrade cycle in CI.
 4. [x] Add structured request logging, request IDs, and redaction. Error
    tracking remains a separate controlled integration.
-5. [x] Add database-backed expiring sessions, logout revocation, exact CORS, and
-   a configurable process-local rate-limit baseline for login, upload,
-   reprocessing, and export routes. Shared multi-instance enforcement, idle
-   timeout, active-session inventory, and secure-cookie transport remain
-   explicit production gates above.
+5. [x] Add database-backed expiring sessions, logout revocation, exact CORS,
+   HttpOnly/SameSite browser cookies, signed CSRF protection, and shared Redis
+   rate limits for login, upload, reprocessing, and exports. Target TLS/managed
+   Redis evidence, idle timeout, and active-session inventory remain gates.
 6. [x] Implement the storage abstraction and private S3 backend with
    tenant-scoped keys, traversal-safe local storage, KMS-encrypted writes,
    original/preview/reprocess/mask integration, and authorized short-lived
@@ -297,11 +313,16 @@ Useful primary references:
 7. [x] Add quarantine plus the versioned `medi-deid-screening-v1` DICOM/NIfTI
    gate, including neutral object names, non-viewable unsafe uploads, safe
    decision evidence, fail-safe legacy migration, and UI intake status.
-8. [ ] Next: add immutable security audit events.
+8. [x] Add append-only, tenant-scoped security audit events with integrity
+   hashes and database mutation guards. WORM export remains a production gate.
 9. [ ] Add dataset releases and annotation revision manifests.
 10. [ ] Implement backup/restore drills, retention, legal hold, and deletion.
 11. [ ] Complete GDPR/DPIA/processor evidence for the target deployment.
 12. [ ] Run a production-readiness review and close every applicable gate.
+
+Current repository increment complete: shared rate enforcement and secure
+browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
+Next repository increment: immutable dataset releases and annotation manifests.
 
 ## Phase 4 Exit Criteria
 

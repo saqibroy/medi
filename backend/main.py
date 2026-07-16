@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .audit_middleware import SecurityAuditMiddleware
+from .csrf import CsrfProtectionMiddleware
 from .observability import RequestLoggingMiddleware, configure_logging
 from .rate_limit import RequestRateLimitMiddleware
 from .routers import annotations, audit_events, auth, health, projects, scans, users
@@ -31,21 +32,25 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(
+        RequestRateLimitMiddleware,
+        login_limit=settings.login_rate_limit_per_minute,
+        sensitive_limit=settings.sensitive_rate_limit_per_minute,
+        backend=settings.rate_limit_backend,
+        redis_url=settings.rate_limit_redis_url,
+        identity_secret=settings.token_secret,
+    )
+    app.add_middleware(CsrfProtectionMiddleware, settings=settings)
+    app.add_middleware(SecurityAuditMiddleware)
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(
         CORSMiddleware,
-        # Development defaults are deliberately local-only. Production must set
-        # an exact, reviewed origin list through CORS_ORIGINS.
+        # Keep CORS outermost so safe rate-limit and CSRF errors remain readable
+        # by the exact configured browser origins.
         allow_origins=list(settings.cors_origins),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(
-        RequestRateLimitMiddleware,
-        login_limit=settings.login_rate_limit_per_minute,
-        sensitive_limit=settings.sensitive_rate_limit_per_minute,
-    )
-    app.add_middleware(SecurityAuditMiddleware)
-    app.add_middleware(RequestLoggingMiddleware)
 
     app.include_router(auth.router)
     app.include_router(audit_events.router)

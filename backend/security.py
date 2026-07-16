@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models import User, UserSession
 from .settings import get_settings
+from .csrf import session_cookie_name
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -83,13 +84,14 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """FastAPI dependency that resolves the bearer token into an active user."""
+    """Resolve an explicit API bearer or the browser's HttpOnly session cookie."""
 
-    if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
-    user_session = resolve_access_session(db, credentials.credentials)
+    raw_token = credentials.credentials if credentials is not None else request.cookies.get(session_cookie_name())
+    if raw_token is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing session")
+    user_session = resolve_access_session(db, raw_token)
     if user_session is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired bearer token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
     from .services.audit_service import mark_request_actor
 
     mark_request_actor(request, user_session.user, user_session.id)

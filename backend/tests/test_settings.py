@@ -23,12 +23,21 @@ def test_development_defaults_are_local_and_seed_demo_data() -> None:
                 "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
                 "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
             },
+            "CSRF_SECRET",
+        ),
+        (
+            {
+                "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
+                "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+                "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
+            },
             "AUDIT_SIGNING_KEY",
         ),
         (
             {
                 "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
                 "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+                "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
                 "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
             },
             "CORS_ORIGINS",
@@ -37,6 +46,7 @@ def test_development_defaults_are_local_and_seed_demo_data() -> None:
             {
                 "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
                 "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+                "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
                 "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
                 "CORS_ORIGINS": "https://medi.example.org",
                 "SEED_DEMO_DATA": "true",
@@ -58,9 +68,12 @@ def test_production_accepts_explicit_safe_settings() -> None:
             "APP_ENV": "production",
             "DATABASE_URL": "postgresql+psycopg://medi_app:strong-password@db:5432/medi",
             "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+            "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
             "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
             "CORS_ORIGINS": "https://medi.example.org,https://review.medi.example.org",
             "SEED_DEMO_DATA": "false",
+            "RATE_LIMIT_BACKEND": "redis",
+            "RATE_LIMIT_REDIS_URL": "rediss://redis.example.org:6380/0",
             "SCAN_STORAGE_BACKEND": "s3",
             "SCAN_STORAGE_BUCKET": "medi-private-production",
             "SCAN_STORAGE_REGION": "eu-central-1",
@@ -74,6 +87,8 @@ def test_production_accepts_explicit_safe_settings() -> None:
     assert settings.cors_origins == ("https://medi.example.org", "https://review.medi.example.org")
     assert settings.scan_storage_backend == "s3"
     assert settings.scan_storage_sse == "aws:kms"
+    assert settings.session_cookie_secure is True
+    assert settings.rate_limit_backend == "redis"
 
 
 def test_production_rejects_local_or_unencrypted_storage() -> None:
@@ -81,9 +96,12 @@ def test_production_rejects_local_or_unencrypted_storage() -> None:
         "APP_ENV": "production",
         "DATABASE_URL": "postgresql+psycopg://medi_app:strong-password@db:5432/medi",
         "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+        "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
         "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
         "CORS_ORIGINS": "https://medi.example.org",
         "SEED_DEMO_DATA": "false",
+        "RATE_LIMIT_BACKEND": "redis",
+        "RATE_LIMIT_REDIS_URL": "rediss://redis.example.org:6380/0",
     }
     with pytest.raises(ConfigurationError, match="SCAN_STORAGE_BACKEND=s3"):
         get_settings(base)
@@ -116,3 +134,16 @@ def test_cors_origins_must_be_exact_http_origins(origins: str) -> None:
 def test_session_and_rate_limit_settings_reject_invalid_values(variable_name: str, value: str) -> None:
     with pytest.raises(ConfigurationError, match=variable_name):
         get_settings({variable_name: value})
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"RATE_LIMIT_BACKEND": "redis"}, "RATE_LIMIT_REDIS_URL"),
+        ({"SESSION_COOKIE_SAMESITE": "none"}, "SESSION_COOKIE_SAMESITE"),
+        ({"RATE_LIMIT_BACKEND": "database"}, "RATE_LIMIT_BACKEND"),
+    ],
+)
+def test_cookie_and_shared_rate_limit_settings_reject_unsafe_values(changes: dict[str, str], message: str) -> None:
+    with pytest.raises(ConfigurationError, match=message):
+        get_settings(changes)

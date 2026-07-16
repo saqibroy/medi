@@ -8,14 +8,14 @@ import { exportScanAsCoco, exportScanAsCsv, exportScanAsSegmentation, exportScan
 interface ExportPanelProps {
   projectId?: string;
   scanId?: string;
-  token: string;
+  csrfToken: string;
 }
 
 type ExportMode = "project" | "scan";
 type ExportFormat = "internal" | "csv" | "coco" | "yolo" | "segmentation";
 type ExportData = Record<string, unknown>;
 
-export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
+export function ExportPanel({ projectId, scanId, csrfToken }: ExportPanelProps) {
   /** Let developers inspect exactly what the ML team receives from the API. */
   const [mode, setMode] = useState<ExportMode>("project");
   const [format, setFormat] = useState<ExportFormat>("internal");
@@ -61,7 +61,7 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
 
   async function handleExport(): Promise<void> {
     /** Fetch approved annotation data for a training pipeline handoff. */
-    if (!token) return;
+    if (!csrfToken) return;
     if (mode === "project" && !projectId) return;
     if (mode === "scan" && !scanId) return;
     setIsLoading(true);
@@ -70,23 +70,23 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
       const response =
         mode === "project"
           ? format === "coco"
-            ? await exportProjectAsCoco(projectId as string, token)
+            ? await exportProjectAsCoco(projectId as string, csrfToken)
             : format === "csv"
-              ? await exportProjectAsCsv(projectId as string, token)
+              ? await exportProjectAsCsv(projectId as string, csrfToken)
             : format === "yolo"
-              ? await exportProjectAsYolo(projectId as string, token)
+              ? await exportProjectAsYolo(projectId as string, csrfToken)
             : format === "segmentation"
-              ? await exportProjectAsSegmentation(projectId as string, token)
-              : await exportProjectForMl(projectId as string, token)
+              ? await exportProjectAsSegmentation(projectId as string, csrfToken)
+              : await exportProjectForMl(projectId as string, csrfToken)
           : format === "coco"
-            ? await exportScanAsCoco(scanId as string, token)
+            ? await exportScanAsCoco(scanId as string, csrfToken)
             : format === "csv"
-              ? await exportScanAsCsv(scanId as string, token)
+              ? await exportScanAsCsv(scanId as string, csrfToken)
             : format === "yolo"
-              ? await exportScanAsYolo(scanId as string, token)
+              ? await exportScanAsYolo(scanId as string, csrfToken)
             : format === "segmentation"
-              ? await exportScanAsSegmentation(scanId as string, token)
-              : await exportScanForMl(scanId as string, token);
+              ? await exportScanAsSegmentation(scanId as string, csrfToken)
+              : await exportScanForMl(scanId as string, csrfToken);
       setExportData(response as ExportData);
     } catch (apiError) {
       setError(apiError instanceof Error ? apiError.message : "Export failed");
@@ -126,7 +126,7 @@ export function ExportPanel({ projectId, scanId, token }: ExportPanelProps) {
       {/* ML teams use this JSON to build datasets, check label quality, and feed training jobs. */}
       <button
         className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-        disabled={!token || isLoading || (mode === "project" ? !projectId : !scanId)}
+        disabled={!csrfToken || isLoading || (mode === "project" ? !projectId : !scanId)}
         onClick={handleExport}
       >
         {isLoading ? "Exporting..." : mode === "project" ? "Export Project Dataset" : "Export Selected Scan"}

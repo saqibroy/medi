@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.audit_middleware import SecurityAuditMiddleware
+from backend.csrf import CsrfProtectionMiddleware, csrf_cookie_name, session_cookie_name
 from backend.database import Base, get_db
 from backend.models import Annotation, Label, Organization, Project, Scan, User
 from backend.observability import RequestLoggingMiddleware
@@ -55,8 +57,16 @@ def build_test_app(storage_root: Path) -> FastAPI:
             db.close()
 
     app = FastAPI()
+    app.add_middleware(CsrfProtectionMiddleware)
     app.add_middleware(SecurityAuditMiddleware, session_factory=SessionLocal)
     app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.include_router(auth.router)
     app.include_router(audit_events.router)
     app.include_router(health.router)
@@ -154,15 +164,23 @@ def seed_workspace(db: Session) -> None:
 
 
 async def login(client: httpx.AsyncClient, email: str) -> str:
-    """Return a bearer token for a seeded user."""
+    """Return explicit cookie/CSRF material for one seeded user's session."""
 
-    response = await client.post("/auth/login", json={"email": email, "password": "password"})
+    csrf_response = await client.get("/auth/csrf")
+    csrf_token = csrf_response.json()["csrf_token"]
+    response = await client.post("/auth/login", json={"email": email, "password": "password"}, headers={"X-CSRF-Token": csrf_token})
     assert response.status_code == 200
-    return response.json()["access_token"]
+    session_token = response.cookies[session_cookie_name()]
+    bound_csrf_token = response.json()["csrf_token"]
+    return f"{session_token}|{bound_csrf_token}"
 
 
 def auth_headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+    session_token, csrf_token = token.split("|", 1)
+    return {
+        "Cookie": f"{session_cookie_name()}={session_token}; {csrf_cookie_name()}={csrf_token}",
+        "X-CSRF-Token": csrf_token,
+    }
 
 
 def private_scan_root(storage_root: Path, project_id: str, scan_id: str) -> Path:
@@ -187,10 +205,20 @@ def make_png_bytes(width: int, height: int, color: int = 255) -> bytes:
 @pytest.mark.anyio
 async def test_login_and_me_route(tmp_path: Path) -> None:
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
-        response = await client.post("/auth/login", json={"email": "admin@test.local", "password": "password"})
+        csrf_response = await client.get("/auth/csrf")
+        anonymous_csrf = csrf_response.json()["csrf_token"]
+        assert csrf_response.headers["Cache-Control"] == "no-store"
+        response = await client.post(
+            "/auth/login",
+            json={"email": "admin@test.local", "password": "password"},
+            headers={"X-CSRF-Token": anonymous_csrf},
+        )
         assert response.status_code == 200
         assert response.json()["expires_at"]
-        token = response.json()["access_token"]
+        assert "access_token" not in response.json()
+        assert response.headers["Cache-Control"] == "no-store"
+        token = f"{response.cookies[session_cookie_name()]}|{response.json()['csrf_token']}"
+        assert "HttpOnly" in response.headers["set-cookie"]
 
         response = await client.get("/auth/me", headers=auth_headers(token))
 
@@ -201,6 +229,44 @@ async def test_login_and_me_route(tmp_path: Path) -> None:
         assert logout.status_code == 204
         revoked = await client.get("/auth/me", headers=auth_headers(token))
         assert revoked.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_cookie_mutation_requires_session_bound_csrf(tmp_path: Path) -> None:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
+        token = await login(client, "admin@test.local")
+        session_token, csrf_token = token.split("|", 1)
+        cookies = {"Cookie": f"{session_cookie_name()}={session_token}; {csrf_cookie_name()}={csrf_token}"}
+
+        missing = await client.post(
+            "/projects",
+            json={"name": "Blocked", "modality": "MRI"},
+            headers={**cookies, "Origin": "http://localhost:5173"},
+        )
+        mismatched = await client.post(
+            "/projects",
+            json={"name": "Blocked", "modality": "MRI"},
+            headers={**cookies, "X-CSRF-Token": "wrong"},
+        )
+
+        assert missing.status_code == 403
+        assert mismatched.status_code == 403
+        assert missing.json() == {"detail": "CSRF validation failed"}
+        assert missing.headers["Access-Control-Allow-Origin"] == "http://localhost:5173"
+        assert missing.headers["Access-Control-Allow-Credentials"] == "true"
+
+
+@pytest.mark.anyio
+async def test_login_csrf_cannot_be_bypassed_with_a_bearer_header(tmp_path: Path) -> None:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
+        response = await client.post(
+            "/auth/login",
+            json={"email": "admin@test.local", "password": "password"},
+            headers={"Authorization": "Bearer attacker-controlled"},
+        )
+
+        assert response.status_code == 403
+        assert response.json() == {"detail": "CSRF validation failed"}
 
 
 @pytest.mark.anyio

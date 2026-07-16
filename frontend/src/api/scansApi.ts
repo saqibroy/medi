@@ -24,11 +24,12 @@ async function responseError(response: Response): Promise<Error> {
   return new Error(`API request failed: ${response.status} ${response.statusText}`);
 }
 
-async function request<T>(path: string, token: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, csrfToken: string, options?: RequestInit): Promise<T> {
   /** Fetch JSON and convert HTTP errors into useful exceptions for hooks. */
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...options?.headers },
     ...options,
+    credentials: "include",
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken, ...options?.headers },
   });
   if (!response.ok) {
     throw await responseError(response);
@@ -36,37 +37,37 @@ async function request<T>(path: string, token: string, options?: RequestInit): P
   return response.json() as Promise<T>;
 }
 
-export async function listScans(token: string): Promise<Scan[]> {
+export async function listScans(csrfToken: string): Promise<Scan[]> {
   /** Load all scans for the left panel. */
-  return request<Scan[]>("/scans", token);
+  return request<Scan[]>("/scans", csrfToken);
 }
 
-export async function getScan(scanId: string, token: string): Promise<Scan> {
+export async function getScan(scanId: string, csrfToken: string): Promise<Scan> {
   /** Load one scan's metadata for viewer configuration. */
-  return request<Scan>(`/scans/${scanId}`, token);
+  return request<Scan>(`/scans/${scanId}`, csrfToken);
 }
 
-export async function getScanSlice(scanId: string, sliceIndex: number, token: string): Promise<SliceImage> {
+export async function getScanSlice(scanId: string, sliceIndex: number, csrfToken: string): Promise<SliceImage> {
   /** Load one base64 PNG slice for the current viewport. */
-  return request<SliceImage>(`/scans/${scanId}/slice/${sliceIndex}`, token);
+  return request<SliceImage>(`/scans/${scanId}/slice/${sliceIndex}`, csrfToken);
 }
 
-export async function getScanMetadata(scanId: string, token: string): Promise<ScanMetadata> {
+export async function getScanMetadata(scanId: string, csrfToken: string): Promise<ScanMetadata> {
   /** Load parsed imaging metadata for the selected scan. */
-  return request<ScanMetadata>(`/scans/${scanId}/metadata`, token);
+  return request<ScanMetadata>(`/scans/${scanId}/metadata`, csrfToken);
 }
 
-export async function getScanStats(scanId: string, token: string): Promise<ReviewStats> {
+export async function getScanStats(scanId: string, csrfToken: string): Promise<ReviewStats> {
   /** Load annotation and review metrics for one scan. */
-  return request<ReviewStats>(`/scans/${scanId}/stats`, token);
+  return request<ReviewStats>(`/scans/${scanId}/stats`, csrfToken);
 }
 
-export async function createScan(payload: ScanCreate, token: string): Promise<Scan> {
+export async function createScan(payload: ScanCreate, csrfToken: string): Promise<Scan> {
   /** Create fake scan metadata and storage entry. */
-  return request<Scan>("/scans", token, { method: "POST", body: JSON.stringify(payload) });
+  return request<Scan>("/scans", csrfToken, { method: "POST", body: JSON.stringify(payload) });
 }
 
-export async function uploadScan(payload: ScanUpload, token: string): Promise<Scan> {
+export async function uploadScan(payload: ScanUpload, csrfToken: string): Promise<Scan> {
   /** Upload a scan file and create project-scoped metadata. */
   const formData = new FormData();
   formData.append("project_id", payload.project_id);
@@ -75,7 +76,8 @@ export async function uploadScan(payload: ScanUpload, token: string): Promise<Sc
   formData.append("file", payload.file);
   const response = await fetch(`${API_BASE_URL}/scans/upload`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+    headers: { "X-CSRF-Token": csrfToken },
     body: formData,
   });
   if (!response.ok) {
@@ -84,27 +86,27 @@ export async function uploadScan(payload: ScanUpload, token: string): Promise<Sc
   return response.json() as Promise<Scan>;
 }
 
-export async function exportScanForMl(scanId: string, token: string): Promise<ExportResponse> {
+export async function exportScanForMl(scanId: string, csrfToken: string): Promise<ExportResponse> {
   /** Load the approved annotation payload that an ML pipeline would consume. */
-  return request<ExportResponse>(`/scans/${scanId}/export`, token);
+  return request<ExportResponse>(`/scans/${scanId}/export`, csrfToken);
 }
 
-export async function exportScanAsCoco(scanId: string, token: string): Promise<Record<string, unknown>> {
+export async function exportScanAsCoco(scanId: string, csrfToken: string): Promise<Record<string, unknown>> {
   /** Load approved bounding boxes in COCO format. */
-  return request<Record<string, unknown>>(`/scans/${scanId}/export/coco`, token);
+  return request<Record<string, unknown>>(`/scans/${scanId}/export/coco`, csrfToken);
 }
 
-export async function exportScanAsCsv(scanId: string, token: string): Promise<Record<string, unknown>> {
+export async function exportScanAsCsv(scanId: string, csrfToken: string): Promise<Record<string, unknown>> {
   /** Load annotations in spreadsheet-friendly CSV format. */
-  return request<Record<string, unknown>>(`/scans/${scanId}/export/csv`, token);
+  return request<Record<string, unknown>>(`/scans/${scanId}/export/csv`, csrfToken);
 }
 
-export async function exportScanAsYolo(scanId: string, token: string): Promise<Record<string, unknown>> {
+export async function exportScanAsYolo(scanId: string, csrfToken: string): Promise<Record<string, unknown>> {
   /** Load approved bounding boxes in YOLO format. */
-  return request<Record<string, unknown>>(`/scans/${scanId}/export/yolo`, token);
+  return request<Record<string, unknown>>(`/scans/${scanId}/export/yolo`, csrfToken);
 }
 
-export async function exportScanAsSegmentation(scanId: string, token: string): Promise<Record<string, unknown>> {
+export async function exportScanAsSegmentation(scanId: string, csrfToken: string): Promise<Record<string, unknown>> {
   /** Load approved segmentation masks as a training manifest. */
-  return request<Record<string, unknown>>(`/scans/${scanId}/export/segmentation`, token);
+  return request<Record<string, unknown>>(`/scans/${scanId}/export/segmentation`, csrfToken);
 }
