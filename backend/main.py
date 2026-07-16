@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .observability import RequestLoggingMiddleware, configure_logging
+from .rate_limit import RequestRateLimitMiddleware
 from .routers import annotations, auth, health, projects, scans, users
 from .settings import get_settings
 
@@ -36,6 +37,11 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+    app.add_middleware(
+        RequestRateLimitMiddleware,
+        login_limit=settings.login_rate_limit_per_minute,
+        sensitive_limit=settings.sensitive_rate_limit_per_minute,
     )
     app.add_middleware(RequestLoggingMiddleware)
 

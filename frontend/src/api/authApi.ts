@@ -21,6 +21,16 @@ export async function getMe(token: string): Promise<User> {
   return request<User>("/auth/me", { headers: { Authorization: `Bearer ${token}` } });
 }
 
+export async function logout(token: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+  }
+}
+
 export async function listUsers(token: string): Promise<User[]> {
   return request<User[]>("/users", { headers: { Authorization: `Bearer ${token}` } });
 }

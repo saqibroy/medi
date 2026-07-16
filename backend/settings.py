@@ -32,6 +32,9 @@ class Settings:
     token_secret: str
     cors_origins: tuple[str, ...]
     seed_demo_data: bool
+    session_ttl_minutes: int
+    login_rate_limit_per_minute: int
+    sensitive_rate_limit_per_minute: int
 
     @property
     def is_production(self) -> bool:
@@ -45,6 +48,16 @@ def _read_boolean(value: str, variable_name: str) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise ConfigurationError(f"{variable_name} must be true or false")
+
+
+def _read_integer(values: object, variable_name: str, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(str(values))
+    except ValueError as error:
+        raise ConfigurationError(f"{variable_name} must be an integer") from error
+    if parsed < minimum or parsed > maximum:
+        raise ConfigurationError(f"{variable_name} must be between {minimum} and {maximum}")
+    return parsed
 
 
 def _read_origins(value: str) -> tuple[str, ...]:
@@ -82,6 +95,9 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
     default_origins = ",".join(DEVELOPMENT_CORS_ORIGINS)
     cors_origins = _read_origins(values.get("CORS_ORIGINS", default_origins))
     seed_demo_data = _read_boolean(values.get("SEED_DEMO_DATA", "false" if app_environment == "production" else "true"), "SEED_DEMO_DATA")
+    session_ttl_minutes = _read_integer(values.get("SESSION_TTL_MINUTES", "480"), "SESSION_TTL_MINUTES", 5, 1440)
+    login_rate_limit = _read_integer(values.get("LOGIN_RATE_LIMIT_PER_MINUTE", "10"), "LOGIN_RATE_LIMIT_PER_MINUTE", 1, 1000)
+    sensitive_rate_limit = _read_integer(values.get("SENSITIVE_RATE_LIMIT_PER_MINUTE", "60"), "SENSITIVE_RATE_LIMIT_PER_MINUTE", 1, 10000)
 
     if app_environment == "production":
         if "DATABASE_URL" not in values or database_url == DEVELOPMENT_DATABASE_URL or "postgres:postgres@" in database_url:
@@ -99,4 +115,7 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
         token_secret=token_secret,
         cors_origins=cors_origins,
         seed_demo_data=seed_demo_data,
+        session_ttl_minutes=session_ttl_minutes,
+        login_rate_limit_per_minute=login_rate_limit,
+        sensitive_rate_limit_per_minute=sensitive_rate_limit,
     )

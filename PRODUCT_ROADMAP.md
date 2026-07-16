@@ -132,7 +132,8 @@ Status: in progress. Detailed gates: `PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
 - Error tracking.
 - [x] Database-aware backend readiness/liveness and frontend health checks.
 - [x] PostgreSQL migration/rollback runbook and isolated CI rehearsal.
-- Rate limiting.
+- [x] Configurable process-local login and expensive-route rate-limit baseline;
+  shared multi-instance enforcement remains a production gate.
 - Backups and restore documentation.
 - Admin tools for organizations, users, and projects.
 
@@ -190,5 +191,6 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Add expiring sessions and rate limiting for sensitive endpoints.
-2. Introduce private object storage and organization-safe access controls.
+1. Introduce private object storage and organization-safe access controls.
+2. Replace process-local rate limits with shared production enforcement and move
+   browser sessions to Secure, HttpOnly cookies with CSRF protection.

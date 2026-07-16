@@ -13,5 +13,6 @@ export interface User {
 export interface AuthResponse {
   access_token: string;
   token_type: "bearer";
+  expires_at: string;
   user: User;
 }

@@ -1,11 +1,13 @@
 """Service smoke tests for the Phase 1 product foundation."""
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from backend.database import Base
-from backend.models import Annotation, Label, Organization, Project, Scan, User
-from backend.security import hash_password, require_role
+from backend.models import Annotation, Label, Organization, Project, Scan, User, UserSession
+from backend.security import hash_password, require_role, resolve_access_token
 from backend.services.annotation_service import get_annotation_for_user_or_404, list_annotations_for_user, search_annotations
 from backend.services.auth_service import authenticate_user
 from backend.services.project_service import export_project_annotations, list_project_labels, list_projects
@@ -61,12 +63,28 @@ def test_authenticate_user_and_list_projects() -> None:
     try:
         seed_product_workspace(db)
 
-        token, user = authenticate_user(db, "annotator@test.local", "password")
+        token, user, expires_at = authenticate_user(db, "annotator@test.local", "password")
         projects = list_projects(db, user)
 
         assert len(token) > 20
         assert user.email == "annotator@test.local"
+        assert expires_at.tzinfo is not None
         assert [project.name for project in projects] == ["Brain MRI"]
+    finally:
+        db.close()
+
+
+def test_expired_session_cannot_be_resolved() -> None:
+    db = build_session()
+    try:
+        seed_product_workspace(db)
+        token, _, _ = authenticate_user(db, "annotator@test.local", "password")
+        session = db.scalar(select(UserSession))
+        assert session is not None
+        session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db.commit()
+
+        assert resolve_access_token(db, token) is None
     finally:
         db.close()
 

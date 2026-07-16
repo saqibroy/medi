@@ -173,12 +173,20 @@ def make_png_bytes(width: int, height: int, color: int = 255) -> bytes:
 @pytest.mark.anyio
 async def test_login_and_me_route(tmp_path: Path) -> None:
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
-        token = await login(client, "admin@test.local")
+        response = await client.post("/auth/login", json={"email": "admin@test.local", "password": "password"})
+        assert response.status_code == 200
+        assert response.json()["expires_at"]
+        token = response.json()["access_token"]
 
         response = await client.get("/auth/me", headers=auth_headers(token))
 
         assert response.status_code == 200
         assert response.json()["email"] == "admin@test.local"
+
+        logout = await client.post("/auth/logout", headers=auth_headers(token))
+        assert logout.status_code == 204
+        revoked = await client.get("/auth/me", headers=auth_headers(token))
+        assert revoked.status_code == 401
 
 
 @pytest.mark.anyio

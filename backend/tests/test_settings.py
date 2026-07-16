@@ -66,3 +66,12 @@ def test_production_accepts_explicit_safe_settings() -> None:
 def test_cors_origins_must_be_exact_http_origins(origins: str) -> None:
     with pytest.raises(ConfigurationError, match="CORS_ORIGINS"):
         get_settings({"CORS_ORIGINS": origins})
+
+
+@pytest.mark.parametrize(
+    ("variable_name", "value"),
+    [("SESSION_TTL_MINUTES", "four"), ("LOGIN_RATE_LIMIT_PER_MINUTE", "0"), ("SENSITIVE_RATE_LIMIT_PER_MINUTE", "10001")],
+)
+def test_session_and_rate_limit_settings_reject_invalid_values(variable_name: str, value: str) -> None:
+    with pytest.raises(ConfigurationError, match=variable_name):
+        get_settings({variable_name: value})

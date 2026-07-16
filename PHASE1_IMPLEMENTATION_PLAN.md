@@ -4,7 +4,8 @@ This plan turns Medi from a scan-level demo into a project-based annotation
 workspace. Phase 1 intentionally avoids real DICOM ingestion so the product
 foundation can become solid before the imaging pipeline becomes complex.
 
-Status: in progress.
+Status: complete. Production hardening continues in
+`PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
 
 ## Target User Flow
 
@@ -381,5 +382,6 @@ CI verification:
 
 ## Next Engineering Priorities
 
-1. Add expiring sessions and rate limiting for sensitive endpoints.
-2. Introduce private object storage and organization-safe access controls.
+1. Introduce private object storage and organization-safe access controls.
+2. Replace process-local rate limits with shared production enforcement and move
+   browser sessions to Secure, HttpOnly cookies with CSRF protection.
