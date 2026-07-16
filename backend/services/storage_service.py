@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import shutil
+import hashlib
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 from urllib.parse import urlencode
@@ -18,6 +20,29 @@ class StorageKeyError(ValueError):
 
 
 DATA_CLASS_TAG_KEY = "medi-data-class"
+
+
+@dataclass(frozen=True)
+class StorageObjectSnapshot:
+    """Version and digest evidence captured while reading one private object."""
+
+    version_id: str
+    checksum_sha256: str
+    byte_size: int
+
+
+def _stream_sha256(stream: object, chunk_size: int = 1024 * 1024) -> tuple[str, int]:
+    """Hash an object incrementally so large medical volumes stay bounded."""
+
+    digest = hashlib.sha256()
+    byte_size = 0
+    while True:
+        chunk = stream.read(chunk_size)  # type: ignore[attr-defined]
+        if not chunk:
+            break
+        digest.update(chunk)
+        byte_size += len(chunk)
+    return digest.hexdigest(), byte_size
 
 
 def _validate_object_key(key: str) -> str:
@@ -55,6 +80,7 @@ class PrivateStorage(Protocol):
     def delete(self, key: str) -> None: ...
     def delete_prefix(self, prefix: str) -> None: ...
     def signed_get_url(self, key: str, expires_seconds: int) -> str: ...
+    def snapshot(self, key: str) -> StorageObjectSnapshot: ...
 
 
 class LocalPrivateStorage:
@@ -107,6 +133,15 @@ class LocalPrivateStorage:
     def signed_get_url(self, key: str, expires_seconds: int) -> str:
         raise RuntimeError("Signed object URLs require the S3 storage backend")
 
+    def snapshot(self, key: str) -> StorageObjectSnapshot:
+        with self.local_path(key).open("rb") as stream:
+            checksum, byte_size = _stream_sha256(stream)
+        return StorageObjectSnapshot(
+            version_id=f"local-sha256:{checksum}",
+            checksum_sha256=checksum,
+            byte_size=byte_size,
+        )
+
 
 class S3PrivateStorage:
     """Private S3 storage with mandatory server-side encryption on writes."""
@@ -142,6 +177,12 @@ class S3PrivateStorage:
     def get_bytes(self, key: str) -> bytes:
         response = self.client.get_object(Bucket=self.bucket, Key=_validate_object_key(key))  # type: ignore[attr-defined]
         return response["Body"].read()
+
+    def snapshot(self, key: str) -> StorageObjectSnapshot:
+        response = self.client.get_object(Bucket=self.bucket, Key=_validate_object_key(key))  # type: ignore[attr-defined]
+        checksum, byte_size = _stream_sha256(response["Body"])
+        version_id = str(response.get("VersionId") or f"sha256:{checksum}")
+        return StorageObjectSnapshot(version_id=version_id, checksum_sha256=checksum, byte_size=byte_size)
 
     def exists(self, key: str) -> bool:
         try:

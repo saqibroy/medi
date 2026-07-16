@@ -401,6 +401,12 @@ CI verification:
   removes browser token storage. Redis provides shared, hashed rate counters
   with fail-closed production behavior; target TLS and managed-Redis evidence
   remains tracked in `SESSION_AND_RATE_LIMIT_PLAN.md`.
+- Immutable dataset releases now freeze ready scan evidence, approved
+  annotation geometry and safe lineage digests, label taxonomy, segmentation
+  masks, object versions/checksums, and tool/export versions. Monotonic project
+  versions, append-only superseding/revocation, tenant-safe APIs, admin UI,
+  audit coverage, and live checksum-stability evidence are complete; target S3
+  and retention/WORM gates remain in `DATASET_RELEASE_PLAN.md`.
 
 ## Next Engineering Priorities
 
@@ -416,5 +422,9 @@ CI verification:
    SameSite browser sessions and signed, session-bound CSRF protection.
    Production TLS/managed-Redis evidence remains in
    `SESSION_AND_RATE_LIMIT_PLAN.md`.
-4. Next: add immutable dataset releases with scan object versions, checksums,
-   label snapshots, and approved annotation revision manifests.
+4. Completed repository boundary: add immutable dataset releases with scan
+   object versions/checksums, label snapshots, approved annotation lineage,
+   segmentation masks, deterministic manifests, and append-only lifecycle
+   events. Deployment gates remain in `DATASET_RELEASE_PLAN.md`.
+5. Next: automate backup/restore drills and implement the approved retention,
+   legal-hold, source-withdrawal, and verified-deletion model.

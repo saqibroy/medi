@@ -34,3 +34,34 @@ export interface ProjectExportResponse {
   approved_count: number;
   pending_count: number;
 }
+
+export type DatasetReleaseStatus = "active" | "superseded" | "revoked";
+export type DatasetReleaseReason = "quality_issue" | "source_withdrawn" | "policy_change" | "other";
+
+export interface DatasetReleaseEvent {
+  id: string;
+  action: "created" | "superseded" | "revoked";
+  reason_code: DatasetReleaseReason | "superseded" | null;
+  related_release_id: string | null;
+  actor_user_id: string;
+  occurred_at: string;
+}
+
+export interface DatasetReleaseSummary {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  version: number;
+  schema_version: string;
+  content_sha256: string;
+  manifest_sha256: string;
+  supersedes_release_id: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  status: DatasetReleaseStatus;
+  lifecycle: DatasetReleaseEvent[];
+}
+
+export interface DatasetRelease extends DatasetReleaseSummary {
+  manifest: Record<string, unknown>;
+}

@@ -115,6 +115,7 @@ class Project(Base):
     scans: Mapped[list["Scan"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     annotations: Mapped[list["Annotation"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     segmentation_masks: Mapped[list["SegmentationMask"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    dataset_releases: Mapped[list["DatasetRelease"]] = relationship(back_populates="project", passive_deletes=True)
 
 
 class Label(Base):
@@ -289,3 +290,78 @@ class SegmentationMask(Base):
     annotation: Mapped[Annotation] = relationship(back_populates="segmentation_masks")
     project: Mapped[Project] = relationship(back_populates="segmentation_masks")
     scan: Mapped[Scan] = relationship(back_populates="segmentation_masks")
+
+
+class DatasetRelease(Base):
+    """Immutable, reproducible snapshot of one project's approved dataset."""
+
+    __tablename__ = "dataset_releases"
+    __table_args__ = (
+        UniqueConstraint("project_id", "version", name="uq_dataset_releases_project_version"),
+        CheckConstraint("version > 0", name="ck_dataset_release_version_positive"),
+        Index("ix_dataset_releases_org_created", "organization_id", "created_at"),
+        Index("ix_dataset_releases_project_version", "project_id", "version"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
+    project_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest: Mapped[dict] = mapped_column(JSON, nullable=False)
+    supersedes_release_id: Mapped[PythonUUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("dataset_releases.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    created_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    project: Mapped[Project] = relationship(back_populates="dataset_releases", foreign_keys=[project_id])
+    lifecycle_events: Mapped[list["DatasetReleaseEvent"]] = relationship(
+        back_populates="release",
+        foreign_keys="DatasetReleaseEvent.release_id",
+        passive_deletes=True,
+    )
+
+
+class DatasetReleaseEvent(Base):
+    """Append-only lifecycle fact for release creation, supersession, or revocation."""
+
+    __tablename__ = "dataset_release_events"
+    __table_args__ = (
+        CheckConstraint("action IN ('created', 'superseded', 'revoked')", name="ck_dataset_release_event_action"),
+        CheckConstraint(
+            "reason_code IS NULL OR reason_code IN ('quality_issue', 'source_withdrawn', 'policy_change', 'superseded', 'other')",
+            name="ck_dataset_release_event_reason",
+        ),
+        Index("ix_dataset_release_events_release_occurred", "release_id", "occurred_at"),
+        Index("ix_dataset_release_events_org_occurred", "organization_id", "occurred_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    release_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("dataset_releases.id", ondelete="RESTRICT"), nullable=False)
+    organization_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
+    actor_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(String(30), nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    related_release_id: Mapped[PythonUUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("dataset_releases.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    release: Mapped[DatasetRelease] = relationship(back_populates="lifecycle_events", foreign_keys=[release_id])
+
+
+@event.listens_for(DatasetRelease, "before_update")
+@event.listens_for(DatasetRelease, "before_delete")
+@event.listens_for(DatasetReleaseEvent, "before_update")
+@event.listens_for(DatasetReleaseEvent, "before_delete")
+def _reject_dataset_release_mutation(*_: object) -> None:
+    """Keep release manifests and lifecycle facts append-only through the ORM."""
+
+    raise ValueError("dataset releases are append-only")

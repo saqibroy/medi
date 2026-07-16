@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import CocoExportRead, CsvExportRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectStatsRead, ProjectUpdate, ScanRead, SegmentationExportRead, YoloExportRead
+from ..schemas import CocoExportRead, CsvExportRead, DatasetReleaseRead, DatasetReleaseRevoke, DatasetReleaseSummaryRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectStatsRead, ProjectUpdate, ScanRead, SegmentationExportRead, YoloExportRead
 from ..security import get_current_user, require_admin
-from ..services import project_service, scan_service
+from ..services import dataset_release_service, project_service, scan_service
 from ..services.audit_service import mark_request_target
 
 
@@ -42,6 +42,57 @@ async def get_project(project_id: UUID, db: Session = Depends(get_db), current_u
     """Return one project workspace."""
 
     return project_service.get_project_or_404(db, project_id, current_user)
+
+
+@router.get("/projects/{project_id}/releases", response_model=list[DatasetReleaseSummaryRead])
+async def list_dataset_releases(
+    project_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[DatasetReleaseSummaryRead]:
+    """List immutable releases for one organization-scoped project."""
+
+    return dataset_release_service.list_releases(db, project_id, current_user)
+
+
+@router.post("/projects/{project_id}/releases", response_model=DatasetReleaseRead, status_code=201)
+async def create_dataset_release(
+    request: Request,
+    project_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> DatasetReleaseRead:
+    """Snapshot ready scans and approved annotations into an immutable release."""
+
+    release = dataset_release_service.create_release(db, project_id, current_user)
+    mark_request_target(request, release["id"], release_version=release["version"])
+    return release
+
+
+@router.get("/dataset-releases/{release_id}", response_model=DatasetReleaseRead)
+async def get_dataset_release(
+    release_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DatasetReleaseRead:
+    """Return one stable release manifest without private storage paths."""
+
+    return dataset_release_service.get_release(db, release_id, current_user)
+
+
+@router.post("/dataset-releases/{release_id}/revoke", response_model=DatasetReleaseRead)
+async def revoke_dataset_release(
+    request: Request,
+    release_id: UUID,
+    payload: DatasetReleaseRevoke,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> DatasetReleaseRead:
+    """Append a controlled revocation event without rewriting the release."""
+
+    release = dataset_release_service.revoke_release(db, release_id, payload.reason_code, current_user)
+    mark_request_target(request, release["id"], release_version=release["version"])
+    return release
 
 
 @router.put("/projects/{project_id}", response_model=ProjectRead)

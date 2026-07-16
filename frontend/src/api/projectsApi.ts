@@ -1,4 +1,4 @@
-import type { Label, Project, ProjectExportResponse, ProjectPayload } from "../types/project";
+import type { DatasetRelease, DatasetReleaseReason, DatasetReleaseSummary, Label, Project, ProjectExportResponse, ProjectPayload } from "../types/project";
 import type { ProjectReviewStats, Scan } from "../types/scan";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -37,6 +37,25 @@ export async function listProjectScans(projectId: string, csrfToken: string): Pr
 
 export async function listProjectLabels(projectId: string, csrfToken: string): Promise<Label[]> {
   return request<Label[]>(`/projects/${projectId}/labels`, csrfToken);
+}
+
+export async function listDatasetReleases(projectId: string, csrfToken: string): Promise<DatasetReleaseSummary[]> {
+  return request<DatasetReleaseSummary[]>(`/projects/${projectId}/releases`, csrfToken);
+}
+
+export async function createDatasetRelease(projectId: string, csrfToken: string): Promise<DatasetRelease> {
+  return request<DatasetRelease>(`/projects/${projectId}/releases`, csrfToken, { method: "POST" });
+}
+
+export async function getDatasetRelease(releaseId: string, csrfToken: string): Promise<DatasetRelease> {
+  return request<DatasetRelease>(`/dataset-releases/${releaseId}`, csrfToken);
+}
+
+export async function revokeDatasetRelease(releaseId: string, reasonCode: DatasetReleaseReason, csrfToken: string): Promise<DatasetRelease> {
+  return request<DatasetRelease>(`/dataset-releases/${releaseId}/revoke`, csrfToken, {
+    method: "POST",
+    body: JSON.stringify({ reason_code: reasonCode }),
+  });
 }
 
 export async function exportProjectForMl(projectId: string, csrfToken: string): Promise<ProjectExportResponse> {

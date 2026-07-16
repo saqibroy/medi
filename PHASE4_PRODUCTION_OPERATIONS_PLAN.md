@@ -62,9 +62,12 @@ Not production-ready yet:
   anonymization.
 - Annotation history is append-oriented but not immutable; cascade deletion can
   remove it with the annotation.
-- Dataset releases and annotation snapshots are not versioned.
-- Backup, restore, retention, legal-hold, and verified deletion procedures are
-  not implemented.
+- Dataset releases are immutable and reproducible in the application database;
+  target S3 VersionId evidence, retained portable artifacts, and independent
+  WORM replication remain deployment gates.
+- Backup/restore/deletion procedures are documented, but automated drills,
+  approved retention, legal hold, and verified target-account evidence remain
+  incomplete.
 - Request logging is structured and payload-safe, append-only security audit
   records exist, and Redis provides shared rate enforcement with hashed keys.
   Managed-Redis deployment evidence, monitoring, and error tracking remain
@@ -171,16 +174,16 @@ and annotation-history tombstoning remain open production gates.
 
 ## Dataset And Annotation Versioning
 
-- [ ] Add immutable dataset releases containing a manifest of scan object
+- [x] Add immutable dataset releases containing a manifest of scan object
   versions, checksums, metadata-profile versions, labels, and approved
   annotation versions.
-- [ ] Give releases stable IDs and monotonic project version numbers.
-- [ ] Preserve annotation revision lineage rather than overwriting the only
+- [x] Give releases stable IDs and monotonic project version numbers.
+- [x] Preserve annotation revision lineage rather than overwriting the only
   training-data representation.
-- [ ] Record export format/tool versions and deterministic checksums.
-- [ ] Prevent a released dataset from silently changing when live annotations
+- [x] Record export format/tool versions and deterministic checksums.
+- [x] Prevent a released dataset from silently changing when live annotations
   are edited or deleted.
-- [ ] Support superseding and revoking releases without erasing their audit
+- [x] Support superseding and revoking releases without erasing their audit
   trail.
 
 ## Private Object Storage
@@ -315,14 +318,19 @@ Useful primary references:
    decision evidence, fail-safe legacy migration, and UI intake status.
 8. [x] Add append-only, tenant-scoped security audit events with integrity
    hashes and database mutation guards. WORM export remains a production gate.
-9. [ ] Add dataset releases and annotation revision manifests.
+9. [x] Add immutable dataset releases and approved annotation revision
+   manifests. Target S3, retained artifact/WORM, and retention gates remain in
+   `DATASET_RELEASE_PLAN.md`.
 10. [ ] Implement backup/restore drills, retention, legal hold, and deletion.
 11. [ ] Complete GDPR/DPIA/processor evidence for the target deployment.
 12. [ ] Run a production-readiness review and close every applicable gate.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
-Next repository increment: immutable dataset releases and annotation manifests.
+Current repository increment complete: immutable dataset releases and
+annotation manifests are evidenced in `DATASET_RELEASE_PLAN.md`.
+Next repository increment: backup/restore automation plus retention,
+legal-hold, source-withdrawal, and verified-deletion enforcement.
 
 ## Phase 4 Exit Criteria
 
@@ -334,7 +342,8 @@ Next repository increment: immutable dataset releases and annotation manifests.
 - [x] Supported DICOM/NIfTI intake is quarantined until the versioned v1
   screening checks complete. Full pixel anonymization validation remains a
   separate production gate above.
-- [ ] Audit records are immutable and dataset releases are reproducible.
+- [x] Application/database audit records are immutable and dataset releases are
+  reproducible. Independent WORM retention remains an explicit gate above.
 - [ ] Retention/deletion and external-AI egress policies are enforceable.
 - [ ] Required privacy, security, and legal evidence is approved for the target
   data classification.
