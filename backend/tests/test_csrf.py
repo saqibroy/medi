@@ -16,6 +16,7 @@ def production_settings():
             "TOKEN_SECRET": "production-token-secret-longer-than-thirty-two",
             "CSRF_SECRET": "production-csrf-secret-distinct-and-long-enough",
             "AUDIT_SIGNING_KEY": "production-audit-key-distinct-and-long-enough",
+            "PRIVACY_REFERENCE_KEY": "production-privacy-reference-key-distinct-and-long",
             "CORS_ORIGINS": "https://medi.example.org",
             "SEED_DEMO_DATA": "false",
             "RATE_LIMIT_BACKEND": "redis",

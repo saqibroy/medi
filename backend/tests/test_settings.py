@@ -14,6 +14,7 @@ def test_development_defaults_are_local_and_seed_demo_data() -> None:
     assert settings.data_deletion_operator_enabled is False
     assert settings.external_ai_enabled is False
     assert settings.external_ai_allowed_origins == ()
+    assert settings.privacy_reference_key
 
 
 @pytest.mark.parametrize(
@@ -43,6 +44,16 @@ def test_development_defaults_are_local_and_seed_demo_data() -> None:
                 "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
                 "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
             },
+            "PRIVACY_REFERENCE_KEY",
+        ),
+        (
+            {
+                "DATABASE_URL": "postgresql+psycopg://app:strong-password@db:5432/medi",
+                "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+                "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
+                "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
+                "PRIVACY_REFERENCE_KEY": "a-distinct-production-privacy-reference-key",
+            },
             "CORS_ORIGINS",
         ),
         (
@@ -51,6 +62,7 @@ def test_development_defaults_are_local_and_seed_demo_data() -> None:
                 "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
                 "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
                 "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
+                "PRIVACY_REFERENCE_KEY": "a-distinct-production-privacy-reference-key",
                 "CORS_ORIGINS": "https://medi.example.org",
                 "SEED_DEMO_DATA": "true",
             },
@@ -73,6 +85,7 @@ def test_production_accepts_explicit_safe_settings() -> None:
             "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
             "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
             "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
+            "PRIVACY_REFERENCE_KEY": "a-distinct-production-privacy-reference-key",
             "CORS_ORIGINS": "https://medi.example.org,https://review.medi.example.org",
             "SEED_DEMO_DATA": "false",
             "RATE_LIMIT_BACKEND": "redis",
@@ -103,6 +116,7 @@ def test_production_rejects_local_or_unencrypted_storage() -> None:
         "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
         "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
         "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
+        "PRIVACY_REFERENCE_KEY": "a-distinct-production-privacy-reference-key",
         "CORS_ORIGINS": "https://medi.example.org",
         "SEED_DEMO_DATA": "false",
         "RATE_LIMIT_BACKEND": "redis",

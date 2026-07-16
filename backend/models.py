@@ -736,6 +736,198 @@ class ExternalAIEgressDecision(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class PrivacyProcessingRecord(Base):
+    """Immutable version of one organization processing activity and DPIA decision."""
+
+    __tablename__ = "privacy_processing_records"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "activity_key", "version", name="uq_privacy_processing_record_version"),
+        CheckConstraint("version > 0", name="ck_privacy_processing_record_version_positive"),
+        CheckConstraint(
+            "organization_role IN ('controller', 'processor', 'joint_controller')",
+            name="ck_privacy_processing_record_role",
+        ),
+        CheckConstraint(
+            "purpose_code IN ('research_dataset_annotation', 'imaging_quality_assurance', 'ml_dataset_export', "
+            "'security_and_audit', 'service_operations', 'customer_support', 'external_ai_inference')",
+            name="ck_privacy_processing_record_purpose",
+        ),
+        CheckConstraint(
+            "lawful_basis IN ('consent', 'contract', 'legal_obligation', 'vital_interests', "
+            "'public_task', 'legitimate_interests')",
+            name="ck_privacy_processing_record_lawful_basis",
+        ),
+        CheckConstraint(
+            "article9_condition IN ('not_applicable', 'explicit_consent', 'employment_social_security', "
+            "'vital_interests', 'nonprofit', 'made_public', 'legal_claims', "
+            "'substantial_public_interest', 'healthcare', 'public_health', 'research_statistics')",
+            name="ck_privacy_processing_record_article9",
+        ),
+        CheckConstraint(
+            "(health_data_processed = false AND article9_condition = 'not_applicable') OR "
+            "(health_data_processed = true AND article9_condition <> 'not_applicable')",
+            name="ck_privacy_processing_record_health_condition",
+        ),
+        CheckConstraint(
+            "transfer_mechanism IN ('not_applicable', 'adequacy_decision', "
+            "'standard_contractual_clauses', 'binding_corporate_rules', 'approved_derogation')",
+            name="ck_privacy_processing_record_transfer",
+        ),
+        CheckConstraint(
+            "(transfer_mechanism = 'not_applicable' AND transfer_safeguard_reference IS NULL) OR "
+            "(transfer_mechanism <> 'not_applicable' AND transfer_safeguard_reference IS NOT NULL)",
+            name="ck_privacy_processing_record_transfer_reference",
+        ),
+        CheckConstraint(
+            "dpia_outcome IN ('not_required', 'approved', 'consultation_required')",
+            name="ck_privacy_processing_record_dpia_outcome",
+        ),
+        CheckConstraint(
+            "(dpia_required = false AND dpia_outcome = 'not_required') OR "
+            "(dpia_required = true AND dpia_outcome IN ('approved', 'consultation_required'))",
+            name="ck_privacy_processing_record_dpia_consistency",
+        ),
+        Index("ix_privacy_processing_records_org_created", "organization_id", "created_at"),
+        Index("ix_privacy_processing_records_org_activity", "organization_id", "activity_key", "version"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    activity_key: Mapped[str] = mapped_column(String(60), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    organization_role: Mapped[str] = mapped_column(String(30), nullable=False)
+    purpose_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    lawful_basis: Mapped[str] = mapped_column(String(40), nullable=False)
+    health_data_processed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    article9_condition: Mapped[str] = mapped_column(String(50), nullable=False)
+    data_subject_categories: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    personal_data_categories: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    recipient_categories: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    processor_references: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    processing_locations: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    transfer_mechanism: Mapped[str] = mapped_column(String(50), nullable=False)
+    transfer_safeguard_reference: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    retention_policy_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("data_retention_policies.id", ondelete="RESTRICT"), nullable=False
+    )
+    retention_policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    security_measure_references: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    dpia_required: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    dpia_outcome: Mapped[str] = mapped_column(String(30), nullable=False)
+    dpia_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    dpo_review_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    approval_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    events: Mapped[list["PrivacyProcessingRecordEvent"]] = relationship(
+        back_populates="processing_record", passive_deletes=True
+    )
+
+
+class PrivacyProcessingRecordEvent(Base):
+    """Append-only record/revocation fact for a processing-activity version."""
+
+    __tablename__ = "privacy_processing_record_events"
+    __table_args__ = (
+        CheckConstraint("action IN ('recorded', 'revoked')", name="ck_privacy_processing_record_event_action"),
+        Index("ix_privacy_processing_record_events_record_occurred", "processing_record_id", "occurred_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    processing_record_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("privacy_processing_records.id", ondelete="RESTRICT"), nullable=False
+    )
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    actor_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    processing_record: Mapped[PrivacyProcessingRecord] = relationship(back_populates="events")
+
+
+class PrivacyRequest(Base):
+    """Data-minimized privacy case; the external subject reference is never stored."""
+
+    __tablename__ = "privacy_requests"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "case_reference", name="uq_privacy_request_case_reference"),
+        CheckConstraint(
+            "request_type IN ('access', 'rectification', 'restriction', 'objection', 'portability', 'erasure')",
+            name="ck_privacy_request_type",
+        ),
+        CheckConstraint("scope_type IN ('organization', 'project', 'scan')", name="ck_privacy_request_scope"),
+        Index("ix_privacy_requests_org_created", "organization_id", "created_at"),
+        Index("ix_privacy_requests_org_scope", "organization_id", "scope_type", "scope_id"),
+        Index("ix_privacy_requests_org_due", "organization_id", "response_due_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    case_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    subject_reference_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    scope_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    response_due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    events: Mapped[list["PrivacyRequestEvent"]] = relationship(back_populates="privacy_request", passive_deletes=True)
+
+
+class PrivacyRequestEvent(Base):
+    """Append-only, controlled-value workflow fact for one privacy request."""
+
+    __tablename__ = "privacy_request_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('received', 'identity_verified', 'accepted', 'fulfilled', "
+            "'denied', 'cancelled', 'deadline_extended')",
+            name="ck_privacy_request_event_action",
+        ),
+        CheckConstraint(
+            "reason_code IS NULL OR reason_code IN ('identity_not_verified', 'request_not_applicable', "
+            "'legal_exception', 'insufficient_scope', 'manifestly_unfounded_or_excessive', "
+            "'requester_withdrew', 'complexity', 'request_volume')",
+            name="ck_privacy_request_event_reason",
+        ),
+        CheckConstraint(
+            "outcome_code IS NULL OR outcome_code IN ('secure_delivery', 'record_corrected', "
+            "'processing_restricted', 'objection_applied', 'erasure_verified')",
+            name="ck_privacy_request_event_outcome",
+        ),
+        Index("ix_privacy_request_events_request_occurred", "privacy_request_id", "occurred_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    privacy_request_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("privacy_requests.id", ondelete="RESTRICT"), nullable=False
+    )
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(30), nullable=False)
+    actor_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    outcome_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    evidence_reference: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    linked_deletion_request_id: Mapped[PythonUUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("data_deletion_requests.id", ondelete="RESTRICT"), nullable=True
+    )
+    new_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    privacy_request: Mapped[PrivacyRequest] = relationship(back_populates="events")
+
+
 @event.listens_for(DataRetentionPolicy, "before_update")
 @event.listens_for(DataRetentionPolicy, "before_delete")
 @event.listens_for(LegalHold, "before_update")
@@ -758,6 +950,14 @@ class ExternalAIEgressDecision(Base):
 @event.listens_for(ExternalAIDataFlowEvent, "before_delete")
 @event.listens_for(ExternalAIEgressDecision, "before_update")
 @event.listens_for(ExternalAIEgressDecision, "before_delete")
+@event.listens_for(PrivacyProcessingRecord, "before_update")
+@event.listens_for(PrivacyProcessingRecord, "before_delete")
+@event.listens_for(PrivacyProcessingRecordEvent, "before_update")
+@event.listens_for(PrivacyProcessingRecordEvent, "before_delete")
+@event.listens_for(PrivacyRequest, "before_update")
+@event.listens_for(PrivacyRequest, "before_delete")
+@event.listens_for(PrivacyRequestEvent, "before_update")
+@event.listens_for(PrivacyRequestEvent, "before_delete")
 def _reject_data_governance_mutation(*_: object) -> None:
     """Keep lifecycle policies, decisions, and receipts append-only."""
 

@@ -241,16 +241,24 @@ combined deletion gate open.
 
 ## GDPR And Privacy Operations
 
-- [ ] Record controller/processor roles, processing purposes, lawful basis, and
-  the additional Article 9 condition for health data before sensitive-data use.
-- [ ] Complete a DPIA when the planned processing is likely to create high risk,
-  especially for large-scale health-data or new-technology processing.
-- [ ] Maintain records of processing activities, subprocessors, data locations,
-  and international transfer mechanisms.
-- [ ] Provide workflows for access, correction, restriction, objection, export,
-  and erasure requests where applicable.
-- [ ] Apply purpose limitation and data minimization to metadata, logs, free text,
-  analytics, and support tooling.
+- [~] Immutable versions now record declared controller/processor role,
+  processing purpose, Article 6 basis, and Article 9 condition. Target legal
+  approval remains required before sensitive-data use.
+- [~] DPIA screening/outcome, DPO review, and evidence references are versioned;
+  `consultation_required` records cannot become active. The actual assessment,
+  approval, and any authority consultation remain external deployment gates.
+- [~] Processing records now cover controlled subject/data/recipient categories,
+  processor references, locations, transfers, retention snapshots, and security
+  controls. Target ROPA and processor/transfer evidence remain to be supplied.
+- [~] Admin workflows now cover access, correction, restriction, objection,
+  portability, and erasure using keyed subject-reference digests, two-person
+  identity evidence, calendar deadlines, controlled outcomes, and append-only
+  events. Identity/case systems, secure delivery, correction/restriction actions,
+  and target operator exercises remain external gates.
+- [x] The repository boundary applies controlled categories/references, excludes
+  request bodies and privacy evidence from audit/log records, and requires an
+  executed matching deletion receipt before erasure fulfillment. Broader target
+  analytics/support review remains required.
 - [ ] Define incident response, breach assessment, notification ownership, and
   evidence preservation.
 - [ ] Obtain privacy/security review and appropriate customer agreements before
@@ -335,7 +343,10 @@ Useful primary references:
     `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
 11. [x] Complete the repository boundary for external-AI egress denial,
     approved-provider and dataset-flow governance, and value-free decisions.
-12. [ ] Complete GDPR/DPIA/processor evidence for the target deployment.
+12. [~] Repository boundary complete: versioned processing/DPIA evidence and
+    governed privacy-request workflows are implemented and locally verified.
+    Target controller/processor records, identity/case tooling, operator
+    exercises, and legal approval remain deployment gates.
 13. [ ] Run a production-readiness review and close every applicable gate.
 
 Current repository increment complete: shared rate enforcement and secure
@@ -347,8 +358,10 @@ retention, legal-hold, source-withdrawal, and verified project/scan deletion are
 evidenced in `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
 Current repository increment complete: external-AI egress denial and approved-
 provider/data-flow governance are evidenced in
-`EXTERNAL_AI_GOVERNANCE_PLAN.md`. Next repository increment: the repository-
-controlled GDPR/privacy operations boundary.
+`EXTERNAL_AI_GOVERNANCE_PLAN.md`. Current repository increment complete:
+processing/DPIA evidence and privacy-request governance are evidenced in
+`PRIVACY_OPERATIONS_PLAN.md`. Next repository increment: the Phase 4 production-
+readiness review and explicit remaining-gate inventory.
 
 ## Phase 4 Exit Criteria
 
@@ -368,3 +381,7 @@ controlled GDPR/privacy operations boundary.
   remains required.
 - [ ] Required privacy, security, and legal evidence is approved for the target
   data classification.
+
+Repository privacy workflows are implemented, but this exit gate remains open
+until the target records, DPIA/agreements, identity/case tooling, delivery and
+rights-execution procedures, and legal/privacy approvals have real evidence.

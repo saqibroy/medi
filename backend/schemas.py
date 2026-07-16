@@ -10,7 +10,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 Modality = Literal["MRI", "CT", "PET", "Ultrasound", "XRAY"]
@@ -54,6 +54,54 @@ ExternalAIDecisionReason = Literal[
     "purpose_not_approved",
     "data_class_not_approved",
     "dataset_not_deidentified",
+]
+PrivacyOrganizationRole = Literal["controller", "processor", "joint_controller"]
+PrivacyPurpose = Literal[
+    "research_dataset_annotation",
+    "imaging_quality_assurance",
+    "ml_dataset_export",
+    "security_and_audit",
+    "service_operations",
+    "customer_support",
+    "external_ai_inference",
+]
+PrivacyLawfulBasis = Literal["consent", "contract", "legal_obligation", "vital_interests", "public_task", "legitimate_interests"]
+PrivacyArticle9Condition = Literal[
+    "not_applicable",
+    "explicit_consent",
+    "employment_social_security",
+    "vital_interests",
+    "nonprofit",
+    "made_public",
+    "legal_claims",
+    "substantial_public_interest",
+    "healthcare",
+    "public_health",
+    "research_statistics",
+]
+PrivacyTransferMechanism = Literal[
+    "not_applicable",
+    "adequacy_decision",
+    "standard_contractual_clauses",
+    "binding_corporate_rules",
+    "approved_derogation",
+]
+PrivacyRequestType = Literal["access", "rectification", "restriction", "objection", "portability", "erasure"]
+PrivacyRequestStatus = Literal["received", "identity_verified", "accepted", "fulfilled", "denied", "cancelled", "untracked"]
+PrivacyDeadlineStatus = Literal["on_time", "overdue", "completed_on_time", "completed_late"]
+PrivacyDenialReason = Literal[
+    "identity_not_verified",
+    "request_not_applicable",
+    "legal_exception",
+    "insufficient_scope",
+    "manifestly_unfounded_or_excessive",
+]
+PrivacyOutcome = Literal[
+    "secure_delivery",
+    "record_corrected",
+    "processing_restricted",
+    "objection_applied",
+    "erasure_verified",
 ]
 
 
@@ -715,6 +763,178 @@ class ProjectStatsRead(AnnotationReviewStatsRead):
     project_name: str
     scan_count: int
     label_count: int
+
+
+class PrivacyProcessingRecordCreate(BaseModel):
+    """Controlled processing/DPIA evidence; references point to approved external records."""
+
+    activity_key: str = Field(..., min_length=2, max_length=60, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    organization_role: PrivacyOrganizationRole
+    purpose_code: PrivacyPurpose
+    lawful_basis: PrivacyLawfulBasis
+    health_data_processed: bool
+    article9_condition: PrivacyArticle9Condition
+    data_subject_categories: list[
+        Literal["patients", "research_participants", "workspace_users", "customer_staff", "support_contacts"]
+    ] = Field(..., min_length=1, max_length=5)
+    personal_data_categories: list[
+        Literal[
+            "identifiable_medical_images",
+            "pseudonymized_medical_images",
+            "deidentified_medical_images",
+            "annotation_data",
+            "account_data",
+            "security_audit_data",
+            "support_case_data",
+        ]
+    ] = Field(..., min_length=1, max_length=7)
+    recipient_categories: list[
+        Literal[
+            "authorized_workspace_users",
+            "controller_staff",
+            "approved_processors",
+            "approved_subprocessors",
+            "research_collaborators",
+            "regulators",
+        ]
+    ] = Field(..., min_length=1, max_length=6)
+    processor_references: list[str] = Field(default_factory=list, max_length=20)
+    processing_locations: list[str] = Field(..., min_length=1, max_length=20)
+    transfer_mechanism: PrivacyTransferMechanism
+    transfer_safeguard_reference: str | None = Field(
+        None, min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    )
+    retention_policy_id: UUID
+    security_measure_references: list[str] = Field(..., min_length=1, max_length=20)
+    dpia_required: bool
+    dpia_outcome: Literal["not_required", "approved", "consultation_required"]
+    dpia_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    dpo_review_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    approval_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+
+    @field_validator(
+        "data_subject_categories",
+        "personal_data_categories",
+        "recipient_categories",
+        "processor_references",
+        "processing_locations",
+        "security_measure_references",
+    )
+    @classmethod
+    def unique_controlled_values(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for reference in value:
+            if not 2 <= len(reference) <= 80 or not all(character.isalnum() or character in "._:/-" for character in reference):
+                raise ValueError("list values must be controlled codes or stable references, not free text")
+            normalized.append(reference)
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("list values must not contain duplicates")
+        return sorted(normalized)
+
+    @model_validator(mode="after")
+    def consistent_legal_evidence(self) -> "PrivacyProcessingRecordCreate":
+        if self.health_data_processed == (self.article9_condition == "not_applicable"):
+            raise ValueError("health-data processing requires an Article 9 condition; other processing requires not_applicable")
+        if self.transfer_mechanism == "not_applicable" and self.transfer_safeguard_reference is not None:
+            raise ValueError("transfer_safeguard_reference must be empty when no transfer mechanism applies")
+        if self.transfer_mechanism != "not_applicable" and self.transfer_safeguard_reference is None:
+            raise ValueError("transfer_safeguard_reference is required for international transfers")
+        if self.dpia_required and self.dpia_outcome == "not_required":
+            raise ValueError("a required DPIA cannot use the not_required outcome")
+        if not self.dpia_required and self.dpia_outcome != "not_required":
+            raise ValueError("a non-required DPIA screening must use the not_required outcome")
+        return self
+
+
+class PrivacyProcessingRecordEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    action: Literal["recorded", "revoked"]
+    actor_user_id: UUID
+    occurred_at: datetime
+
+
+class PrivacyProcessingRecordRead(PrivacyProcessingRecordCreate):
+    id: UUID
+    organization_id: UUID
+    version: int
+    retention_policy_version: int
+    created_by_user_id: UUID
+    created_at: datetime
+    status: Literal["active", "superseded", "revoked", "consultation_required", "unrecorded"]
+    events: list[PrivacyProcessingRecordEventRead]
+
+
+class PrivacyRequestCreate(BaseModel):
+    """Raw subject reference is accepted transiently and returned only as a digest token."""
+
+    case_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    external_subject_reference: str = Field(..., min_length=3, max_length=255)
+    request_type: PrivacyRequestType
+    scope_type: GovernanceScope
+    scope_id: UUID
+
+
+class PrivacyIdentityVerificationCreate(BaseModel):
+    evidence_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+
+
+class PrivacyRequestAcceptCreate(BaseModel):
+    evidence_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    linked_deletion_request_id: UUID | None = None
+
+
+class PrivacyRequestFulfillCreate(BaseModel):
+    evidence_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    outcome_code: PrivacyOutcome
+
+
+class PrivacyRequestDenyCreate(BaseModel):
+    evidence_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    reason_code: PrivacyDenialReason
+
+
+class PrivacyRequestCancelCreate(BaseModel):
+    evidence_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    reason_code: Literal["requester_withdrew"]
+
+
+class PrivacyRequestExtendCreate(BaseModel):
+    evidence_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    reason_code: Literal["complexity", "request_volume"]
+
+
+class PrivacyRequestEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    action: Literal["received", "identity_verified", "accepted", "fulfilled", "denied", "cancelled", "deadline_extended"]
+    actor_user_id: UUID
+    reason_code: str | None
+    outcome_code: PrivacyOutcome | None
+    evidence_reference: str | None
+    linked_deletion_request_id: UUID | None
+    new_due_at: datetime | None
+    occurred_at: datetime
+
+
+class PrivacyRequestRead(BaseModel):
+    id: UUID
+    organization_id: UUID
+    case_reference: str
+    subject_reference_token: str
+    request_type: PrivacyRequestType
+    scope_type: GovernanceScope
+    scope_id: UUID
+    received_at: datetime
+    response_due_at: datetime
+    effective_due_at: datetime
+    created_by_user_id: UUID
+    created_at: datetime
+    status: PrivacyRequestStatus
+    deadline_status: PrivacyDeadlineStatus
+    events: list[PrivacyRequestEventRead]
 
 
 class ExternalAIProviderCreate(BaseModel):

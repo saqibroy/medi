@@ -151,6 +151,19 @@ requires a separate workload identity allowed to remove versions. Keep
 `DATA_DELETION_OPERATOR_ENABLED=false` in normal application environments.
 See `DATA_LIFECYCLE_RECOVERY_PLAN.md` and `STORAGE_OPERATIONS_RUNBOOK.md`.
 
+Administrators manage privacy evidence under `/governance/privacy`. Processing
+activity records are immutable, monotonic versions that pin the declared role,
+purpose, Article 6 basis, Article 9 condition, processors/locations/transfers,
+retention-policy version, security controls, and DPIA/DPO approval references.
+Privacy requests cover access, rectification, restriction, objection,
+portability, and erasure through append-only events. The external subject
+reference is converted immediately to a keyed digest using
+`PRIVACY_REFERENCE_KEY`; keep this production secret distinct from session,
+CSRF, and audit keys. Identity proof, request correspondence, and delivered
+personal-data copies remain in an approved external case system. Erasure cannot
+be marked fulfilled without a matching executed deletion receipt. See
+`PRIVACY_OPERATIONS_PLAN.md`; these engineering controls are not legal approval.
+
 ## PostgreSQL Migration Safety
 
 Use [POSTGRES_MIGRATION_RUNBOOK.md](POSTGRES_MIGRATION_RUNBOOK.md) for the
@@ -216,6 +229,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
   deletion approval, operator boundaries, and remaining deployment evidence.
 - `EXTERNAL_AI_GOVERNANCE_PLAN.md` for default egress denial, provider and
   dataset-flow approvals, decision evidence, and remaining deployment gates.
+- `PRIVACY_OPERATIONS_PLAN.md` for processing/DPIA evidence, privacy-request
+  workflows, keyed subject-reference minimization, and deployment legal gates.
 - `IMAGING_DEIDENTIFICATION_PLAN.md` for the versioned upload quarantine,
   metadata-screening profile, threat model, and human-review boundary.
 - `PRODUCTION_STORAGE_PLAN.md` for object storage and signed URL planning.

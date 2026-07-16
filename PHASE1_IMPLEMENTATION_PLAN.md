@@ -420,6 +420,13 @@ CI verification:
   value-free decisions/audits, admin controls, and a static CI policy form the
   repository boundary. Target network enforcement and real-provider approval
   remain in `EXTERNAL_AI_GOVERNANCE_PLAN.md`.
+- Privacy operations now use immutable processing/DPIA evidence versions,
+  controlled categories and approval references, a separate keyed subject-
+  reference digest, append-only access/rectification/restriction/objection/
+  portability/erasure requests, two-person identity verification, calendar-
+  aware deadlines, and executed-deletion-receipt enforcement for erasure.
+  Target legal decisions and case/delivery tooling remain in
+  `PRIVACY_OPERATIONS_PLAN.md`.
 
 ## Next Engineering Priorities
 
@@ -447,4 +454,9 @@ CI verification:
    approved-provider versions, project data-flow policy, value-free decisions,
    administrator controls, and static CI enforcement. Deployment gates remain
    in `EXTERNAL_AI_GOVERNANCE_PLAN.md`.
-7. Next: implement the repository-controlled GDPR/privacy operations boundary.
+7. Completed repository boundary: versioned processing/DPIA evidence and a
+   data-minimized privacy-request lifecycle with keyed subject references,
+   two-person identity verification, deadline evidence, and governed erasure
+   handoff. Deployment gates remain in `PRIVACY_OPERATIONS_PLAN.md`.
+8. Next: run the Phase 4 production-readiness review and separate remaining
+   repository work from target-environment, operator, and legal evidence.

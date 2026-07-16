@@ -29,10 +29,12 @@ SAFE_DETAIL_KEYS = {
     "provider_version",
     "purpose_code",
     "reason_code",
+    "request_type",
     "release_version",
     "slice_index",
     "source_format",
     "scope_type",
+    "workflow_status",
 }
 
 
@@ -77,6 +79,36 @@ AUDITED_ROUTES: dict[tuple[str, str], AuditRoute] = {
     ),
     ("POST", "/governance/external-ai/evaluate"): AuditRoute("external_ai.egress_evaluate", "external_ai_decision"),
     ("GET", "/governance/external-ai/decisions"): AuditRoute("external_ai.decision_list", "organization"),
+    ("GET", "/governance/privacy/processing-records"): AuditRoute("privacy.processing_record_list", "organization"),
+    ("POST", "/governance/privacy/processing-records"): AuditRoute(
+        "privacy.processing_record_create", "privacy_processing_record"
+    ),
+    ("POST", "/governance/privacy/processing-records/{record_id}/revoke"): AuditRoute(
+        "privacy.processing_record_revoke", "privacy_processing_record", "record_id"
+    ),
+    ("GET", "/governance/privacy/requests"): AuditRoute("privacy.request_list", "organization"),
+    ("POST", "/governance/privacy/requests"): AuditRoute("privacy.request_create", "privacy_request"),
+    ("GET", "/governance/privacy/requests/{request_id}"): AuditRoute(
+        "privacy.request_read", "privacy_request", "request_id"
+    ),
+    ("POST", "/governance/privacy/requests/{request_id}/verify-identity"): AuditRoute(
+        "privacy.request_identity_verify", "privacy_request", "request_id"
+    ),
+    ("POST", "/governance/privacy/requests/{request_id}/accept"): AuditRoute(
+        "privacy.request_accept", "privacy_request", "request_id"
+    ),
+    ("POST", "/governance/privacy/requests/{request_id}/fulfill"): AuditRoute(
+        "privacy.request_fulfill", "privacy_request", "request_id"
+    ),
+    ("POST", "/governance/privacy/requests/{request_id}/deny"): AuditRoute(
+        "privacy.request_deny", "privacy_request", "request_id"
+    ),
+    ("POST", "/governance/privacy/requests/{request_id}/cancel"): AuditRoute(
+        "privacy.request_cancel", "privacy_request", "request_id"
+    ),
+    ("POST", "/governance/privacy/requests/{request_id}/extend"): AuditRoute(
+        "privacy.request_extend", "privacy_request", "request_id"
+    ),
     ("POST", "/projects/{project_id}/labels"): AuditRoute("label.create", "label"),
     ("PUT", "/labels/{label_id}"): AuditRoute("label.update", "label", "label_id"),
     ("DELETE", "/labels/{label_id}"): AuditRoute("label.delete", "label", "label_id"),

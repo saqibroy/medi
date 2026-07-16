@@ -73,6 +73,18 @@ and allowed/denied result enter audit details; provider contracts, prompts,
 medical payloads, credentials, and model responses do not. See
 `EXTERNAL_AI_GOVERNANCE_PLAN.md`.
 
+The privacy-operations increment audits processing-record creation/revocation
+and every privacy-request transition. Audit details are limited to stable target
+IDs plus controlled policy version, purpose, scope, request type, workflow
+status, and reason codes. Raw or digested subject references, case/evidence
+references, identity material, correspondence, and delivered data never enter
+the audit ledger. See `PRIVACY_OPERATIONS_PLAN.md`.
+
+Its local verification added signed-audit assertions to the 129-test backend
+suite and an authenticated synthetic smoke proving the request-create audit is
+present while the raw subject reference is absent from the API response and
+audit details.
+
 ## Remaining Production Gates
 
 - [ ] Export events to independently controlled append-only/WORM-capable
