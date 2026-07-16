@@ -407,6 +407,13 @@ CI verification:
   versions, append-only superseding/revocation, tenant-safe APIs, admin UI,
   audit coverage, and live checksum-stability evidence are complete; target S3
   and retention/WORM gates remain in `DATASET_RELEASE_PLAN.md`.
+- Versioned retention/RPO/RTO policies, append-only legal holds, data-minimized
+  deletion requests, requester/approver/operator separation, source-withdrawal
+  release revocation, every-version storage purge, checksum receipts, and an
+  encrypted disposable database/object recovery drill are implemented. The web
+  runtime cannot execute deletion and the operator flag defaults off. Target
+  vault/role evidence, approved values, and organization deletion remain in
+  `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
 
 ## Next Engineering Priorities
 
@@ -426,5 +433,9 @@ CI verification:
    object versions/checksums, label snapshots, approved annotation lineage,
    segmentation masks, deterministic manifests, and append-only lifecycle
    events. Deployment gates remain in `DATASET_RELEASE_PLAN.md`.
-5. Next: automate backup/restore drills and implement the approved retention,
-   legal-hold, source-withdrawal, and verified-deletion model.
+5. Completed repository boundary: encrypted recovery drills, versioned
+   retention/RPO/RTO policy, legal holds, source withdrawal, two-person
+   project/scan deletion, every-version operator purge, and verified value-free
+   receipts. Deployment gates remain in `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
+6. Next: enforce external-AI egress denial and approved-provider governance,
+   then add the repository-controlled GDPR/privacy operations boundary.

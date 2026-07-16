@@ -80,3 +80,15 @@ bash scripts/verify_postgres_migrations.sh
 It proves the complete migration chain can upgrade to the current head,
 downgrade to base, and upgrade again. GitHub Actions performs the same cycle on
 an ephemeral PostgreSQL service for every pull request and push to `main`.
+
+The separate encrypted restore rehearsal pairs PostgreSQL with a synthetic
+private-object snapshot and never targets the application database:
+
+```bash
+bash scripts/verify_backup_restore_drill.sh
+```
+
+Its value-free receipt proves isolated restoration, revision/count equality,
+object checksum equality, and cleanup. Production acceptance still requires an
+approved managed backup/vault, separate credentials, alerts, RPO/RTO, and a
+signed target-environment drill.

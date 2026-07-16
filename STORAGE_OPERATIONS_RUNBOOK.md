@@ -122,6 +122,20 @@ S3 versioning is a recovery layer, not an independent backup. Before production
 data is accepted, configure AWS Backup or approved cross-account replication
 with a separate vault/key, credentials, failure alerts, and retention policy.
 
+The repository provides a disposable proof of the recovery sequence:
+
+```bash
+bash scripts/verify_backup_restore_drill.sh
+```
+
+It creates only guarded `medi_recovery_*` databases, migrates and seeds the
+source with synthetic data, encrypts a custom-format PostgreSQL dump and a
+synthetic private-object tree with an ephemeral restricted key, restores both
+into isolated targets, verifies Alembic revision, selected table counts, and
+object checksum, emits a value-free JSON receipt, and cleans up. CI runs the
+same drill. This proves the automation path, not target backup-vault isolation,
+approved retention, alerts, achieved production RPO/RTO, or operator sign-off.
+
 At least quarterly and after material storage changes:
 
 1. Open a restore ticket and record the approved RPO/RTO and operators.
@@ -165,10 +179,33 @@ separate, tightly controlled operator role that is not attached to the runtime.
    state, timestamps, backup-expiry statement, audit-event IDs, and approvals—
    never filenames, DICOM values, image data, annotation notes, or secrets.
 
-Deletion automation is intentionally not included in this increment. It must be
-built only after organization/project deletion semantics, legal holds, dataset
-release retention, annotation tombstones, and the operator-role boundary are
-implemented and reviewed.
+Project and scan deletion governance is implemented through versioned
+organization policies, append-only legal holds, value-free inventories,
+retention checks, different requester/approver identities, and a third operator.
+The web API can request, approve, or cancel but cannot execute deletion. The
+operator environment must supply the database URL and separately authorized
+storage workload identity, then enable and confirm one exact request:
+
+```bash
+DATA_DELETION_OPERATOR_ENABLED=true \
+python -m backend.data_lifecycle_cli \
+  --request-id <approved-request-uuid> \
+  --operator-user-id <distinct-admin-uuid> \
+  --confirm-request-id <approved-request-uuid>
+```
+
+The command derives the tenant prefix from trusted database records, rechecks
+retention and all applicable organization/project/scan holds, deletes every S3
+version and delete marker (or the exact local prefix), verifies absence, revokes
+affected dataset releases as `source_withdrawn`, removes scan-owned rows, and
+writes an append-only checksum receipt with backup expiry. Project scope retains
+only a data-minimized tombstone because immutable release/audit history uses its
+stable ID. The normal runtime policy still excludes `s3:DeleteObjectVersion`.
+
+Organization-wide execution remains unsupported. Target deployment must also
+prove maintenance/write isolation, version-purge permissions on only the
+approved bucket, independent backup expiry, queue/cache/export inventory, and
+two-person operator authorization before this command is enabled.
 
 ## Evidence Record
 

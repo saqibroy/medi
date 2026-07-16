@@ -7,6 +7,8 @@ export interface Project {
   name: string;
   description: string | null;
   modality: Modality;
+  lifecycle_status: "active" | "deleted";
+  deleted_at: string | null;
   created_at: string;
 }
 

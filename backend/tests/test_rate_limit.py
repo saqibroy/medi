@@ -49,6 +49,22 @@ async def test_health_and_normal_reads_are_not_rate_limited() -> None:
     assert [response.status_code for response in responses] == [200, 200, 200]
 
 
+@pytest.mark.anyio
+async def test_governance_writes_use_the_sensitive_limit() -> None:
+    app = FastAPI()
+    app.add_middleware(RequestRateLimitMiddleware, login_limit=5, sensitive_limit=1, window_seconds=60)
+
+    @app.post("/governance/deletion-requests")
+    async def request_deletion() -> dict[str, bool]:
+        return {"ok": True}
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.post("/governance/deletion-requests")).status_code == 200
+        limited = await client.post("/governance/deletion-requests")
+
+    assert limited.status_code == 429
+
+
 class FakeRedis:
     def __init__(self) -> None:
         self.counts: dict[str, int] = {}

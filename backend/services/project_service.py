@@ -14,7 +14,11 @@ from ..schemas import LabelCreate, LabelUpdate, ProjectCreate, ProjectUpdate
 def list_projects(db: Session, current_user: User) -> list[Project]:
     """Return projects visible inside the user's organization."""
 
-    statement = select(Project).where(Project.organization_id == current_user.organization_id).order_by(Project.created_at.desc())
+    statement = (
+        select(Project)
+        .where(Project.organization_id == current_user.organization_id, Project.lifecycle_status != "deleted")
+        .order_by(Project.created_at.desc())
+    )
     return list(db.scalars(statement))
 
 
@@ -22,7 +26,7 @@ def get_project_or_404(db: Session, project_id: UUID, current_user: User) -> Pro
     """Fetch one project and enforce organization scoping."""
 
     project = db.get(Project, project_id)
-    if project is None or project.organization_id != current_user.organization_id:
+    if project is None or project.organization_id != current_user.organization_id or project.lifecycle_status == "deleted":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return project
 

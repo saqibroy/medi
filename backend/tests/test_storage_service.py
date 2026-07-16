@@ -31,9 +31,25 @@ class FakePaginator:
         return [{"Contents": [{"Key": key} for key in self.client.objects if key.startswith(prefix)]}]
 
 
+class FakeVersionPaginator:
+    def __init__(self, client: "FakeS3Client") -> None:
+        self.client = client
+
+    def paginate(self, **arguments: object) -> list[dict[str, list[dict[str, str]]]]:
+        prefix = str(arguments["Prefix"])
+        return [
+            {
+                "Versions": [item.copy() for item in self.client.versions if item["Key"].startswith(prefix)],
+                "DeleteMarkers": [item.copy() for item in self.client.delete_markers if item["Key"].startswith(prefix)],
+            }
+        ]
+
+
 class FakeS3Client:
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
+        self.versions: list[dict[str, str]] = []
+        self.delete_markers: list[dict[str, str]] = []
         self.last_put: dict[str, object] = {}
         self.last_presign: dict[str, object] = {}
 
@@ -51,15 +67,21 @@ class FakeS3Client:
     def delete_object(self, **arguments: object) -> None:
         self.objects.pop(str(arguments["Key"]), None)
 
-    def get_paginator(self, operation_name: str) -> FakePaginator:
-        assert operation_name == "list_objects_v2"
-        return FakePaginator(self)
+    def get_paginator(self, operation_name: str) -> FakePaginator | FakeVersionPaginator:
+        if operation_name == "list_objects_v2":
+            return FakePaginator(self)
+        assert operation_name == "list_object_versions"
+        return FakeVersionPaginator(self)
 
     def delete_objects(self, **arguments: object) -> None:
         delete = arguments["Delete"]
         assert isinstance(delete, dict)
         for item in delete["Objects"]:
-            self.objects.pop(str(item["Key"]), None)
+            key = str(item["Key"])
+            version_id = str(item.get("VersionId", ""))
+            self.objects.pop(key, None)
+            self.versions = [version for version in self.versions if not (version["Key"] == key and version["VersionId"] == version_id)]
+            self.delete_markers = [marker for marker in self.delete_markers if not (marker["Key"] == key and marker["VersionId"] == version_id)]
 
     def generate_presigned_url(self, method: str, **arguments: object) -> str:
         self.last_presign = {"method": method, **arguments}
@@ -146,6 +168,32 @@ def test_s3_storage_rejects_unsafe_key_before_client_call() -> None:
     with pytest.raises(StorageKeyError):
         storage.put_bytes("../escape", b"private")
     assert client.last_put == {}
+
+
+def test_s3_operator_purge_deletes_only_exact_prefix_versions_and_markers() -> None:
+    client = FakeS3Client()
+    selected_prefix = "org/org-a/project/project-a/scan/scan-a"
+    retained_prefix = "org/org-a/project/project-a/scan/scan-b"
+    client.versions = [
+        {"Key": f"{selected_prefix}/original/volume.dcm", "VersionId": "v1"},
+        {"Key": f"{selected_prefix}/original/volume.dcm", "VersionId": "v2"},
+        {"Key": f"{retained_prefix}/original/volume.dcm", "VersionId": "v3"},
+    ]
+    client.delete_markers = [
+        {"Key": f"{selected_prefix}/derived/preview/000000.png", "VersionId": "marker-1"},
+        {"Key": f"{retained_prefix}/derived/preview/000000.png", "VersionId": "marker-2"},
+    ]
+    storage = S3PrivateStorage("bucket", "region", "AES256", client=client)
+
+    result = storage.purge_prefix_versions(selected_prefix)
+
+    assert result.object_count == 2
+    assert result.object_versions_deleted == 2
+    assert result.delete_markers_deleted == 1
+    assert client.versions == [{"Key": f"{retained_prefix}/original/volume.dcm", "VersionId": "v3"}]
+    assert client.delete_markers == [
+        {"Key": f"{retained_prefix}/derived/preview/000000.png", "VersionId": "marker-2"}
+    ]
 
 
 @pytest.mark.parametrize(

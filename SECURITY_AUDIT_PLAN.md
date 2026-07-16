@@ -19,6 +19,10 @@ second store of patient data, credentials, or clinical free text.
   decisions, sensitive pixel/mask reads, signed-URL issuance, exports, project
   and label administration, annotation changes/reviews/deletions, and mask
   changes/deletions.
+- [x] Record retention-policy, legal-hold, deletion-request approval/cancellation,
+  and successful operator execution using only stable IDs and controlled scalar
+  details; governance payloads, inventories, and receipts do not enter audit
+  rows.
 - [x] Prove tenant isolation, non-admin denial, safe-field behavior, integrity
   verification, and database-level immutability with automated tests.
 - [x] Rebuild and run the complete application, rehearse migrations against
@@ -55,6 +59,12 @@ Completed on 2026-07-16:
   denial, and absence of bearer/email values.
 - A direct PostgreSQL `UPDATE` against the live audit table was rejected by the
   append-only trigger.
+
+The later data-lifecycle increment adds audited governance routes and operator
+execution without changing the ledger's allowlisted, payload-free boundary;
+signed success evidence is transactionally committed with the deletion receipt
+and lifecycle events, while failed attempts append signed error evidence. Its
+full evidence is tracked in `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
 
 ## Remaining Production Gates
 

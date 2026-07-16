@@ -18,6 +18,10 @@ ReviewStatus = Literal["pending", "approved", "rejected", "needs_changes"]
 DatasetReleaseStatus = Literal["active", "superseded", "revoked"]
 DatasetReleaseAction = Literal["created", "superseded", "revoked"]
 DatasetReleaseReason = Literal["quality_issue", "source_withdrawn", "policy_change", "superseded", "other"]
+GovernanceScope = Literal["organization", "project", "scan"]
+DeletionScope = Literal["project", "scan"]
+LegalHoldReason = Literal["litigation", "regulatory", "security_incident", "customer_request"]
+DeletionReason = Literal["erasure_request", "source_withdrawal", "contract_end", "duplicate_data"]
 UserRole = Literal["admin", "annotator", "reviewer"]
 SourceFormat = Literal["synthetic", "nifti", "dicom", "dicom_zip", "unknown"]
 IngestionStatus = Literal["pending", "processing", "ready", "failed", "quarantined"]
@@ -115,6 +119,8 @@ class ProjectRead(ProjectBase):
 
     id: UUID
     organization_id: UUID
+    lifecycle_status: Literal["active", "deleted"]
+    deleted_at: datetime | None
     created_at: datetime
 
 
@@ -156,6 +162,105 @@ class DatasetReleaseRevoke(BaseModel):
     """Controlled revocation reason without a free-text PHI channel."""
 
     reason_code: Literal["quality_issue", "source_withdrawn", "policy_change", "other"]
+
+
+class DataRetentionPolicyCreate(BaseModel):
+    """Explicit organization policy values; no destructive default is assumed."""
+
+    approval_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    original_minimum_days: int = Field(..., ge=0, le=36500)
+    mask_minimum_days: int = Field(..., ge=0, le=36500)
+    metadata_minimum_days: int = Field(..., ge=0, le=36500)
+    dataset_release_minimum_days: int = Field(..., ge=0, le=36500)
+    audit_minimum_days: int = Field(..., ge=0, le=36500)
+    backup_retention_days: int = Field(..., ge=1, le=36500)
+    rpo_hours: int = Field(..., ge=1, le=8760)
+    rto_hours: int = Field(..., ge=1, le=8760)
+
+
+class DataRetentionPolicyRead(DataRetentionPolicyCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID
+    version: int
+    created_by_user_id: UUID
+    created_at: datetime
+
+
+class LegalHoldCreate(BaseModel):
+    scope_type: GovernanceScope
+    scope_id: UUID
+    reason_code: LegalHoldReason
+    approval_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+
+
+class LegalHoldEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    action: Literal["applied", "released"]
+    actor_user_id: UUID
+    occurred_at: datetime
+
+
+class LegalHoldRead(LegalHoldCreate):
+    id: UUID
+    organization_id: UUID
+    created_by_user_id: UUID
+    created_at: datetime
+    status: Literal["active", "released"]
+    events: list[LegalHoldEventRead]
+
+
+class DataDeletionRequestCreate(BaseModel):
+    scope_type: DeletionScope
+    scope_id: UUID
+    reason_code: DeletionReason
+    approval_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+
+
+class DataDeletionEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    action: Literal["requested", "approved", "cancelled", "executed", "verified", "failed"]
+    actor_user_id: UUID
+    occurred_at: datetime
+
+
+class DataDeletionReceiptRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    request_id: UUID
+    organization_id: UUID
+    scope_type: DeletionScope
+    scope_id: UUID
+    deleted_counts: dict[str, int]
+    object_versions_deleted: int
+    delete_markers_deleted: int
+    revoked_releases: int
+    backup_disposition: Literal["expires_per_policy", "not_applicable"]
+    backup_expires_at: datetime | None
+    approved_by_user_id: UUID
+    operator_user_id: UUID
+    receipt_sha256: str
+    completed_at: datetime
+
+
+class DataDeletionRequestRead(DataDeletionRequestCreate):
+    id: UUID
+    organization_id: UUID
+    retention_policy_id: UUID
+    retention_policy_version: int
+    inventory: dict[str, int]
+    earliest_execute_at: datetime
+    requested_by_user_id: UUID
+    created_at: datetime
+    status: Literal["requested", "approved", "cancelled", "executed", "verified", "failed"]
+    events: list[DataDeletionEventRead]
+    receipt: DataDeletionReceiptRead | None
 
 
 class LabelBase(BaseModel):

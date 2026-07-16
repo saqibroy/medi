@@ -150,6 +150,33 @@ events. The browser surface is `DatasetReleasePanel.tsx`; the service and schema
 contract live in `backend/services/dataset_release_service.py` and
 `backend/schemas.py`.
 
+## Governing Retention, Holds, And Deletion
+
+Organization administrators create explicit versioned retention policies; the
+application supplies no production retention values. Legal holds and deletion
+requests use immutable parent records plus append-only lifecycle events.
+Deletion snapshots a value-free row/object-reference inventory and the exact
+policy version. A different administrator must approve after minimum retention
+has elapsed and all organization/project/scan holds are clear.
+
+Deletion execution is deliberately absent from HTTP routes. The separately
+enabled `backend.data_lifecycle_cli` requires the approved request UUID twice
+and a third active administrator identity. It rechecks policy and holds, derives
+the tenant prefix from database ownership, purges the exact local scope or every
+S3 version/delete marker, verifies absence, revokes affected releases, and then
+removes scan-owned rows. Project deletion leaves a data-minimized tombstone so
+immutable release and audit identifiers remain valid. A checksum-protected,
+append-only receipt records only stable IDs, counts, actors, timestamps, and
+backup expiry. Its signed success audit is committed in the same database
+transaction as the receipt/lifecycle events; failures append a signed error
+audit beside the failed lifecycle event.
+
+The normal S3 runtime role still cannot delete object versions. The operator
+must use separately approved credentials, and target backup-vault/Object Lock,
+organization-wide deletion, policy approval, and signed drills remain Phase 4
+gates. `scripts/verify_backup_restore_drill.sh` proves the encrypted recovery
+sequence only on disposable PostgreSQL databases and synthetic objects.
+
 ## ML Team Consumption
 
 The ML team would usually start with:

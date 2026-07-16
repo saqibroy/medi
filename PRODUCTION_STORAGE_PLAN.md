@@ -3,11 +3,11 @@
 Status: repository-controlled target-account boundary complete. The path-safe local backend,
 private S3 backend, organization/project/scan key layout, KMS-encrypted writes,
 and tenant-authorized short-lived preview URLs are implemented and tested for
-originals, previews, reprocessing, and segmentation masks. Deployment-specific
-bucket policy, lifecycle rules, cloud integration evidence, backup/restore, and
-customer-deletion drills remain production gates. This increment adds
-deployable AWS controls, lifecycle tags, read-only verification, and recovery/
-deletion procedures; cloud evidence still requires an approved target account.
+originals, previews, reprocessing, and segmentation masks. Encrypted disposable
+restore automation, every-version operator purge, versioned retention policies,
+legal holds, two-person approval, and value-free receipts are also implemented.
+Target bucket/vault deployment, approved policy values, alerts, organization
+deletion, and signed recovery/deletion drills remain production gates.
 
 Medi currently stores scan originals and derived preview PNGs on the local
 filesystem so the product can run simply in development and Docker Compose. For
@@ -135,6 +135,8 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
 10. [ ] Deploy and verify the controls in the approved target AWS account.
 11. [ ] Configure independent backups/alerts and record restore and deletion
     drills with synthetic evidence.
+12. [x] Add encrypted disposable PostgreSQL/object recovery automation in CI
+    plus governed project/scan deletion and every-version operator purge.
 
 ## Acceptance Criteria
 
@@ -150,14 +152,16 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
 
 Completed on 2026-07-16:
 
-- 92 backend tests passed, including S3 write tagging and fail-closed control
-  verification.
+- 113 backend tests pass across the current repository, including S3 write
+  tagging, exact-prefix every-version purge, fail-closed controls, governance,
+  and recovery/deletion safety.
 - `cfn-lint 1.53.0` accepted
   `infrastructure/aws/medi-private-storage.json`; the same pinned check now runs
   in CI.
-- The frontend production build and PostgreSQL upgrade/rollback rehearsal
-  passed at migration `20260716_0009`.
+- The frontend production build, PostgreSQL upgrade/rollback rehearsal at
+  `20260716_0011`, and encrypted PostgreSQL/synthetic-object restore drill pass.
 - Docker Compose rebuilt successfully and live readiness, authentication,
+  versioned policy, value-free deletion request/cancellation, disabled operator,
   private slice access, and audit evidence checks passed.
 - No cloud account was mutated and no real credentials or patient data were
   introduced. Target-account verifier output and operational drill records
