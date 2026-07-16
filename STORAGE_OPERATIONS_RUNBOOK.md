@@ -128,8 +128,9 @@ The repository provides a disposable proof of the recovery sequence:
 bash scripts/verify_backup_restore_drill.sh
 ```
 
-It creates only guarded `medi_recovery_*` databases, migrates and seeds the
-source with synthetic data, encrypts a custom-format PostgreSQL dump and a
+It creates only guarded `medi_recovery_*` databases, waits for database
+readiness, migrates and seeds the source with synthetic data, encrypts a
+custom-format PostgreSQL dump and a
 synthetic private-object tree with an ephemeral restricted key, restores both
 into isolated targets, verifies Alembic revision, selected table counts, and
 object checksum, emits a value-free JSON receipt, and cleans up. CI runs the

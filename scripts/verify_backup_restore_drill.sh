@@ -52,6 +52,18 @@ cleanup() {
 
 trap cleanup EXIT
 docker compose up -d db >/dev/null
+database_ready=false
+for _ in $(seq 1 30); do
+  if docker compose exec -T db pg_isready -U postgres -d postgres >/dev/null 2>&1; then
+    database_ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$database_ready" != true ]]; then
+  echo "Recovery PostgreSQL did not become ready within 30 seconds." >&2
+  exit 2
+fi
 drop_database "$restore_database"
 drop_database "$source_database"
 docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres \

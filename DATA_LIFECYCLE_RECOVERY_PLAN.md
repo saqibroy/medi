@@ -36,7 +36,8 @@ approved operators, and customer authorization remain deployment gates.
 
 - [x] Add a guarded disposable PostgreSQL backup/restore drill using an
   encrypted temporary dump, isolated restore database, schema revision and row
-  count verification, and cleanup on failure or success.
+  count verification, bounded database-readiness gate, and cleanup on failure
+  or success.
 - [x] Add an encrypted synthetic private-object snapshot/restore check with
   checksum and path-containment verification.
 - [x] Emit a value-free machine-readable drill receipt and make failures visible
@@ -61,7 +62,8 @@ approved operators, and customer authorization remain deployment gates.
 - [x] Backend tests pass: 113 tests on 2026-07-16.
 - [x] Frontend production build passes on 2026-07-16.
 - [x] PostgreSQL migration rehearsal passes through `20260716_0011`, and the
-  encrypted PostgreSQL/synthetic-object recovery drill restores and verifies.
+  encrypted PostgreSQL/synthetic-object recovery drill restores and verifies,
+  including from a newly initialized Compose volume.
 - [x] Infrastructure configuration lints successfully with `cfn-lint 1.53.0`.
 - [x] Rebuilt Compose services are healthy and pass live versioned-policy,
   value-free deletion-request/cancellation, audit, migration-head, and disabled
