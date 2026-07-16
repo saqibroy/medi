@@ -19,6 +19,7 @@ DEVELOPMENT_CORS_ORIGINS = (
 DEVELOPMENT_TOKEN_SECRET = "dev-token-secret-change-before-production"
 DEVELOPMENT_CSRF_SECRET = "dev-csrf-secret-change-before-production"
 DEVELOPMENT_AUDIT_SIGNING_KEY = "dev-audit-signing-key-change-before-production"
+DEVELOPMENT_PRIVACY_REFERENCE_KEY = "dev-privacy-reference-key-change-before-production"
 DEVELOPMENT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/medical_annotations"
 
 
@@ -35,6 +36,7 @@ class Settings:
     token_secret: str
     csrf_secret: str
     audit_signing_key: str
+    privacy_reference_key: str
     cors_origins: tuple[str, ...]
     seed_demo_data: bool
     session_ttl_minutes: int
@@ -134,6 +136,7 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
     token_secret = values.get("TOKEN_SECRET", DEVELOPMENT_TOKEN_SECRET).strip()
     csrf_secret = values.get("CSRF_SECRET", DEVELOPMENT_CSRF_SECRET).strip()
     audit_signing_key = values.get("AUDIT_SIGNING_KEY", DEVELOPMENT_AUDIT_SIGNING_KEY).strip()
+    privacy_reference_key = values.get("PRIVACY_REFERENCE_KEY", DEVELOPMENT_PRIVACY_REFERENCE_KEY).strip()
     default_origins = ",".join(DEVELOPMENT_CORS_ORIGINS)
     cors_origins = _read_origins(values.get("CORS_ORIGINS", default_origins))
     seed_demo_data = _read_boolean(values.get("SEED_DEMO_DATA", "false" if app_environment == "production" else "true"), "SEED_DEMO_DATA")
@@ -195,6 +198,13 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
             or audit_signing_key == csrf_secret
         ):
             raise ConfigurationError("production requires a distinct AUDIT_SIGNING_KEY of at least 32 characters")
+        if (
+            "PRIVACY_REFERENCE_KEY" not in values
+            or privacy_reference_key == DEVELOPMENT_PRIVACY_REFERENCE_KEY
+            or len(privacy_reference_key) < 32
+            or privacy_reference_key in {token_secret, csrf_secret, audit_signing_key}
+        ):
+            raise ConfigurationError("production requires a distinct PRIVACY_REFERENCE_KEY of at least 32 characters")
         if "CORS_ORIGINS" not in values:
             raise ConfigurationError("production requires explicit CORS_ORIGINS")
         if seed_demo_data:
@@ -216,6 +226,7 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
         token_secret=token_secret,
         csrf_secret=csrf_secret,
         audit_signing_key=audit_signing_key,
+        privacy_reference_key=privacy_reference_key,
         cors_origins=cors_origins,
         seed_demo_data=seed_demo_data,
         session_ttl_minutes=session_ttl_minutes,

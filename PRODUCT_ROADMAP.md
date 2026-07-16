@@ -227,4 +227,12 @@ Definition of done:
    de-identification gates, value-free decisions/audits, administrator controls,
    and static CI enforcement are implemented. Target network/provider approval
    remains in `EXTERNAL_AI_GOVERNANCE_PLAN.md`.
-7. Next: implement the repository-controlled GDPR/privacy operations boundary.
+7. Completed repository boundary: versioned processing/DPIA evidence,
+   data-minimized privacy-request lifecycle records, keyed subject-reference
+   digests, two-person identity verification, deadline evidence, and verified
+   erasure handoff to the existing deletion workflow are implemented. Target
+   legal approval, real controller/processor evidence, identity tooling, and
+   end-to-end operator exercises remain in `PRIVACY_OPERATIONS_PLAN.md`.
+8. Next: run the Phase 4 production-readiness review, inventory every remaining
+   repository versus target-deployment gate, and close the highest-risk
+   repository-controlled gaps without inventing external evidence.

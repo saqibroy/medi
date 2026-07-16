@@ -36,6 +36,7 @@ services:
       TOKEN_SECRET: ${TOKEN_SECRET:-dev-token-secret-change-before-production}
       CSRF_SECRET: ${CSRF_SECRET:-dev-csrf-secret-change-before-production}
       AUDIT_SIGNING_KEY: ${AUDIT_SIGNING_KEY:-dev-audit-signing-key-change-before-production}
+      PRIVACY_REFERENCE_KEY: ${PRIVACY_REFERENCE_KEY:-dev-privacy-reference-key-change-before-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:8080,http://127.0.0.1:8080}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
       SESSION_TTL_MINUTES: ${SESSION_TTL_MINUTES:-480}

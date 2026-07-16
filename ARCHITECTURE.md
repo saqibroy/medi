@@ -177,6 +177,37 @@ organization-wide deletion, policy approval, and signed drills remain Phase 4
 gates. `scripts/verify_backup_restore_drill.sh` proves the encrypted recovery
 sequence only on disposable PostgreSQL databases and synthetic objects.
 
+## Governing Privacy Operations
+
+`/governance/privacy` exposes administrator-only processing records and privacy
+request workflows. A processing record is an immutable, monotonic activity
+version that pins controlled role, purpose, lawful-basis/Article 9 declarations,
+data/subject/recipient categories, processor and location references, transfer
+mechanism, the exact retention-policy version, security-control references, and
+DPIA/DPO evidence. Append-only record events support second-administrator
+revocation. A version whose DPIA outcome requires prior consultation is reported
+as `consultation_required`, never active.
+
+Privacy requests accept access, rectification, restriction, objection,
+portability, and erasure case types. Medi does not become the identity system:
+the supplied external subject reference is converted immediately to a tenant-
+scoped HMAC-SHA-256 digest under a separate `PRIVACY_REFERENCE_KEY`; successful
+responses expose only a short digest token. Identity documents, correspondence,
+free-text decisions, and delivered copies stay outside Medi. A second
+administrator must record external identity-verification evidence before
+acceptance. The service computes a one-calendar-month target, supports one
+controlled two-month extension, and derives on-time/overdue state from
+append-only events.
+
+Fulfillment stores only a controlled outcome and evidence reference. An erasure
+case must link to the same tenant and project/scan scope in the existing deletion
+workflow, and cannot be fulfilled until that request has an executed deletion
+receipt. Other rights remain evidence-governed operator workflows rather than
+unsafe automatic data disclosure or mutation. Signed audits contain only stable
+targets, scope/type/status/reason codes, and no subject reference or case
+evidence. Target legal decisions, identity tooling, secure delivery, and
+end-to-end operational exercises remain gates in `PRIVACY_OPERATIONS_PLAN.md`.
+
 ## Governing External AI Egress
 
 The normal runtime starts with `EXTERNAL_AI_ENABLED=false`, an empty exact-
