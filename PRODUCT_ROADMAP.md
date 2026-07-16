@@ -222,5 +222,9 @@ Definition of done:
    every-version operator purge, and checksum receipts. Target infrastructure,
    organization deletion, and approved policy values remain deployment gates in
    `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
-6. Next: enforce external-AI egress denial and approved-provider governance,
-   then implement the repository-controlled GDPR/privacy operations boundary.
+6. Completed repository boundary: external AI defaults off with no provider
+   call; provider/model versions, project flows, exact data classes/origins,
+   de-identification gates, value-free decisions/audits, administrator controls,
+   and static CI enforcement are implemented. Target network/provider approval
+   remains in `EXTERNAL_AI_GOVERNANCE_PLAN.md`.
+7. Next: implement the repository-controlled GDPR/privacy operations boundary.

@@ -575,6 +575,167 @@ class DataDeletionReceipt(Base):
     request: Mapped[DataDeletionRequest] = relationship(back_populates="receipt")
 
 
+class ExternalAIProviderApproval(Base):
+    """Immutable approved-provider and exact model-version policy snapshot."""
+
+    __tablename__ = "external_ai_provider_approvals"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "provider_key", "version", name="uq_external_ai_provider_version"),
+        CheckConstraint("version > 0", name="ck_external_ai_provider_version_positive"),
+        CheckConstraint(
+            "purpose_code IN ('research_inference', 'annotation_assistance', 'quality_assurance')",
+            name="ck_external_ai_provider_purpose",
+        ),
+        CheckConstraint(
+            "transfer_mechanism IN ('not_applicable', 'adequacy_decision', 'standard_contractual_clauses', 'approved_derogation')",
+            name="ck_external_ai_provider_transfer",
+        ),
+        CheckConstraint("retention_days >= 0", name="ck_external_ai_provider_retention"),
+        CheckConstraint("training_use_allowed = false", name="ck_external_ai_provider_no_training"),
+        Index("ix_external_ai_providers_org_created", "organization_id", "created_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    provider_key: Mapped[str] = mapped_column(String(60), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    purpose_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    endpoint_origin: Mapped[str] = mapped_column(String(255), nullable=False)
+    region_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    data_classes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    retention_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    training_use_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    subprocessors: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    transfer_mechanism: Mapped[str] = mapped_column(String(40), nullable=False)
+    contract_owner_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    approval_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    events: Mapped[list["ExternalAIProviderEvent"]] = relationship(back_populates="provider", passive_deletes=True)
+
+
+class ExternalAIProviderEvent(Base):
+    """Append-only provider approval or revocation fact."""
+
+    __tablename__ = "external_ai_provider_events"
+    __table_args__ = (
+        CheckConstraint("action IN ('approved', 'revoked')", name="ck_external_ai_provider_event_action"),
+        Index("ix_external_ai_provider_events_provider_occurred", "provider_approval_id", "occurred_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    provider_approval_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("external_ai_provider_approvals.id", ondelete="RESTRICT"), nullable=False
+    )
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    actor_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    provider: Mapped[ExternalAIProviderApproval] = relationship(back_populates="events")
+
+
+class ExternalAIDataFlowApproval(Base):
+    """Immutable project-level approval pinned to one provider policy version."""
+
+    __tablename__ = "external_ai_data_flow_approvals"
+    __table_args__ = (
+        CheckConstraint(
+            "purpose_code IN ('research_inference', 'annotation_assistance', 'quality_assurance')",
+            name="ck_external_ai_flow_purpose",
+        ),
+        Index("ix_external_ai_flows_org_project", "organization_id", "project_id", "created_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    project_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    provider_approval_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("external_ai_provider_approvals.id", ondelete="RESTRICT"), nullable=False
+    )
+    purpose_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    data_classes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    approval_reference: Mapped[str] = mapped_column(String(80), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    provider: Mapped[ExternalAIProviderApproval] = relationship()
+    events: Mapped[list["ExternalAIDataFlowEvent"]] = relationship(back_populates="data_flow", passive_deletes=True)
+
+
+class ExternalAIDataFlowEvent(Base):
+    """Append-only project data-flow approval or revocation fact."""
+
+    __tablename__ = "external_ai_data_flow_events"
+    __table_args__ = (
+        CheckConstraint("action IN ('approved', 'revoked')", name="ck_external_ai_flow_event_action"),
+        Index("ix_external_ai_flow_events_flow_occurred", "data_flow_id", "occurred_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    data_flow_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("external_ai_data_flow_approvals.id", ondelete="RESTRICT"), nullable=False
+    )
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    actor_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    data_flow: Mapped[ExternalAIDataFlowApproval] = relationship(back_populates="events")
+
+
+class ExternalAIEgressDecision(Base):
+    """Value-free append-only evidence for one governed authorization attempt."""
+
+    __tablename__ = "external_ai_egress_decisions"
+    __table_args__ = (
+        CheckConstraint("result IN ('allowed', 'denied')", name="ck_external_ai_decision_result"),
+        CheckConstraint(
+            "reason_code IN ('authorized', 'feature_disabled', 'provider_revoked', 'provider_unapproved', "
+            "'flow_revoked', 'flow_unapproved', 'flow_expired', 'origin_not_allowlisted', "
+            "'project_unavailable', 'purpose_not_approved', "
+            "'data_class_not_approved', 'dataset_not_deidentified')",
+            name="ck_external_ai_decision_reason",
+        ),
+        Index("ix_external_ai_decisions_org_occurred", "organization_id", "occurred_at"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    provider_approval_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("external_ai_provider_approvals.id", ondelete="RESTRICT"), nullable=False
+    )
+    data_flow_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("external_ai_data_flow_approvals.id", ondelete="RESTRICT"), nullable=False
+    )
+    project_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
+    )
+    actor_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    purpose_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    requested_data_classes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    result: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 @event.listens_for(DataRetentionPolicy, "before_update")
 @event.listens_for(DataRetentionPolicy, "before_delete")
 @event.listens_for(LegalHold, "before_update")
@@ -587,6 +748,16 @@ class DataDeletionReceipt(Base):
 @event.listens_for(DataDeletionEvent, "before_delete")
 @event.listens_for(DataDeletionReceipt, "before_update")
 @event.listens_for(DataDeletionReceipt, "before_delete")
+@event.listens_for(ExternalAIProviderApproval, "before_update")
+@event.listens_for(ExternalAIProviderApproval, "before_delete")
+@event.listens_for(ExternalAIProviderEvent, "before_update")
+@event.listens_for(ExternalAIProviderEvent, "before_delete")
+@event.listens_for(ExternalAIDataFlowApproval, "before_update")
+@event.listens_for(ExternalAIDataFlowApproval, "before_delete")
+@event.listens_for(ExternalAIDataFlowEvent, "before_update")
+@event.listens_for(ExternalAIDataFlowEvent, "before_delete")
+@event.listens_for(ExternalAIEgressDecision, "before_update")
+@event.listens_for(ExternalAIEgressDecision, "before_delete")
 def _reject_data_governance_mutation(*_: object) -> None:
     """Keep lifecycle policies, decisions, and receipts append-only."""
 

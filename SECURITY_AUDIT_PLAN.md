@@ -66,6 +66,13 @@ signed success evidence is transactionally committed with the deletion receipt
 and lifecycle events, while failed attempts append signed error evidence. Its
 full evidence is tracked in `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
 
+The external-AI governance increment adds explicit signed audits for provider
+and project-flow creation/revocation plus every dry-run authorization decision.
+Only stable targets, controlled purpose/reason, class count, provider version,
+and allowed/denied result enter audit details; provider contracts, prompts,
+medical payloads, credentials, and model responses do not. See
+`EXTERNAL_AI_GOVERNANCE_PLAN.md`.
+
 ## Remaining Production Gates
 
 - [ ] Export events to independently controlled append-only/WORM-capable

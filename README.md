@@ -163,12 +163,34 @@ Run `bash scripts/verify_backup_restore_drill.sh` for the encrypted disposable
 PostgreSQL plus synthetic private-object restore proof. It does not replace a
 signed target backup-vault drill.
 
+## External AI Boundary
+
+External AI is disabled and has no provider-call implementation by default:
+
+```dotenv
+EXTERNAL_AI_ENABLED=false
+EXTERNAL_AI_ALLOWED_ORIGINS=
+```
+
+Administrators may record append-only provider and project data-flow approvals
+and run a value-free authorization decision, but this does not transmit data.
+Enabling the feature gate requires one or more exact HTTPS gateway origins and
+still does not create a provider client. Run the static repository policy with:
+
+```bash
+.venv/bin/python scripts/verify_external_ai_egress.py
+```
+
+See `EXTERNAL_AI_GOVERNANCE_PLAN.md` for prohibited data classes, approval
+fields, operational boundaries, and deployment-only network/legal gates.
+
 ## Run Quality Checks
 
 Use these before pushing production-minded changes:
 
 ```bash
 .venv/bin/python -m compileall backend
+.venv/bin/python scripts/verify_external_ai_egress.py
 .venv/bin/python -m pytest backend/tests
 cd frontend
 npm run build
@@ -192,6 +214,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
   and remaining deployment gates.
 - `DATA_LIFECYCLE_RECOVERY_PLAN.md` for recovery automation, retention, holds,
   deletion approval, operator boundaries, and remaining deployment evidence.
+- `EXTERNAL_AI_GOVERNANCE_PLAN.md` for default egress denial, provider and
+  dataset-flow approvals, decision evidence, and remaining deployment gates.
 - `IMAGING_DEIDENTIFICATION_PLAN.md` for the versioned upload quarantine,
   metadata-screening profile, threat model, and human-review boundary.
 - `PRODUCTION_STORAGE_PLAN.md` for object storage and signed URL planning.

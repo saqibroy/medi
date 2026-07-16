@@ -53,6 +53,8 @@ class Settings:
     scan_storage_sse: str
     scan_storage_kms_key_id: str | None
     data_deletion_operator_enabled: bool
+    external_ai_enabled: bool
+    external_ai_allowed_origins: tuple[str, ...]
 
     @property
     def is_production(self) -> bool:
@@ -100,6 +102,26 @@ def _read_origins(value: str) -> tuple[str, ...]:
     return origins
 
 
+def _read_external_ai_origins(value: str) -> tuple[str, ...]:
+    origins = tuple(origin.strip().rstrip("/") for origin in value.split(",") if origin.strip())
+    if "*" in origins:
+        raise ConfigurationError("EXTERNAL_AI_ALLOWED_ORIGINS must not contain '*'")
+    for origin in origins:
+        parsed = urlparse(origin)
+        if (
+            parsed.scheme != "https"
+            or not parsed.netloc
+            or parsed.path
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+            or parsed.username
+            or parsed.password
+        ):
+            raise ConfigurationError("EXTERNAL_AI_ALLOWED_ORIGINS must contain exact HTTPS origins")
+    return tuple(dict.fromkeys(origins))
+
+
 def get_settings(environment: dict[str, str] | None = None) -> Settings:
     """Read settings without caching so focused tests can safely isolate env vars."""
 
@@ -144,6 +166,10 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
         values.get("DATA_DELETION_OPERATOR_ENABLED", "false"),
         "DATA_DELETION_OPERATOR_ENABLED",
     )
+    external_ai_enabled = _read_boolean(values.get("EXTERNAL_AI_ENABLED", "false"), "EXTERNAL_AI_ENABLED")
+    external_ai_allowed_origins = _read_external_ai_origins(values.get("EXTERNAL_AI_ALLOWED_ORIGINS", ""))
+    if external_ai_enabled and not external_ai_allowed_origins:
+        raise ConfigurationError("EXTERNAL_AI_ALLOWED_ORIGINS is required when EXTERNAL_AI_ENABLED=true")
     if storage_backend == "s3" and (storage_bucket is None or storage_region is None):
         raise ConfigurationError("S3 storage requires SCAN_STORAGE_BUCKET and SCAN_STORAGE_REGION")
     if storage_sse == "aws:kms" and storage_kms_key_id is None:
@@ -208,4 +234,6 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
         scan_storage_sse=storage_sse,
         scan_storage_kms_key_id=storage_kms_key_id,
         data_deletion_operator_enabled=deletion_operator_enabled,
+        external_ai_enabled=external_ai_enabled,
+        external_ai_allowed_origins=external_ai_allowed_origins,
     )

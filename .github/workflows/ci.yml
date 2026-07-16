@@ -58,6 +58,9 @@ jobs:
       - name: Compile backend
         run: python -m compileall backend
 
+      - name: Verify external AI egress policy
+        run: python scripts/verify_external_ai_egress.py
+
       - name: Run backend tests
         run: python -m pytest backend/tests
 

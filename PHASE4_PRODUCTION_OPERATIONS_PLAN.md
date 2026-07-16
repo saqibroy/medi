@@ -264,17 +264,17 @@ Useful primary references:
 
 ## External AI And Model Governance
 
-- [ ] Keep `EXTERNAL_AI_ENABLED=false` as the safe default and implement no
+- [x] Keep `EXTERNAL_AI_ENABLED=false` as the safe default and implement no
   provider call on the default code path.
-- [ ] Maintain an approved-provider registry with purpose, model/version, data
+- [x] Maintain an approved-provider registry with purpose, model/version, data
   classes allowed, region, retention/training terms, subprocessors, and contract
   owner.
-- [ ] Block pixels, raw DICOM, metadata, annotations, and notes from external
+- [x] Block pixels, raw DICOM, metadata, annotations, and notes from external
   egress unless the exact data flow is approved.
 - [ ] Prefer local or private-endpoint inference for sensitive workloads.
-- [ ] Add an egress gateway/allowlist and audit every approved request without
-  logging sensitive payloads.
-- [ ] Present clear administrator controls and dataset-level consent/policy
+- [~] Enforce an exact HTTPS application allowlist, value-free decisions, and
+  signed audits. Target proxy/firewall/DNS enforcement remains required.
+- [x] Present clear administrator controls and dataset-level consent/policy
   checks; never silently enable a provider from a frontend feature flag.
 - [ ] Version model outputs and keep them distinguishable from human annotations.
 
@@ -333,8 +333,10 @@ Useful primary references:
     deletion, every-version purge, and verified receipts. Target infrastructure,
     organization deletion, and policy approvals remain in
     `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
-11. [ ] Complete GDPR/DPIA/processor evidence for the target deployment.
-12. [ ] Run a production-readiness review and close every applicable gate.
+11. [x] Complete the repository boundary for external-AI egress denial,
+    approved-provider and dataset-flow governance, and value-free decisions.
+12. [ ] Complete GDPR/DPIA/processor evidence for the target deployment.
+13. [ ] Run a production-readiness review and close every applicable gate.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
@@ -343,8 +345,10 @@ annotation manifests are evidenced in `DATASET_RELEASE_PLAN.md`.
 Current repository increment complete: backup/restore automation plus
 retention, legal-hold, source-withdrawal, and verified project/scan deletion are
 evidenced in `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
-Next repository increment: external-AI egress denial/provider governance and
-the repository-controlled GDPR/privacy operations boundary.
+Current repository increment complete: external-AI egress denial and approved-
+provider/data-flow governance are evidenced in
+`EXTERNAL_AI_GOVERNANCE_PLAN.md`. Next repository increment: the repository-
+controlled GDPR/privacy operations boundary.
 
 ## Phase 4 Exit Criteria
 
@@ -359,6 +363,8 @@ the repository-controlled GDPR/privacy operations boundary.
   separate production gate above.
 - [x] Application/database audit records are immutable and dataset releases are
   reproducible. Independent WORM retention remains an explicit gate above.
-- [ ] Retention/deletion and external-AI egress policies are enforceable.
+- [~] Retention/deletion and application-level external-AI egress policies are
+  enforceable; target backup/operator and network proxy/firewall evidence
+  remains required.
 - [ ] Required privacy, security, and legal evidence is approved for the target
   data classification.

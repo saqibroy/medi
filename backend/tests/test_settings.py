@@ -12,6 +12,8 @@ def test_development_defaults_are_local_and_seed_demo_data() -> None:
     assert settings.cors_origins == DEVELOPMENT_CORS_ORIGINS
     assert settings.seed_demo_data is True
     assert settings.data_deletion_operator_enabled is False
+    assert settings.external_ai_enabled is False
+    assert settings.external_ai_allowed_origins == ()
 
 
 @pytest.mark.parametrize(
@@ -91,6 +93,7 @@ def test_production_accepts_explicit_safe_settings() -> None:
     assert settings.session_cookie_secure is True
     assert settings.rate_limit_backend == "redis"
     assert settings.data_deletion_operator_enabled is False
+    assert settings.external_ai_enabled is False
 
 
 def test_production_rejects_local_or_unencrypted_storage() -> None:
@@ -136,6 +139,7 @@ def test_cors_origins_must_be_exact_http_origins(origins: str) -> None:
         ("LOGIN_RATE_LIMIT_PER_MINUTE", "0"),
         ("SENSITIVE_RATE_LIMIT_PER_MINUTE", "10001"),
         ("DATA_DELETION_OPERATOR_ENABLED", "sometimes"),
+        ("EXTERNAL_AI_ENABLED", "sometimes"),
     ],
 )
 def test_session_and_rate_limit_settings_reject_invalid_values(variable_name: str, value: str) -> None:
@@ -154,3 +158,26 @@ def test_session_and_rate_limit_settings_reject_invalid_values(variable_name: st
 def test_cookie_and_shared_rate_limit_settings_reject_unsafe_values(changes: dict[str, str], message: str) -> None:
     with pytest.raises(ConfigurationError, match=message):
         get_settings(changes)
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["*", "http://gateway.example.org", "https://gateway.example.org/path", "https://user@gateway.example.org"],
+)
+def test_external_ai_origins_must_be_exact_https_origins(origin: str) -> None:
+    with pytest.raises(ConfigurationError, match="EXTERNAL_AI_ALLOWED_ORIGINS"):
+        get_settings({"EXTERNAL_AI_ALLOWED_ORIGINS": origin})
+
+
+def test_external_ai_requires_an_explicit_allowlist_when_enabled() -> None:
+    with pytest.raises(ConfigurationError, match="EXTERNAL_AI_ALLOWED_ORIGINS"):
+        get_settings({"EXTERNAL_AI_ENABLED": "true"})
+
+    settings = get_settings(
+        {
+            "EXTERNAL_AI_ENABLED": "true",
+            "EXTERNAL_AI_ALLOWED_ORIGINS": "https://ai-gateway.example.org,https://ai-gateway.example.org/",
+        }
+    )
+    assert settings.external_ai_enabled is True
+    assert settings.external_ai_allowed_origins == ("https://ai-gateway.example.org",)

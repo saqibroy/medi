@@ -177,6 +177,31 @@ organization-wide deletion, policy approval, and signed drills remain Phase 4
 gates. `scripts/verify_backup_restore_drill.sh` proves the encrypted recovery
 sequence only on disposable PostgreSQL databases and synthetic objects.
 
+## Governing External AI Egress
+
+The normal runtime starts with `EXTERNAL_AI_ENABLED=false`, an empty exact-
+origin allowlist, and no provider HTTP or vendor SDK client. Append-only provider
+approvals pin purpose, model/version, HTTPS origin, region, allowed data classes,
+retention, no-training terms, subprocessors, transfer mechanism, contract owner,
+and an external approval reference. Project data-flow approvals pin a subset of
+those classes to one exact provider version; revocation requires a different
+administrator.
+
+`POST /governance/external-ai/evaluate` is an authorization dry run, not an AI
+request. It records only stable IDs, controlled data classes, result, reason,
+actor, and timestamp. It denies unless the feature gate, deployment origin,
+active provider and project flow, purpose, class subset, expiry, project state,
+and de-identification status all pass. Raw DICOM, direct identifiers, raw DICOM
+metadata, and clinical free text have no accepted API schema value and are
+always outside this boundary. The security ledger audits the decision without
+prompts, pixels, filenames, annotations, credentials, or response content.
+
+CI statically rejects general HTTP/vendor-AI imports and new process-based
+network bypasses in backend runtime code. This is defense in depth, not a
+network firewall: a target egress proxy, DNS/firewall enforcement, approved
+provider adapter, output provenance/versioning, and signed legal/privacy review
+remain deployment gates in `EXTERNAL_AI_GOVERNANCE_PLAN.md`.
+
 ## ML Team Consumption
 
 The ML team would usually start with:

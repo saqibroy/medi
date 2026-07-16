@@ -20,7 +20,7 @@ from backend.csrf import CsrfProtectionMiddleware, csrf_cookie_name, session_coo
 from backend.database import Base, get_db
 from backend.models import Annotation, Label, Organization, Project, Scan, User
 from backend.observability import RequestLoggingMiddleware
-from backend.routers import annotations, audit_events, auth, data_governance, health, projects, scans, users
+from backend.routers import annotations, audit_events, auth, data_governance, external_ai_governance, health, projects, scans, users
 from backend.security import hash_password
 from backend.services import imaging_service, scan_service, segmentation_mask_service
 from backend.tests.fixtures.imaging import write_synthetic_dicom, write_synthetic_dicom_zip, write_synthetic_nifti
@@ -70,6 +70,7 @@ def build_test_app(storage_root: Path) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(audit_events.router)
     app.include_router(data_governance.router)
+    app.include_router(external_ai_governance.router)
     app.include_router(health.router)
     app.include_router(projects.router)
     app.include_router(scans.router)
