@@ -373,8 +373,14 @@ CI verification:
 - Phase 3 browser QA completed for box and polygon editing, draft label
   switching, keyboard safety, responsive layout, zoom, pan, and overlay
   alignment.
+- Phase 4 operations plan now treats medical-image de-identification,
+  encryption, immutable auditing, dataset versioning, private storage,
+  retention/deletion, GDPR, and external-AI egress as production gates.
+- Database-aware backend readiness/liveness and frontend health checks are
+  implemented for Docker Compose.
 
 ## Next Engineering Priorities
 
-1. Prepare Phase 4 production operations plan and checklist.
-2. Define production PostgreSQL configuration and migration procedure.
+1. Separate development and production configuration, including demo seeding,
+   secrets, and exact CORS origins.
+2. Define and test the production PostgreSQL migration and rollback procedure.

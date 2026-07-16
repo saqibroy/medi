@@ -8,7 +8,7 @@ changes are owned by Alembic migrations.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import annotations, auth, projects, scans, users
+from .routers import annotations, auth, health, projects, scans, users
 
 
 def create_app() -> FastAPI:
@@ -42,6 +42,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(auth.router)
+    app.include_router(health.router)
     app.include_router(projects.router)
     app.include_router(scans.router)
     app.include_router(annotations.router)

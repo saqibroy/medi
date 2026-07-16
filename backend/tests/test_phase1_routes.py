@@ -10,12 +10,13 @@ import pytest
 from fastapi import FastAPI
 from PIL import Image
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.database import Base, get_db
 from backend.models import Annotation, Label, Organization, Project, Scan, User
-from backend.routers import annotations, auth, projects, scans, users
+from backend.routers import annotations, auth, health, projects, scans, users
 from backend.security import hash_password
 from backend.services import imaging_service, scan_service, segmentation_mask_service
 from backend.tests.fixtures.imaging import write_synthetic_dicom, write_synthetic_dicom_zip, write_synthetic_nifti
@@ -53,6 +54,7 @@ def build_test_app(storage_root: Path) -> FastAPI:
 
     app = FastAPI()
     app.include_router(auth.router)
+    app.include_router(health.router)
     app.include_router(projects.router)
     app.include_router(scans.router)
     app.include_router(annotations.router)
@@ -60,6 +62,40 @@ def build_test_app(storage_root: Path) -> FastAPI:
     app.dependency_overrides[get_db] = override_get_db
 
     return app
+
+
+@pytest.mark.anyio
+async def test_health_routes_report_liveness_and_database_readiness(tmp_path: Path) -> None:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=build_test_app(tmp_path)), base_url="http://test") as client:
+        live = await client.get("/health/live")
+        ready = await client.get("/health/ready")
+        alias = await client.get("/health")
+
+        assert live.status_code == 200
+        assert live.json() == {"status": "ok"}
+        assert ready.status_code == 200
+        assert ready.json() == {"status": "ok", "database": "reachable"}
+        assert alias.json() == ready.json()
+
+
+@pytest.mark.anyio
+async def test_readiness_returns_safe_503_when_database_is_unavailable() -> None:
+    class UnavailableDatabase:
+        def execute(self, _statement: object) -> None:
+            raise SQLAlchemyError("simulated private connection failure")
+
+    async def override_get_db() -> Generator[object, None, None]:
+        yield UnavailableDatabase()
+
+    app = FastAPI()
+    app.include_router(health.router)
+    app.dependency_overrides[get_db] = override_get_db
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/health/ready")
+
+        assert response.status_code == 503
+        assert response.json() == {"detail": "Database unavailable"}
 
 
 def seed_workspace(db: Session) -> None:

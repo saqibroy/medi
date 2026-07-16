@@ -70,6 +70,8 @@ Then open:
 
 - Frontend: `http://localhost:8080`
 - Backend API docs: `http://localhost:8000/docs`
+- Backend readiness: `http://localhost:8000/health/ready`
+- Backend liveness: `http://localhost:8000/health/live`
 
 The backend container runs migrations, seeds demo users, and stores uploaded scan
 files in the `scan_storage` Docker volume.
@@ -97,6 +99,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
 - `PHASE2_IMAGING_PLAN.md` for the real DICOM/NIfTI ingestion plan.
 - `PHASE3_ANNOTATION_TOOLS_PLAN.md` for advanced annotation workflows.
 - `PHASE3_FRONTEND_QA_CHECKLIST.md` for the browser QA pass before Phase 3 exit.
+- `PHASE4_PRODUCTION_OPERATIONS_PLAN.md` for production, medical-data security,
+  privacy, backup, audit, versioning, and external-AI release gates.
 - `PRODUCTION_STORAGE_PLAN.md` for object storage and signed URL planning.
 - `BACKGROUND_INGESTION_PLAN.md` for large-study worker planning.
 - `BUSINESS_PRICING_MODEL.md` for the first research-team pricing strategy.

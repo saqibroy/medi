@@ -1,10 +1,32 @@
-# Medical Image Annotation Learning Architecture
+# Medi Architecture
 
-This repository is a deliberately educational full-stack codebase. It uses
+This repository is a production-minded research MVP. It uses
 React, TypeScript, Tailwind CSS, Cornerstone3D, FastAPI, Pydantic, SQLAlchemy,
-PostgreSQL, and local-file storage to model the shape of a real medical image
-annotation platform without the operational complexity of production DICOM,
-PACS, cloud storage, authentication, or migrations.
+PostgreSQL, Alembic, bearer authentication, role checks, and local-file storage.
+Real DICOM/NIfTI parsing is implemented, while private object storage,
+production sessions, immutable security auditing, and compliance operations
+remain explicit Phase 4 gates.
+
+## Medical Data Safety Boundary
+
+Medi's default supported data class is synthetic or properly anonymized
+research imaging. DICOM/NIfTI files are treated as potentially sensitive at
+intake because identifiers can exist in metadata, filenames, linked sidecars,
+private tags, free text, or burned-in pixels.
+
+The production architecture must enforce these boundaries:
+
+- quarantine before de-identification checks and normal viewer availability;
+- allowlisted metadata projection rather than raw header persistence;
+- encryption for transport, databases, objects, and backups;
+- tenant and role authorization before every scan, mask, export, and signed URL;
+- immutable security audit events plus reproducible dataset releases;
+- private object storage, tested backup/restore, retention, and verified delete;
+- external AI egress disabled unless an approved provider and data flow are
+  explicitly configured.
+
+The detailed implementation and release evidence are tracked in
+`PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
 
 ## Component Diagram
 
@@ -54,9 +76,8 @@ PACS, cloud storage, authentication, or migrations.
 9. When `selectedScan` or `sliceIndex` changes, `useScan()` calls
    `GET /scans/{scan_id}/slice/{slice_index}`.
 10. The backend validates that the scan exists and the slice index is in range.
-11. `scan_service.get_slice_image_base64()` creates a fake PNG slice and returns
-   base64. In a production imaging app this is where DICOM/NIfTI loading and
-   windowing logic would usually sit.
+11. `scan_service.get_slice_image_base64()` returns a derived PNG for parsed
+   DICOM/NIfTI uploads and retains a generated fallback for synthetic scans.
 12. `ViewerPanel.tsx` receives the base64 slice, draws it to a canvas, and shows
    annotation overlays for the current slice.
 13. `useViewer()` initializes a Cornerstone3D `RenderingEngine` and viewport so

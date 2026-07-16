@@ -121,6 +121,8 @@ analytics iteration and are not part of the Phase 3 exit criteria.
 
 Goal: make the app deployable and supportable.
 
+Status: in progress. Detailed gates: `PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
+
 - [x] Docker Compose for local production-like development.
 - [x] Migration-only schema startup for backend containers.
 - [x] CI for backend tests and frontend builds.
@@ -128,7 +130,7 @@ Goal: make the app deployable and supportable.
 - Object storage configuration.
 - Structured logging.
 - Error tracking.
-- Health checks.
+- [x] Database-aware backend readiness/liveness and frontend health checks.
 - Rate limiting.
 - Backups and restore documentation.
 - Admin tools for organizations, users, and projects.
@@ -146,6 +148,11 @@ Goal: become credible with serious research and healthcare-adjacent teams.
 - Secure file upload limits and validation.
 - Data retention and deletion controls.
 - Privacy policy, terms, and security documentation.
+
+Medical-data controls begin in Phase 4 rather than waiting for Phase 5. DICOM
+and NIfTI intake, encryption, immutable auditing, dataset versioning, private
+storage, retention/deletion, GDPR operations, and external-AI egress gates are
+tracked in `PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
 
 HIPAA readiness, Business Associate Agreements, SOC 2-style controls, and
 clinical regulatory strategy should come after the research MVP shows traction.
@@ -182,5 +189,6 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Prepare Phase 4 production operations plan and checklist.
-2. Define production PostgreSQL configuration and migration procedure.
+1. Separate development and production configuration, including demo seeding,
+   secrets, and exact CORS origins.
+2. Define and test the production PostgreSQL migration and rollback procedure.
