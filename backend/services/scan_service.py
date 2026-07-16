@@ -6,11 +6,10 @@ fake slice images are generated for the learning viewer.
 """
 
 import base64
-import shutil
 from collections import Counter
 from datetime import datetime, timezone
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
@@ -21,9 +20,14 @@ from sqlalchemy.orm import Session
 from ..models import Annotation, Project, Scan, User
 from ..schemas import ScanCreate
 from .imaging_service import ImagingIngestionError, build_dicom_scan_profile, build_dicom_zip_scan_profile, build_initial_scan_profile, build_nifti_scan_profile, detect_source_format, validate_upload_hint, validate_upload_size
+from .storage_service import LocalPrivateStorage, scan_prefix
 
 
 STORAGE_ROOT = Path(__file__).resolve().parents[1] / "data" / "sample_scan"
+
+
+def _storage() -> LocalPrivateStorage:
+    return LocalPrivateStorage(STORAGE_ROOT)
 
 
 def list_scans(db: Session, project_id: UUID | None = None, current_user: User | None = None) -> list[Scan]:
@@ -63,19 +67,21 @@ def get_scan_for_user_or_404(db: Session, scan_id: UUID, current_user: User) -> 
     return scan
 
 
-def create_scan(db: Session, payload: ScanCreate) -> Scan:
+def create_scan(db: Session, payload: ScanCreate, organization_id: UUID) -> Scan:
     """Create fake scan metadata and a placeholder local file."""
 
-    STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+    scan_id = uuid4()
     safe_name = payload.file_name.replace("/", "_")
-    file_path = STORAGE_ROOT / safe_name
-    file_path.write_text("fake volumetric scan data for interview learning\n")
-    scan_profile = build_initial_scan_profile("synthetic", payload.modality, payload.num_slices, str(file_path))
+    prefix = scan_prefix(organization_id, payload.project_id or "unassigned", scan_id)
+    original_key = f"{prefix}/original/{safe_name}"
+    _storage().put_bytes(original_key, b"synthetic volumetric scan placeholder\n")
+    scan_profile = build_initial_scan_profile("synthetic", payload.modality, payload.num_slices, prefix)
 
     scan = Scan(
+        id=scan_id,
         name=payload.name,
         project_id=payload.project_id,
-        file_path=str(file_path),
+        file_path=original_key,
         modality=payload.modality,
         num_slices=payload.num_slices,
         **scan_profile,
@@ -93,7 +99,7 @@ def create_scan_for_user(db: Session, payload: ScanCreate, current_user: User) -
         project = db.get(Project, payload.project_id)
         if project is None or project.organization_id != current_user.organization_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    return create_scan(db, payload)
+    return create_scan(db, payload, current_user.organization_id)
 
 
 def _build_failed_scan_profile(source_format: str, modality: str, num_slices: int, storage_key: str, error: ImagingIngestionError) -> dict:
@@ -173,19 +179,25 @@ def create_uploaded_scan_for_user(
 
     scan_id = uuid4()
     safe_original_name = Path(original_filename or "uploaded-scan").name.replace("/", "_")
-    scan_storage_root = STORAGE_ROOT / str(project_id) / str(scan_id)
-    original_storage_root = scan_storage_root / "original"
-    preview_storage_root = scan_storage_root / "derived" / "preview"
-    original_storage_root.mkdir(parents=True, exist_ok=True)
-    file_path = original_storage_root / safe_original_name
-    file_path.write_bytes(content)
-    scan_profile = _build_uploaded_scan_profile(safe_original_name, content, modality, num_slices, scan_storage_root, preview_storage_root)
+    prefix = scan_prefix(project.organization_id, project_id, scan_id)
+    original_key = f"{prefix}/original/{safe_original_name}"
+    preview_prefix = f"{prefix}/derived/preview"
+    storage = _storage()
+    storage.put_bytes(original_key, content)
+    scan_profile = _build_uploaded_scan_profile(
+        safe_original_name,
+        content,
+        modality,
+        num_slices,
+        Path(prefix),
+        storage.local_path(preview_prefix),
+    )
 
     scan = Scan(
         id=scan_id,
         project_id=project_id,
         name=name,
-        file_path=str(file_path),
+        file_path=original_key,
         modality=modality,
         num_slices=scan_profile["depth"] or num_slices,
         **scan_profile,
@@ -202,15 +214,21 @@ def reprocess_scan_for_user(db: Session, scan_id: UUID, current_user: User) -> S
     scan = get_scan_for_user_or_404(db, scan_id, current_user)
     if scan.ingestion_status != "failed":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only failed scans can be reprocessed")
-    original_path = Path(scan.file_path)
-    if not original_path.exists() or not scan.storage_key:
+    storage = _storage()
+    if not storage.exists(scan.file_path) or not scan.storage_key:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Original scan file is unavailable for reprocessing")
 
-    content = original_path.read_bytes()
-    preview_storage_root = Path(scan.storage_key) / "derived" / "preview"
-    if preview_storage_root.exists():
-        shutil.rmtree(preview_storage_root)
-    scan_profile = _build_uploaded_scan_profile(original_path.name, content, scan.modality, scan.num_slices, Path(scan.storage_key), preview_storage_root)
+    content = storage.get_bytes(scan.file_path)
+    preview_prefix = f"{scan.storage_key}/derived/preview"
+    storage.delete_prefix(preview_prefix)
+    scan_profile = _build_uploaded_scan_profile(
+        PurePosixPath(scan.file_path).name,
+        content,
+        scan.modality,
+        scan.num_slices,
+        Path(scan.storage_key),
+        storage.local_path(preview_prefix),
+    )
     for field_name, value in scan_profile.items():
         setattr(scan, field_name, value)
     scan.num_slices = scan_profile["depth"] or scan.num_slices
@@ -224,10 +242,11 @@ def _read_derived_preview_base64(scan: Scan, slice_index: int) -> str | None:
 
     if not scan.storage_key:
         return None
-    preview_path = Path(scan.storage_key) / "derived" / "preview" / f"{slice_index:06d}.png"
-    if not preview_path.exists():
+    preview_key = f"{scan.storage_key}/derived/preview/{slice_index:06d}.png"
+    storage = _storage()
+    if not storage.exists(preview_key):
         return None
-    return base64.b64encode(preview_path.read_bytes()).decode("ascii")
+    return base64.b64encode(storage.get_bytes(preview_key)).decode("ascii")
 
 
 def _generate_placeholder_slice_base64(scan: Scan, slice_index: int) -> str:

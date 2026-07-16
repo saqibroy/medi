@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Annotation, AnnotationHistory, Project, Scan, SegmentationMask, User
 from .annotation_service import get_annotation_for_user_or_404
+from .storage_service import LocalPrivateStorage, mask_key
 
 
 MASK_STORAGE_ROOT = Path("backend/data/sample_scan/segmentation_masks")
@@ -68,20 +69,8 @@ def _validate_png_mask(content: bytes, scan: Scan) -> tuple[int, int]:
     return width, height
 
 
-def _mask_storage_path(project: Project, annotation: Annotation, slice_index: int) -> Path:
-    return (
-        MASK_STORAGE_ROOT
-        / "org"
-        / str(project.organization_id)
-        / "project"
-        / str(project.id)
-        / "scan"
-        / str(annotation.scan_id)
-        / "annotations"
-        / str(annotation.id)
-        / "mask"
-        / f"{slice_index:06d}.png"
-    )
+def _storage() -> LocalPrivateStorage:
+    return LocalPrivateStorage(MASK_STORAGE_ROOT)
 
 
 def _get_existing_mask(db: Session, annotation_id: UUID, slice_index: int) -> SegmentationMask | None:
@@ -111,9 +100,8 @@ def upload_mask_for_user(db: Session, annotation_id: UUID, slice_index: int, con
 
     width, height = _validate_png_mask(content, scan)
     checksum = hashlib.sha256(content).hexdigest()
-    storage_path = _mask_storage_path(project, annotation, slice_index)
-    storage_path.parent.mkdir(parents=True, exist_ok=True)
-    storage_path.write_bytes(content)
+    storage_key = mask_key(project.organization_id, project.id, scan.id, annotation.id, slice_index)
+    _storage().put_bytes(storage_key, content)
 
     existing_mask = _get_existing_mask(db, annotation.id, slice_index)
     previous = _mask_snapshot(existing_mask)
@@ -123,7 +111,7 @@ def upload_mask_for_user(db: Session, annotation_id: UUID, slice_index: int, con
             project_id=project.id,
             scan_id=scan.id,
             slice_index=slice_index,
-            storage_key=str(storage_path),
+            storage_key=storage_key,
             width=width,
             height=height,
             byte_size=len(content),
@@ -134,7 +122,7 @@ def upload_mask_for_user(db: Session, annotation_id: UUID, slice_index: int, con
         db.add(mask)
     else:
         mask = existing_mask
-        mask.storage_key = str(storage_path)
+        mask.storage_key = storage_key
         mask.width = width
         mask.height = height
         mask.byte_size = len(content)
@@ -159,8 +147,8 @@ def get_mask_image_for_user(db: Session, annotation_id: UUID, slice_index: int, 
     mask = _get_existing_mask(db, annotation.id, slice_index)
     if mask is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segmentation mask not found")
-    path = Path(mask.storage_key)
-    if not path.exists():
+    storage = _storage()
+    if not storage.exists(mask.storage_key):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segmentation mask file not found")
     return {
         "id": mask.id,
@@ -177,7 +165,7 @@ def get_mask_image_for_user(db: Session, annotation_id: UUID, slice_index: int, 
         "updated_by_user_id": mask.updated_by_user_id,
         "created_at": mask.created_at,
         "updated_at": mask.updated_at,
-        "mask_base64": base64.b64encode(path.read_bytes()).decode("ascii"),
+        "mask_base64": base64.b64encode(storage.get_bytes(mask.storage_key)).decode("ascii"),
     }
 
 
@@ -191,9 +179,7 @@ def delete_mask_for_user(db: Session, annotation_id: UUID, slice_index: int, cur
     mask = _get_existing_mask(db, annotation.id, slice_index)
     if mask is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segmentation mask not found")
-    path = Path(mask.storage_key)
-    if path.exists():
-        path.unlink()
+    _storage().delete(mask.storage_key)
     db.add(_record_mask_history(annotation, current_user, "mask_deleted", _mask_snapshot(mask), None))
     annotation.updated_by_user_id = current_user.id
     db.delete(mask)
@@ -205,6 +191,4 @@ def delete_mask_files_for_annotation(db: Session, annotation: Annotation) -> Non
 
     masks = list(db.scalars(select(SegmentationMask).where(SegmentationMask.annotation_id == annotation.id)))
     for mask in masks:
-        path = Path(mask.storage_key)
-        if path.exists():
-            path.unlink()
+        _storage().delete(mask.storage_key)
