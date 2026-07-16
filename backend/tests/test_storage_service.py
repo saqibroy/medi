@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.services.storage_service import LocalPrivateStorage, S3PrivateStorage, StorageKeyError, mask_key, scan_prefix
+from backend.services.storage_service import LocalPrivateStorage, S3PrivateStorage, StorageKeyError, mask_key, scan_prefix, storage_data_class
 
 
 class FakeBody:
@@ -102,6 +102,7 @@ def test_s3_storage_requires_kms_on_write_and_generates_short_lived_get_url() ->
     assert client.last_put["ServerSideEncryption"] == "aws:kms"
     assert client.last_put["SSEKMSKeyId"] == "kms-key-id"
     assert client.last_put["BucketKeyEnabled"] is True
+    assert client.last_put["Tagging"] == "medi-data-class=preview"
     assert url == "https://signed.example/preview"
     assert client.last_presign["method"] == "get_object"
     assert client.last_presign["ExpiresIn"] == 300
@@ -129,3 +130,19 @@ def test_s3_storage_rejects_unsafe_key_before_client_call() -> None:
     with pytest.raises(StorageKeyError):
         storage.put_bytes("../escape", b"private")
     assert client.last_put == {}
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        ("org/a/project/b/scan/c/quarantine/original/upload.dcm", "quarantine"),
+        ("org/a/project/b/scan/c/original/upload.nii.gz", "original"),
+        ("org/a/project/b/scan/c/derived/preview/000000.png", "preview"),
+        ("org/a/project/b/scan/c/annotations/d/mask/000000.png", "mask"),
+        ("org/a/project/b/scan/c/metadata/ingestion.json", "metadata"),
+        ("org/a/project/b/export/release.zip", "export"),
+        ("org/a/project/b/scan/c/other.bin", "unclassified"),
+    ],
+)
+def test_storage_data_class_is_derived_only_from_the_private_key(key: str, expected: str) -> None:
+    assert storage_data_class(key) == expected

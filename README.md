@@ -97,6 +97,12 @@ endpoint authorizes the current organization before minting a derived-preview
 URL; it never signs original uploads. Local development continues to use the
 private `scan_storage` volume and returns no local file URL.
 
+Target-account S3 controls are defined in
+`infrastructure/aws/medi-private-storage.json`; deployment verification and
+backup/restore/deletion evidence procedures are in
+`STORAGE_OPERATIONS_RUNBOOK.md`. Retention parameters intentionally have no
+production defaults and require explicit approval.
+
 Bearer sessions are opaque, stored only as keyed token digests, expire after
 `SESSION_TTL_MINUTES` (480 by default), and are revoked by `POST /auth/logout`.
 `LOGIN_RATE_LIMIT_PER_MINUTE` and `SENSITIVE_RATE_LIMIT_PER_MINUTE` configure the

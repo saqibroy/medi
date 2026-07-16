@@ -389,6 +389,11 @@ CI verification:
   keyed integrity hashes, admin-only reads, and ORM/database mutation guards.
   WORM export, retention approval, safe network context, and annotation-history
   tombstoning remain Phase 4 gates.
+- Production S3 infrastructure now has deployable KMS encryption, versioning,
+  public-access blocking, TLS/KMS deny policies, least-privilege runtime access,
+  data-class lifecycle tagging, a read-only verifier, CI linting, and backup/
+  restore/deletion procedures. Target-account deployment, approved retention,
+  independent backup automation, and drill evidence remain production gates.
 
 ## Next Engineering Priorities
 
@@ -396,8 +401,9 @@ CI verification:
    medical-image intake decisions, object access, exports, and administrative
    changes. Remaining WORM/retention work is tracked in
    `SECURITY_AUDIT_PLAN.md`.
-2. Next: complete target-account storage controls: private bucket policy,
-   lifecycle, versioning/retention, backup/restore, and customer-deletion
-   evidence.
-3. Replace process-local rate limits with shared production enforcement and move
-   browser sessions to Secure, HttpOnly cookies with CSRF protection.
+2. Completed repository boundary: add deployable target-account storage
+   controls, lifecycle tagging, read-only verification, and backup/restore/
+   deletion procedures. Cloud deployment and drill evidence remain dependent
+   on an approved AWS account, retention values, and operators.
+3. Next: replace process-local rate limits with shared production enforcement
+   and move browser sessions to Secure, HttpOnly cookies with CSRF protection.

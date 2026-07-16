@@ -1,0 +1,452 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Private versioned S3 storage controls for Medi medical-image objects. Retention parameters require explicit approval at deployment time.",
+  "Parameters": {
+    "BucketName": {
+      "Type": "String",
+      "Description": "Globally unique private bucket name for one Medi environment.",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "KmsKeyArn": {
+      "Type": "String",
+      "Description": "Customer-managed KMS key ARN approved for this environment.",
+      "AllowedPattern": "^arn:[a-z0-9-]+:kms:[a-z0-9-]+:[0-9]{12}:key/[A-Za-z0-9-]+$"
+    },
+    "QuarantineExpirationDays": {
+      "Type": "Number",
+      "Description": "Approved current-version retention for rejected/quarantined uploads.",
+      "MinValue": 1
+    },
+    "PreviewExpirationDays": {
+      "Type": "Number",
+      "Description": "Approved current-version retention for reproducible derived previews.",
+      "MinValue": 1
+    },
+    "ExportExpirationDays": {
+      "Type": "Number",
+      "Description": "Approved current-version retention for generated export artifacts.",
+      "MinValue": 1
+    },
+    "NoncurrentVersionExpirationDays": {
+      "Type": "Number",
+      "Description": "Approved retention for noncurrent customer-data object versions.",
+      "MinValue": 1
+    }
+  },
+  "Resources": {
+    "StorageBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": {
+          "Ref": "BucketName"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "BucketKeyEnabled": true,
+              "ServerSideEncryptionByDefault": {
+                "KMSMasterKeyID": {
+                  "Ref": "KmsKeyArn"
+                },
+                "SSEAlgorithm": "aws:kms"
+              }
+            }
+          ]
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "AbortIncompleteMultipartUploads",
+              "Status": "Enabled",
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+              }
+            },
+            {
+              "Id": "ExpireQuarantine",
+              "Status": "Enabled",
+              "TagFilters": [
+                {
+                  "Key": "medi-data-class",
+                  "Value": "quarantine"
+                }
+              ],
+              "ExpirationInDays": {
+                "Ref": "QuarantineExpirationDays"
+              }
+            },
+            {
+              "Id": "ExpireDerivedPreviews",
+              "Status": "Enabled",
+              "TagFilters": [
+                {
+                  "Key": "medi-data-class",
+                  "Value": "preview"
+                }
+              ],
+              "ExpirationInDays": {
+                "Ref": "PreviewExpirationDays"
+              }
+            },
+            {
+              "Id": "ExpireExports",
+              "Status": "Enabled",
+              "TagFilters": [
+                {
+                  "Key": "medi-data-class",
+                  "Value": "export"
+                }
+              ],
+              "ExpirationInDays": {
+                "Ref": "ExportExpirationDays"
+              }
+            },
+            {
+              "Id": "ExpireNoncurrentOriginals",
+              "Status": "Enabled",
+              "TagFilters": [
+                {
+                  "Key": "medi-data-class",
+                  "Value": "original"
+                }
+              ],
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": {
+                  "Ref": "NoncurrentVersionExpirationDays"
+                }
+              }
+            },
+            {
+              "Id": "ExpireNoncurrentMasks",
+              "Status": "Enabled",
+              "TagFilters": [
+                {
+                  "Key": "medi-data-class",
+                  "Value": "mask"
+                }
+              ],
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": {
+                  "Ref": "NoncurrentVersionExpirationDays"
+                }
+              }
+            },
+            {
+              "Id": "ExpireNoncurrentMetadata",
+              "Status": "Enabled",
+              "TagFilters": [
+                {
+                  "Key": "medi-data-class",
+                  "Value": "metadata"
+                }
+              ],
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": {
+                  "Ref": "NoncurrentVersionExpirationDays"
+                }
+              }
+            },
+            {
+              "Id": "ExpireNoncurrentQuarantine",
+              "Status": "Enabled",
+              "TagFilters": [
+                {
+                  "Key": "medi-data-class",
+                  "Value": "quarantine"
+                }
+              ],
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": {
+                  "Ref": "NoncurrentVersionExpirationDays"
+                }
+              }
+            },
+            {
+              "Id": "ExpireNoncurrentPreviews",
+              "Status": "Enabled",
+              "TagFilters": [
+                {
+                  "Key": "medi-data-class",
+                  "Value": "preview"
+                }
+              ],
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": {
+                  "Ref": "NoncurrentVersionExpirationDays"
+                }
+              }
+            },
+            {
+              "Id": "ExpireNoncurrentExports",
+              "Status": "Enabled",
+              "TagFilters": [
+                {
+                  "Key": "medi-data-class",
+                  "Value": "export"
+                }
+              ],
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": {
+                  "Ref": "NoncurrentVersionExpirationDays"
+                }
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "Tags": [
+          {
+            "Key": "application",
+            "Value": "medi"
+          },
+          {
+            "Key": "data-classification",
+            "Value": "sensitive-medical-imaging"
+          }
+        ],
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        }
+      }
+    },
+    "StorageBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "StorageBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "StorageBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${StorageBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false",
+                  "aws:PrincipalIsAWSService": "false"
+                }
+              }
+            },
+            {
+              "Sid": "DenyMissingKmsKey",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${StorageBucket.Arn}/*"
+              },
+              "Condition": {
+                "Null": {
+                  "s3:x-amz-server-side-encryption-aws-kms-key-id": "true"
+                }
+              }
+            },
+            {
+              "Sid": "DenyWrongEncryptionAlgorithm",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${StorageBucket.Arn}/*"
+              },
+              "Condition": {
+                "StringNotEquals": {
+                  "s3:x-amz-server-side-encryption": "aws:kms"
+                }
+              }
+            },
+            {
+              "Sid": "DenyWrongKmsKey",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${StorageBucket.Arn}/*"
+              },
+              "Condition": {
+                "ArnNotEqualsIfExists": {
+                  "s3:x-amz-server-side-encryption-aws-kms-key-id": {
+                    "Ref": "KmsKeyArn"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "DenyMissingDataClassTag",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${StorageBucket.Arn}/*"
+              },
+              "Condition": {
+                "Null": {
+                  "s3:RequestObjectTag/medi-data-class": "true"
+                }
+              }
+            },
+            {
+              "Sid": "DenyUnknownDataClassTag",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${StorageBucket.Arn}/*"
+              },
+              "Condition": {
+                "StringNotEquals": {
+                  "s3:RequestObjectTag/medi-data-class": [
+                    "export",
+                    "mask",
+                    "metadata",
+                    "original",
+                    "preview",
+                    "quarantine",
+                    "unclassified"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "DenyUnexpectedObjectTagKeys",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${StorageBucket.Arn}/*"
+              },
+              "Condition": {
+                "ForAnyValue:StringNotEquals": {
+                  "s3:RequestObjectTagKeys": [
+                    "medi-data-class"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ApplicationStoragePolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "Description": "Least-privilege Medi runtime access to one private storage bucket and KMS key.",
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "BucketMetadata",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetBucketLocation"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "StorageBucket",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Sid": "TenantList",
+              "Effect": "Allow",
+              "Action": [
+                "s3:ListBucket"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "StorageBucket",
+                  "Arn"
+                ]
+              },
+              "Condition": {
+                "StringLike": {
+                  "s3:prefix": [
+                    "org/*"
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "TenantObjectOperations",
+              "Effect": "Allow",
+              "Action": [
+                "s3:AbortMultipartUpload",
+                "s3:DeleteObject",
+                "s3:GetObject",
+                "s3:ListMultipartUploadParts",
+                "s3:PutObject",
+                "s3:PutObjectTagging"
+              ],
+              "Resource": {
+                "Fn::Sub": "${StorageBucket.Arn}/org/*"
+              }
+            },
+            {
+              "Sid": "UseApprovedKmsKey",
+              "Effect": "Allow",
+              "Action": [
+                "kms:Decrypt",
+                "kms:DescribeKey",
+                "kms:Encrypt",
+                "kms:GenerateDataKey"
+              ],
+              "Resource": {
+                "Ref": "KmsKeyArn"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "BucketName": {
+      "Value": {
+        "Ref": "StorageBucket"
+      }
+    },
+    "BucketArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "StorageBucket",
+          "Arn"
+        ]
+      }
+    },
+    "ApplicationStoragePolicyArn": {
+      "Description": "Attach this managed policy to the Medi runtime role only after security review.",
+      "Value": {
+        "Ref": "ApplicationStoragePolicy"
+      }
+    }
+  }
+}
