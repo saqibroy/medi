@@ -14,6 +14,7 @@ import { AnnotationTools, type ViewerTool } from "./components/AnnotationTools";
 import { DatasetReleasePanel } from "./components/DatasetReleasePanel";
 import { DataGovernancePanel } from "./components/DataGovernancePanel";
 import { ExportPanel } from "./components/ExportPanel";
+import { ExternalAIGovernancePanel } from "./components/ExternalAIGovernancePanel";
 import { LabelManager } from "./components/LabelManager";
 import { ProjectManager } from "./components/ProjectManager";
 import { ReviewSummaryPanel } from "./components/ReviewSummaryPanel";
@@ -526,6 +527,7 @@ export default function App() {
       <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white lg:h-full">
         <ScanMetadataPanel scanId={selectedScan?.id} csrfToken={csrfToken} />
         {canManageWorkspace ? <DataGovernancePanel projectId={selectedProject?.id} csrfToken={csrfToken} /> : null}
+        {canManageWorkspace ? <ExternalAIGovernancePanel projectId={selectedProject?.id} csrfToken={csrfToken} /> : null}
         <DatasetReleasePanel projectId={selectedProject?.id} csrfToken={csrfToken} canManage={canManageWorkspace} />
         <ExportPanel projectId={selectedProject?.id} scanId={selectedScan?.id} csrfToken={csrfToken} />
         <AnnotationList

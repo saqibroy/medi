@@ -12,7 +12,7 @@ from .audit_middleware import SecurityAuditMiddleware
 from .csrf import CsrfProtectionMiddleware
 from .observability import RequestLoggingMiddleware, configure_logging
 from .rate_limit import RequestRateLimitMiddleware
-from .routers import annotations, audit_events, auth, data_governance, health, projects, scans, users
+from .routers import annotations, audit_events, auth, data_governance, external_ai_governance, health, projects, scans, users
 from .settings import get_settings
 
 
@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(audit_events.router)
     app.include_router(data_governance.router)
+    app.include_router(external_ai_governance.router)
     app.include_router(health.router)
     app.include_router(projects.router)
     app.include_router(scans.router)

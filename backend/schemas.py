@@ -7,9 +7,10 @@ names, types, and validation rules.
 
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlparse
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 Modality = Literal["MRI", "CT", "PET", "Ultrasound", "XRAY"]
@@ -26,6 +27,34 @@ UserRole = Literal["admin", "annotator", "reviewer"]
 SourceFormat = Literal["synthetic", "nifti", "dicom", "dicom_zip", "unknown"]
 IngestionStatus = Literal["pending", "processing", "ready", "failed", "quarantined"]
 DeidentificationStatus = Literal["synthetic", "passed", "quarantined", "not_evaluated", "legacy_unverified"]
+ExternalAIPurpose = Literal["research_inference", "annotation_assistance", "quality_assurance"]
+ExternalAIDataClass = Literal[
+    "deidentified_pixels",
+    "derived_previews",
+    "deidentified_metadata",
+    "annotation_geometry",
+    "label_taxonomy",
+]
+ExternalAITransferMechanism = Literal[
+    "not_applicable",
+    "adequacy_decision",
+    "standard_contractual_clauses",
+    "approved_derogation",
+]
+ExternalAIDecisionReason = Literal[
+    "authorized",
+    "feature_disabled",
+    "provider_revoked",
+    "provider_unapproved",
+    "flow_revoked",
+    "flow_unapproved",
+    "flow_expired",
+    "origin_not_allowlisted",
+    "project_unavailable",
+    "purpose_not_approved",
+    "data_class_not_approved",
+    "dataset_not_deidentified",
+]
 
 
 class UserRead(BaseModel):
@@ -686,3 +715,148 @@ class ProjectStatsRead(AnnotationReviewStatsRead):
     project_name: str
     scan_count: int
     label_count: int
+
+
+class ExternalAIProviderCreate(BaseModel):
+    """Exact provider/model contract snapshot without credentials or free-text data."""
+
+    provider_key: str = Field(..., min_length=2, max_length=60, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    display_name: str = Field(..., min_length=2, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._/-]*$")
+    model_name: str = Field(..., min_length=1, max_length=120, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._:/-]*$")
+    model_version: str = Field(..., min_length=1, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    purpose_code: ExternalAIPurpose
+    endpoint_origin: str = Field(..., min_length=9, max_length=255)
+    region_code: str = Field(..., min_length=2, max_length=40, pattern=r"^[A-Za-z0-9][A-Za-z0-9-]*$")
+    data_classes: list[ExternalAIDataClass] = Field(..., min_length=1, max_length=5)
+    retention_days: int = Field(..., ge=0, le=3650)
+    training_use_allowed: Literal[False] = False
+    subprocessors: list[str] = Field(default_factory=list, max_length=20)
+    transfer_mechanism: ExternalAITransferMechanism
+    contract_owner_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    approval_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+
+    @field_validator("endpoint_origin")
+    @classmethod
+    def exact_https_origin(cls, value: str) -> str:
+        normalized = value.rstrip("/")
+        parsed = urlparse(normalized)
+        if (
+            parsed.scheme != "https"
+            or not parsed.netloc
+            or parsed.path
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+            or parsed.username
+            or parsed.password
+        ):
+            raise ValueError("endpoint_origin must be an exact HTTPS origin")
+        return normalized
+
+    @field_validator("data_classes")
+    @classmethod
+    def unique_data_classes(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("data_classes must not contain duplicates")
+        return sorted(value)
+
+    @field_validator("subprocessors")
+    @classmethod
+    def safe_subprocessor_references(cls, value: list[str]) -> list[str]:
+        normalized = []
+        for reference in value:
+            if not 2 <= len(reference) <= 80 or not all(character.isalnum() or character in "._:/-" for character in reference):
+                raise ValueError("subprocessors must contain stable references, not free text")
+            normalized.append(reference)
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("subprocessors must not contain duplicates")
+        return sorted(normalized)
+
+
+class ExternalAIProviderEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    action: Literal["approved", "revoked"]
+    actor_user_id: UUID
+    occurred_at: datetime
+
+
+class ExternalAIProviderRead(ExternalAIProviderCreate):
+    id: UUID
+    organization_id: UUID
+    version: int
+    created_by_user_id: UUID
+    created_at: datetime
+    status: Literal["active", "revoked", "unapproved"]
+    events: list[ExternalAIProviderEventRead]
+
+
+class ExternalAIDataFlowCreate(BaseModel):
+    project_id: UUID
+    provider_approval_id: UUID
+    purpose_code: ExternalAIPurpose
+    data_classes: list[ExternalAIDataClass] = Field(..., min_length=1, max_length=5)
+    approval_reference: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    expires_at: datetime | None = None
+
+    @field_validator("data_classes")
+    @classmethod
+    def unique_data_classes(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("data_classes must not contain duplicates")
+        return sorted(value)
+
+
+class ExternalAIDataFlowEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    action: Literal["approved", "revoked"]
+    actor_user_id: UUID
+    occurred_at: datetime
+
+
+class ExternalAIDataFlowRead(ExternalAIDataFlowCreate):
+    id: UUID
+    organization_id: UUID
+    created_by_user_id: UUID
+    created_at: datetime
+    status: Literal["active", "revoked", "expired", "unapproved"]
+    events: list[ExternalAIDataFlowEventRead]
+
+
+class ExternalAIEgressEvaluate(BaseModel):
+    data_flow_id: UUID
+    purpose_code: ExternalAIPurpose
+    requested_data_classes: list[ExternalAIDataClass] = Field(..., min_length=1, max_length=5)
+
+    @field_validator("requested_data_classes")
+    @classmethod
+    def unique_data_classes(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("requested_data_classes must not contain duplicates")
+        return sorted(value)
+
+
+class ExternalAIEgressDecisionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID
+    provider_approval_id: UUID
+    data_flow_id: UUID
+    project_id: UUID
+    actor_user_id: UUID
+    purpose_code: ExternalAIPurpose
+    requested_data_classes: list[ExternalAIDataClass]
+    result: Literal["allowed", "denied"]
+    reason_code: ExternalAIDecisionReason
+    occurred_at: datetime
+
+
+class ExternalAIStatusRead(BaseModel):
+    enabled: bool
+    allowed_origins: list[str]
+    provider_network_call_implemented: Literal[False] = False
+    permanently_prohibited_data_classes: list[str]

@@ -414,6 +414,12 @@ CI verification:
   runtime cannot execute deletion and the operator flag defaults off. Target
   vault/role evidence, approved values, and organization deletion remain in
   `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
+- External AI now defaults off with no provider client. Append-only provider
+  versions and project data-flow approvals, exact HTTPS deployment origins,
+  permanent high-risk data-class exclusions, de-identification checks,
+  value-free decisions/audits, admin controls, and a static CI policy form the
+  repository boundary. Target network enforcement and real-provider approval
+  remain in `EXTERNAL_AI_GOVERNANCE_PLAN.md`.
 
 ## Next Engineering Priorities
 
@@ -437,5 +443,8 @@ CI verification:
    retention/RPO/RTO policy, legal holds, source withdrawal, two-person
    project/scan deletion, every-version operator purge, and verified value-free
    receipts. Deployment gates remain in `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
-6. Next: enforce external-AI egress denial and approved-provider governance,
-   then add the repository-controlled GDPR/privacy operations boundary.
+6. Completed repository boundary: enforce external-AI default denial,
+   approved-provider versions, project data-flow policy, value-free decisions,
+   administrator controls, and static CI enforcement. Deployment gates remain
+   in `EXTERNAL_AI_GOVERNANCE_PLAN.md`.
+7. Next: implement the repository-controlled GDPR/privacy operations boundary.

@@ -21,9 +21,13 @@ from ..observability import request_id_context
 SAFE_DETAIL_KEYS = {
     "deidentification_profile_version",
     "deidentification_status",
+    "data_class_count",
+    "decision_result",
     "export_format",
     "ingestion_status",
     "policy_version",
+    "provider_version",
+    "purpose_code",
     "reason_code",
     "release_version",
     "slice_index",
@@ -60,6 +64,19 @@ AUDITED_ROUTES: dict[tuple[str, str], AuditRoute] = {
     ("GET", "/governance/deletion-requests/{request_id}"): AuditRoute("deletion_request.read", "deletion_request", "request_id"),
     ("POST", "/governance/deletion-requests/{request_id}/approve"): AuditRoute("deletion_request.approve", "deletion_request", "request_id"),
     ("POST", "/governance/deletion-requests/{request_id}/cancel"): AuditRoute("deletion_request.cancel", "deletion_request", "request_id"),
+    ("GET", "/governance/external-ai/status"): AuditRoute("external_ai.status", "organization"),
+    ("GET", "/governance/external-ai/providers"): AuditRoute("external_ai.provider_list", "organization"),
+    ("POST", "/governance/external-ai/providers"): AuditRoute("external_ai.provider_create", "external_ai_provider"),
+    ("POST", "/governance/external-ai/providers/{provider_id}/revoke"): AuditRoute(
+        "external_ai.provider_revoke", "external_ai_provider", "provider_id"
+    ),
+    ("GET", "/governance/external-ai/data-flows"): AuditRoute("external_ai.flow_list", "organization"),
+    ("POST", "/governance/external-ai/data-flows"): AuditRoute("external_ai.flow_create", "external_ai_data_flow"),
+    ("POST", "/governance/external-ai/data-flows/{flow_id}/revoke"): AuditRoute(
+        "external_ai.flow_revoke", "external_ai_data_flow", "flow_id"
+    ),
+    ("POST", "/governance/external-ai/evaluate"): AuditRoute("external_ai.egress_evaluate", "external_ai_decision"),
+    ("GET", "/governance/external-ai/decisions"): AuditRoute("external_ai.decision_list", "organization"),
     ("POST", "/projects/{project_id}/labels"): AuditRoute("label.create", "label"),
     ("PUT", "/labels/{label_id}"): AuditRoute("label.update", "label", "label_id"),
     ("DELETE", "/labels/{label_id}"): AuditRoute("label.delete", "label", "label_id"),
