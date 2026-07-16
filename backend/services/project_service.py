@@ -112,7 +112,7 @@ def export_project_annotations(db: Session, project_id: UUID, current_user: User
     project = get_project_or_404(db, project_id, current_user)
     from .scan_service import export_scan_annotations
 
-    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id, Scan.ingestion_status == "ready").order_by(Scan.created_at.desc())))
     scan_exports = [export_scan_annotations(db, scan.id) for scan in scans]
     return {
         "project_id": project.id,
@@ -131,7 +131,7 @@ def get_project_annotation_stats(db: Session, project_id: UUID, current_user: Us
     project = get_project_or_404(db, project_id, current_user)
     scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
     scan_ids = [scan.id for scan in scans]
-    annotations = list(db.scalars(select(Annotation).where(Annotation.scan_id.in_(scan_ids)))) if scan_ids else []
+    annotations = list(db.scalars(select(Annotation).where(Annotation.scan_id.in_(scan_ids), Annotation.scan.has(Scan.ingestion_status == "ready")))) if scan_ids else []
     status_counts = Counter(annotation.review_status for annotation in annotations)
     reviewed_count = status_counts.get("approved", 0) + status_counts.get("rejected", 0) + status_counts.get("needs_changes", 0)
     label_count = db.scalar(select(func.count()).select_from(Label).where(Label.project_id == project_id))
@@ -163,7 +163,7 @@ def export_project_coco(db: Session, project_id: UUID, current_user: User) -> di
     get_project_or_404(db, project_id, current_user)
     from .export_service import build_coco_export
 
-    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id, Scan.ingestion_status == "ready").order_by(Scan.created_at.desc())))
     return build_coco_export(db, scans, project_id=project_id)
 
 
@@ -173,7 +173,7 @@ def export_project_csv(db: Session, project_id: UUID, current_user: User) -> dic
     get_project_or_404(db, project_id, current_user)
     from .export_service import build_csv_export
 
-    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id, Scan.ingestion_status == "ready").order_by(Scan.created_at.desc())))
     return build_csv_export(db, scans, project_id=project_id)
 
 
@@ -183,7 +183,7 @@ def export_project_yolo(db: Session, project_id: UUID, current_user: User) -> di
     get_project_or_404(db, project_id, current_user)
     from .export_service import build_yolo_export
 
-    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id, Scan.ingestion_status == "ready").order_by(Scan.created_at.desc())))
     return build_yolo_export(db, scans, project_id=project_id)
 
 
@@ -193,5 +193,5 @@ def export_project_segmentation(db: Session, project_id: UUID, current_user: Use
     get_project_or_404(db, project_id, current_user)
     from .export_service import build_segmentation_export
 
-    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())))
+    scans = list(db.scalars(select(Scan).where(Scan.project_id == project_id, Scan.ingestion_status == "ready").order_by(Scan.created_at.desc())))
     return build_segmentation_export(db, scans, project_id=project_id)

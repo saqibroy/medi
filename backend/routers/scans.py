@@ -112,7 +112,7 @@ async def reprocess_scan(scan_id: UUID, db: Session = Depends(get_db), current_u
 async def get_scan_annotations(scan_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[AnnotationRead]:
     """Return all annotations for the selected scan."""
 
-    scan_service.get_scan_for_user_or_404(db, scan_id, current_user)
+    scan_service.require_scan_ready(scan_service.get_scan_for_user_or_404(db, scan_id, current_user))
     return annotation_service.list_annotations_for_user(db, current_user, scan_id)
 
 

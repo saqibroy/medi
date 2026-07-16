@@ -159,6 +159,12 @@ tracked in `PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
 HIPAA readiness, Business Associate Agreements, SOC 2-style controls, and
 clinical regulatory strategy should come after the research MVP shows traction.
 
+Implemented Phase 4 intake baseline: originals now enter tenant-scoped
+quarantine under neutral names, `medi-deid-screening-v1` records value-free
+DICOM/NIfTI decisions, and unsafe scans cannot expose pixels, signed URLs,
+annotations, masks, statistics, or exports. Validated pixel anonymization and
+legal/deployment evidence remain tracked separately.
+
 ## Recommended First Sprint
 
 Build a product-grade foundation without jumping into real DICOM complexity yet.
@@ -191,8 +197,8 @@ Definition of done:
 
 ## Current Next Priorities
 
-1. Next: quarantine uploaded DICOM/NIfTI objects until a versioned
-   de-identification policy has inspected them and approved safe derived data.
+1. Next: add immutable security audit events for authentication, medical-image
+   intake decisions, object access, exports, and administrative changes.
 2. Complete target-account storage controls: private bucket policy, lifecycle,
    versioning/retention, backup/restore, and customer-deletion evidence.
 3. Replace process-local rate limits with shared production enforcement and move

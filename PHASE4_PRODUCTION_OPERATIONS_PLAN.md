@@ -53,8 +53,11 @@ Not production-ready yet:
   session inventory, idle timeout, and secure-cookie transport remain absent.
 - Production configuration now requires an explicit token secret and exact CORS
   origins; local-only defaults remain available only for development.
-- Uploaded originals and previews use local volumes without encryption policy.
-- PHI detection warns but does not provide a validated de-identification gate.
+- Production code supports private KMS-encrypted S3 storage, but target-account
+  bucket policy, lifecycle, backup, and deletion evidence remains outstanding.
+- A versioned metadata-screening quarantine gate is enforced, but it does not
+  yet provide validated OCR/defacing, UID pseudonymization, or legal proof of
+  anonymization.
 - Annotation history is append-oriented but not immutable; cascade deletion can
   remove it with the annotation.
 - Dataset releases and annotation snapshots are not versioned.
@@ -68,29 +71,33 @@ Not production-ready yet:
 
 - [ ] Define an upload policy per organization: `synthetic_only`,
   `anonymized_only`, or `approved_sensitive`.
-- [ ] Quarantine new originals until format validation and de-identification
+- [x] Quarantine new originals until format validation and de-identification
   checks finish; quarantined objects must not be viewable or exportable.
-- [ ] Store only an allowlisted metadata projection in normal application tables.
-- [ ] Apply a documented DICOM de-identification profile and record its profile
-  version, tool version, timestamp, and result without storing removed values.
-- [ ] Reject or quarantine unknown/private tags unless a reviewed rule handles
+- [x] Store only an allowlisted metadata projection in normal application tables.
+- [ ] Apply a validated DICOM transformation profile that removes or rewrites
+  unsafe elements. The implemented v1 screening gate records its profile/tool
+  version, timestamp, and result without storing detected values, but it does
+  not rewrite quarantined payloads.
+- [x] Reject or quarantine unknown/private tags unless a reviewed rule handles
   them.
-- [ ] Detect and flag burned-in annotations; do not claim automatic pixel
-  anonymization without a validated workflow and human review option.
+- [x] Flag `BurnedInAnnotation=YES` or a missing/unknown declaration. Actual
+  pixel OCR/defacing remains unimplemented and is not claimed as automatic
+  anonymization.
 - [ ] Pseudonymize UIDs consistently when study relationships must survive; keep
   any mapping key in a separate, access-controlled system.
-- [ ] Sanitize filenames, archive paths, NIfTI headers, and JSON/BIDS sidecars.
-- [ ] Add admin-visible intake results and safe remediation messages.
-- [ ] Add fixtures proving patient name, ID, birth date, accession number,
+- [x] Neutralize filenames, validate archive paths, and screen supported NIfTI
+  header text. JSON/BIDS sidecars remain unsupported and are rejected.
+- [x] Add admin-visible intake results and safe remediation messages.
+- [x] Add fixtures proving patient name, ID, birth date, accession number,
   institution data, private tags, and unsafe filenames are never returned by the
   public API or written to logs.
 
 Acceptance evidence:
 
-- A written de-identification profile and threat model.
-- Automated allowlist/denylist fixtures plus a human review protocol for
-  burned-in text.
-- An end-to-end test showing quarantined data cannot be viewed, signed, or
+- [x] A written de-identification profile and threat model.
+- [ ] Automated allowlist/denylist fixtures are present; a formally validated
+  human review protocol for burned-in text remains required.
+- [x] An end-to-end test showing quarantined data cannot be viewed, signed, or
   exported.
 
 ## Encryption And Secrets
@@ -263,9 +270,10 @@ Useful primary references:
    original/preview/reprocess/mask integration, and authorized short-lived
    derived-preview URLs. Target-account bucket policy, lifecycle, backup, and
    deletion evidence remains tracked as a deployment gate.
-7. [ ] Next: add quarantine plus the versioned DICOM/NIfTI de-identification
-   gate.
-8. [ ] Add immutable security audit events.
+7. [x] Add quarantine plus the versioned `medi-deid-screening-v1` DICOM/NIfTI
+   gate, including neutral object names, non-viewable unsafe uploads, safe
+   decision evidence, fail-safe legacy migration, and UI intake status.
+8. [ ] Next: add immutable security audit events.
 9. [ ] Add dataset releases and annotation revision manifests.
 10. [ ] Implement backup/restore drills, retention, legal hold, and deletion.
 11. [ ] Complete GDPR/DPIA/processor evidence for the target deployment.
@@ -278,8 +286,9 @@ Useful primary references:
 - [ ] PostgreSQL migrations, backup, restore, and rollback are rehearsed.
 - [ ] Private encrypted storage and tenant-safe access are implemented.
 - [ ] Health, logs, alerts, error tracking, and rate limits are operational.
-- [ ] Sensitive image intake is quarantined until approved de-identification
-  checks complete.
+- [x] Supported DICOM/NIfTI intake is quarantined until the versioned v1
+  screening checks complete. Full pixel anonymization validation remains a
+  separate production gate above.
 - [ ] Audit records are immutable and dataset releases are reproducible.
 - [ ] Retention/deletion and external-AI egress policies are enforceable.
 - [ ] Required privacy, security, and legal evidence is approved for the target

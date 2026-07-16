@@ -15,6 +15,7 @@ def write_synthetic_nifti(
     height: int = 6,
     depth: int = 4,
     spacing: tuple[float, float, float] = (0.7, 0.7, 1.5),
+    description: str | None = None,
 ) -> Path:
     """Write a tiny NIfTI-1 `.nii.gz` volume for deterministic parser tests.
 
@@ -33,6 +34,9 @@ def write_synthetic_nifti(
     struct.pack_into("<h", header, 72, 32)
     struct.pack_into("<8f", header, 76, 0.0, spacing[0], spacing[1], spacing[2], 0.0, 0.0, 0.0, 0.0)
     struct.pack_into("<f", header, 108, 352.0)
+    if description:
+        encoded_description = description.encode("utf-8")[:79]
+        header[148 : 148 + len(encoded_description)] = encoded_description
     header[344:348] = b"n+1\0"
 
     voxel_count = width * height * depth
@@ -66,6 +70,11 @@ def write_synthetic_dicom(
     patient_name: str | None = None,
     patient_id: str | None = None,
     accession_number: str | None = None,
+    patient_birth_date: str | None = None,
+    institution_name: str | None = None,
+    referring_physician: str | None = None,
+    burned_in_annotation: str | None = "NO",
+    private_value: str | None = None,
 ) -> Path:
     """Write a tiny Explicit VR Little Endian DICOM file for parser tests."""
 
@@ -77,11 +86,19 @@ def write_synthetic_dicom(
     payload = bytearray(b"\0" * 128 + b"DICM")
     if accession_number:
         payload += _dicom_element(0x0008, 0x0050, b"SH", accession_number.encode("ascii"))
+    if institution_name:
+        payload += _dicom_element(0x0008, 0x0080, b"LO", institution_name.encode("ascii"))
+    if referring_physician:
+        payload += _dicom_element(0x0008, 0x0090, b"PN", referring_physician.encode("ascii"))
     payload += _dicom_element(0x0008, 0x0060, b"CS", b"CT")
     if patient_name:
         payload += _dicom_element(0x0010, 0x0010, b"PN", patient_name.encode("ascii"))
     if patient_id:
         payload += _dicom_element(0x0010, 0x0020, b"LO", patient_id.encode("ascii"))
+    if patient_birth_date:
+        payload += _dicom_element(0x0010, 0x0030, b"DA", patient_birth_date.encode("ascii"))
+    if private_value:
+        payload += _dicom_element(0x0011, 0x1010, b"LO", private_value.encode("ascii"))
     payload += _dicom_element(0x0018, 0x0050, b"DS", str(slice_thickness).encode("ascii"))
     payload += _dicom_element(0x0028, 0x0010, b"US", struct.pack("<H", height))
     payload += _dicom_element(0x0028, 0x0011, b"US", struct.pack("<H", width))
@@ -89,6 +106,8 @@ def write_synthetic_dicom(
     payload += _dicom_element(0x0028, 0x0100, b"US", struct.pack("<H", 16))
     payload += _dicom_element(0x0028, 0x0101, b"US", struct.pack("<H", 16))
     payload += _dicom_element(0x0028, 0x0103, b"US", struct.pack("<H", 0))
+    if burned_in_annotation is not None:
+        payload += _dicom_element(0x0028, 0x0301, b"CS", burned_in_annotation.encode("ascii"))
     payload += _dicom_element(0x0028, 0x1050, b"DS", b"40")
     payload += _dicom_element(0x0028, 0x1051, b"DS", b"400")
     payload += _dicom_element(0x7FE0, 0x0010, b"OW", pixels)

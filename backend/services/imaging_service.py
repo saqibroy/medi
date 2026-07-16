@@ -3,7 +3,8 @@
 import gzip
 import struct
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
@@ -12,6 +13,7 @@ from PIL import Image
 
 
 SourceFormat = Literal["synthetic", "nifti", "dicom", "dicom_zip", "unknown"]
+DEIDENTIFICATION_PROFILE_VERSION = "medi-deid-screening-v1"
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_IMAGE_PIXELS = 1024 * 1024
 MAX_SERIES_SLICES = 256
@@ -69,6 +71,7 @@ class NiftiVolume:
     depth: int
     spacing: tuple[float, float, float]
     voxels: tuple[float, ...]
+    risk_flags: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,26 @@ class DicomImage:
     window_center: float | None
     window_width: float | None
     phi_warnings: tuple[str, ...]
+    private_tag_detected: bool
+    burned_in_annotation: str
+    archive_member_name_risk: bool = False
+
+
+def deidentification_fields(status_name: str, risk_flags: tuple[str, ...] = ()) -> dict:
+    """Build a versioned decision record containing no detected PHI values."""
+
+    return {
+        "deidentification_status": status_name,
+        "deidentification_profile_version": DEIDENTIFICATION_PROFILE_VERSION,
+        "deidentification_checked_at": datetime.now(timezone.utc),
+        "deidentification_evidence": {
+            "profile_version": DEIDENTIFICATION_PROFILE_VERSION,
+            "tool": "medi-built-in-screening",
+            "tool_version": DEIDENTIFICATION_PROFILE_VERSION,
+            "decision": status_name,
+            "risk_flags": list(dict.fromkeys(risk_flags)),
+        },
+    }
 
 
 def detect_source_format(filename: str, content: bytes) -> SourceFormat:
@@ -106,6 +129,7 @@ def build_initial_scan_profile(source_format: SourceFormat, modality: str, num_s
     """
 
     return {
+        **deidentification_fields("synthetic"),
         "storage_key": storage_key,
         "source_format": source_format,
         "ingestion_status": "ready",
@@ -147,6 +171,15 @@ def parse_nifti_volume(filename: str, content: bytes) -> NiftiVolume:
     if payload[344:348] not in (b"n+1\0", b"ni1\0"):
         raise ImagingIngestionError("Unsupported NIfTI magic")
 
+    risk_flags = []
+    for field_name, start, end in (
+        ("NiftiDescription", 148, 228),
+        ("NiftiAuxFile", 228, 252),
+        ("NiftiIntentName", 328, 344),
+    ):
+        if payload[start:end].decode("utf-8", errors="ignore").strip("\0 "):
+            risk_flags.append(field_name)
+
     dim = struct.unpack_from("<8h", payload, 40)
     dimensions = dim[0]
     width, height, depth = dim[1], dim[2], dim[3]
@@ -169,7 +202,7 @@ def parse_nifti_volume(filename: str, content: bytes) -> NiftiVolume:
         raise ImagingIngestionError("NIfTI voxel payload is incomplete")
 
     voxels = struct.unpack_from(f"<{voxel_count}f", payload, vox_offset)
-    return NiftiVolume(width=width, height=height, depth=depth, spacing=spacing, voxels=voxels)
+    return NiftiVolume(width=width, height=height, depth=depth, spacing=spacing, voxels=voxels, risk_flags=tuple(risk_flags))
 
 
 def write_nifti_preview_slices(volume: NiftiVolume, preview_root: Path) -> None:
@@ -212,17 +245,21 @@ def build_nifti_scan_profile(filename: str, content: bytes, modality: str, stora
 
     volume = parse_nifti_volume(filename, content)
     write_nifti_preview_slices(volume, preview_root)
+    decision = "quarantined" if volume.risk_flags else "passed"
     return {
+        **deidentification_fields(decision, volume.risk_flags),
         "storage_key": storage_key,
         "source_format": "nifti",
-        "ingestion_status": "ready",
-        "ingestion_error": None,
+        "ingestion_status": "quarantined" if volume.risk_flags else "ready",
+        "ingestion_error": "Upload quarantined by medical-image intake policy" if volume.risk_flags else None,
         "imaging_metadata": {
             "source_format": "nifti",
             "modality": modality,
             "parser_status": "parsed",
             "data_safety": "uploaded",
-            "deidentification_status": "user_supplied_deidentified_required",
+            "deidentification_status": decision,
+            "deidentification_profile_version": DEIDENTIFICATION_PROFILE_VERSION,
+            "risk_flags": list(volume.risk_flags),
             "datatype": "float32",
             "preview_slice_count": volume.depth,
         },
@@ -271,6 +308,8 @@ def parse_dicom_image(content: bytes) -> DicomImage:
     window_width: float | None = None
     pixel_data: bytes | None = None
     phi_warnings: list[str] = []
+    private_tag_detected = False
+    burned_in_annotation = "missing"
     long_vrs = {b"OB", b"OW", b"OF", b"SQ", b"UT", b"UN"}
 
     while offset + 8 <= len(content):
@@ -292,6 +331,8 @@ def parse_dicom_image(content: bytes) -> DicomImage:
         tag = (group, element)
         if tag in DICOM_PHI_TAGS and _parse_dicom_text(value):
             phi_warnings.append(DICOM_PHI_TAGS[tag])
+        if group % 2 == 1 and value.strip(b"\0 "):
+            private_tag_detected = True
         if tag == (0x0008, 0x0060):
             modality = _parse_dicom_text(value)
         elif tag == (0x0018, 0x0050):
@@ -306,6 +347,8 @@ def parse_dicom_image(content: bytes) -> DicomImage:
             bits_allocated = struct.unpack_from("<H", value, 0)[0]
         elif tag == (0x0028, 0x0103):
             pixel_representation = struct.unpack_from("<H", value, 0)[0]
+        elif tag == (0x0028, 0x0301):
+            burned_in_annotation = _parse_dicom_text(value).upper() or "missing"
         elif tag == (0x0028, 0x1050):
             window_center = _parse_dicom_number(value)
         elif tag == (0x0028, 0x1051):
@@ -334,7 +377,21 @@ def parse_dicom_image(content: bytes) -> DicomImage:
         window_center=window_center,
         window_width=window_width,
         phi_warnings=tuple(dict.fromkeys(phi_warnings)),
+        private_tag_detected=private_tag_detected,
+        burned_in_annotation=burned_in_annotation,
     )
+
+
+def _dicom_risk_flags(images: list[DicomImage]) -> tuple[str, ...]:
+    flags = [warning for image in images for warning in image.phi_warnings]
+    if any(image.private_tag_detected for image in images):
+        flags.append("PrivateDataElement")
+    if any(image.archive_member_name_risk for image in images):
+        flags.append("ArchiveMemberName")
+    burned_in_values = {image.burned_in_annotation for image in images}
+    if burned_in_values != {"NO"}:
+        flags.append("BurnedInAnnotationYes" if "YES" in burned_in_values else "BurnedInAnnotationUnknown")
+    return tuple(dict.fromkeys(sorted(flags)))
 
 
 def build_dicom_scan_profile(content: bytes, modality: str, storage_key: str, preview_root: Path) -> dict:
@@ -343,20 +400,27 @@ def build_dicom_scan_profile(content: bytes, modality: str, storage_key: str, pr
     image = parse_dicom_image(content)
     preview_root.mkdir(parents=True, exist_ok=True)
     _normalize_to_png(image.pixels, image.width, image.height, preview_root / "000000.png")
+    risk_flags = _dicom_risk_flags([image])
+    decision = "quarantined" if risk_flags else "passed"
     return {
+        **deidentification_fields(decision, risk_flags),
         "storage_key": storage_key,
         "source_format": "dicom",
-        "ingestion_status": "ready",
-        "ingestion_error": None,
+        "ingestion_status": "quarantined" if risk_flags else "ready",
+        "ingestion_error": "Upload quarantined by medical-image intake policy" if risk_flags else None,
         "imaging_metadata": {
             "source_format": "dicom",
             "modality": image.modality or modality,
             "parser_status": "parsed",
             "data_safety": "uploaded",
-            "deidentification_status": "phi_warning_detected" if image.phi_warnings else "no_phi_tags_detected",
+            "deidentification_status": decision,
+            "deidentification_profile_version": DEIDENTIFICATION_PROFILE_VERSION,
             "datatype": "uint16",
             "preview_slice_count": 1,
             "phi_warnings": list(image.phi_warnings),
+            "risk_flags": list(risk_flags),
+            "private_tag_detected": image.private_tag_detected,
+            "burned_in_annotation": image.burned_in_annotation,
         },
         "width": image.width,
         "height": image.height,
@@ -384,7 +448,16 @@ def parse_dicom_zip(content: bytes) -> list[DicomImage]:
                     raise ImagingIngestionError("DICOM zip compression ratio is too high")
                 if not member.filename.lower().endswith(".dcm"):
                     continue
-                images.append(parse_dicom_image(archive.read(member)))
+                image = parse_dicom_image(archive.read(member))
+                basename = member_path.name.lower()
+                stem = basename.removesuffix(".dcm")
+                safe_stem = stem.isdigit() or (stem.startswith("im") and stem[2:].isdigit()) or (
+                    stem.startswith(("slice-", "slice_")) and stem[6:].isdigit()
+                )
+                safe_directories = all(part.lower() in {"series", "dicom"} for part in member_path.parts[:-1])
+                if not safe_stem or not safe_directories:
+                    image = replace(image, archive_member_name_risk=True)
+                images.append(image)
     except zipfile.BadZipFile as error:
         raise ImagingIngestionError("DICOM zip could not be opened") from error
 
@@ -410,20 +483,28 @@ def build_dicom_zip_scan_profile(content: bytes, modality: str, storage_key: str
 
     first = images[0]
     phi_warnings = sorted({warning for image in images for warning in image.phi_warnings})
+    risk_flags = _dicom_risk_flags(images)
+    decision = "quarantined" if risk_flags else "passed"
     return {
+        **deidentification_fields(decision, risk_flags),
         "storage_key": storage_key,
         "source_format": "dicom_zip",
-        "ingestion_status": "ready",
-        "ingestion_error": None,
+        "ingestion_status": "quarantined" if risk_flags else "ready",
+        "ingestion_error": "Upload quarantined by medical-image intake policy" if risk_flags else None,
         "imaging_metadata": {
             "source_format": "dicom_zip",
             "modality": first.modality or modality,
             "parser_status": "parsed",
             "data_safety": "uploaded",
-            "deidentification_status": "phi_warning_detected" if phi_warnings else "no_phi_tags_detected",
+            "deidentification_status": decision,
+            "deidentification_profile_version": DEIDENTIFICATION_PROFILE_VERSION,
             "datatype": "uint16",
             "preview_slice_count": len(images),
             "phi_warnings": phi_warnings,
+            "risk_flags": list(risk_flags),
+            "private_tag_detected": any(image.private_tag_detected for image in images),
+            "archive_member_name_risk": any(image.archive_member_name_risk for image in images),
+            "burned_in_annotation": "NO" if all(image.burned_in_annotation == "NO" for image in images) else "unsafe_or_missing",
         },
         "width": first.width,
         "height": first.height,

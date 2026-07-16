@@ -17,7 +17,8 @@ AnnotationType = Literal["bounding_box", "polygon", "segmentation"]
 ReviewStatus = Literal["pending", "approved", "rejected", "needs_changes"]
 UserRole = Literal["admin", "annotator", "reviewer"]
 SourceFormat = Literal["synthetic", "nifti", "dicom", "dicom_zip", "unknown"]
-IngestionStatus = Literal["pending", "processing", "ready", "failed"]
+IngestionStatus = Literal["pending", "processing", "ready", "failed", "quarantined"]
+DeidentificationStatus = Literal["synthetic", "passed", "quarantined", "not_evaluated", "legacy_unverified"]
 
 
 class UserRead(BaseModel):
@@ -149,6 +150,10 @@ class ScanRead(ScanBase):
     source_format: SourceFormat = "synthetic"
     ingestion_status: IngestionStatus = "ready"
     ingestion_error: str | None = None
+    deidentification_status: DeidentificationStatus = "not_evaluated"
+    deidentification_profile_version: str | None = None
+    deidentification_checked_at: datetime | None = None
+    deidentification_evidence: dict[str, Any] | None = None
     imaging_metadata: dict[str, Any] | None = None
     width: int | None = None
     height: int | None = None
@@ -200,6 +205,10 @@ class ScanMetadataRead(BaseModel):
     source_format: SourceFormat
     ingestion_status: IngestionStatus
     ingestion_error: str | None = None
+    deidentification_status: DeidentificationStatus
+    deidentification_profile_version: str | None = None
+    deidentification_checked_at: datetime | None = None
+    deidentification_evidence: dict[str, Any] | None = None
     num_slices: int
     width: int | None = None
     height: int | None = None
