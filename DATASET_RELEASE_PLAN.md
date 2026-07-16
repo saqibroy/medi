@@ -1,7 +1,7 @@
 # Immutable Dataset Release Plan
 
-Status: repository implementation and local verification complete; pull-request
-checks remain pending.
+Status: repository implementation and verification complete. Remaining items
+below require approved deployment infrastructure or policy decisions.
 
 This increment creates reproducible, project-scoped dataset releases without
 copying patient-related free text or exposing private object-storage keys. A
@@ -45,7 +45,7 @@ must not alter its stored manifest or checksum.
 - [x] Infrastructure configuration lints successfully with `cfn-lint 1.53.0`.
 - [x] Rebuilt Compose services are healthy and pass a live create, supersede,
   retrieve, mutate-live-data, checksum-stability, and revoke smoke test.
-- [ ] GitHub pull-request checks pass before merge.
+- [x] GitHub pull-request checks pass on PR #11 before merge.
 
 ## Remaining Deployment Gates
 
