@@ -261,8 +261,10 @@ combined deletion gate open.
   request bodies and privacy evidence from audit/log records, and requires an
   executed matching deletion receipt before erasure fulfillment. Broader target
   analytics/support review remains required.
-- [ ] Define incident response, breach assessment, notification ownership, and
-  evidence preservation.
+- [~] Repository incident response, privacy-safe evidence preservation, and
+  personal-data breach assessment handoff are defined in
+  `SECURITY_INCIDENT_RUNBOOK.md`. Named notification owners, target severity/
+  contact rules, legal decisions, and signed exercises remain deployment gates.
 - [ ] Obtain privacy/security review and appropriate customer agreements before
   enabling identifiable or pseudonymized patient data.
 
@@ -311,8 +313,11 @@ Useful primary references:
   high/critical gate, the backend image upgrades vulnerable packaging tools, and
   the frontend runtime updates nginx/Alpine packages during build; non-root
   users, read-only filesystems, and digest-pinned base images remain P1 work.
-- [ ] Add operator runbooks for deploy, rollback, degraded storage, database
-  outage, queue outage, key compromise, and security incident.
+- [x] Add repository operator runbooks for deploy, rollback, degraded storage,
+  database/Redis outage, key compromise, and security incident. Redis is only
+  the rate-limit store today; any future general queue requires its own pause,
+  replay, idempotency, and dead-letter procedure. Target commands/owners and
+  exercise evidence remain external gates.
 
 ## Implementation Sequence
 
@@ -357,8 +362,12 @@ Useful primary references:
 13. [x] Complete the P0 production-readiness dependency and supply-chain
     security baseline without inventing target, operator, integration, or legal
     evidence.
-14. [ ] Add privacy-safe operator runbooks for security incidents, degraded
-    storage/database/Redis, key compromise, deploy, and rollback.
+14. [x] Add privacy-safe operator runbooks for security incidents, degraded
+    storage/database/Redis, key compromise, deploy, and rollback, plus a CI
+    structure/link verifier. Target contacts, commands, thresholds, legal
+    decisions, and exercises remain deployment gates.
+15. [ ] Add session idle expiry and administrator-visible active-session
+    inventory/revocation without exposing raw session credentials.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
@@ -374,6 +383,9 @@ processing/DPIA evidence and privacy-request governance are evidenced in
 `PRIVACY_OPERATIONS_PLAN.md`. Current repository increment complete: the Phase
 4 production-readiness inventory and P0 dependency/supply-chain security
 baseline are evidenced in `PRODUCTION_READINESS_REVIEW.md`.
+Current repository increment complete: the incident, degraded-service,
+key-compromise, deployment, and rollback package is indexed in
+`OPERATOR_RUNBOOKS.md` and structurally verified in CI.
 
 ## Phase 4 Exit Criteria
 

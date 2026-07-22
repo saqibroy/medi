@@ -28,6 +28,9 @@ jobs:
           python -m pip install cfn-lint==1.53.0
           cfn-lint infrastructure/aws/medi-private-storage.json
 
+      - name: Validate operator runbooks
+        run: python scripts/verify_operator_runbooks.py
+
   backend:
     name: Backend
     runs-on: ubuntu-latest
