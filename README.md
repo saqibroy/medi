@@ -84,6 +84,8 @@ For production, set `APP_ENV=production`, a non-development `DATABASE_URL`, a
 unique `TOKEN_SECRET` of at least 32 characters, distinct `CSRF_SECRET` and
 `AUDIT_SIGNING_KEY` values of at least 32 characters, exact comma-separated
 HTTPS `CORS_ORIGINS`, `SEED_DEMO_DATA=false`, `SESSION_COOKIE_SECURE=true`,
+an explicitly approved `SESSION_IDLE_TIMEOUT_MINUTES` no greater than
+`SESSION_TTL_MINUTES`,
 `RATE_LIMIT_BACKEND=redis`, and an encrypted `rediss://` connection in
 `RATE_LIMIT_REDIS_URL`. The backend validates these before migrations run and
 refuses unsafe startup. Keep real values in the deployment secret manager,
@@ -107,12 +109,23 @@ production defaults and require explicit approval.
 
 Browser sessions are opaque, stored only as keyed token digests in PostgreSQL
 and as `HttpOnly`, `SameSite` cookies in the browser, expire after
-`SESSION_TTL_MINUTES` (480 by default), and are revoked by `POST /auth/logout`.
+`SESSION_TTL_MINUTES` (480 by default), and enforce sliding idle expiry through
+`SESSION_IDLE_TIMEOUT_MINUTES` (60 minutes in development). Production must
+supply an approved idle value explicitly. Sessions are revoked by
+`POST /auth/logout`.
 State-changing cookie requests require a signed, session-bound CSRF cookie and
 header pair. Production uses `Secure`, `__Host-` cookies; the development names
 exist only because local HTTP cannot set `Secure` cookies. Explicit bearer
 headers remain supported for non-browser clients, but login never returns the
 raw credential in JSON.
+
+Organization administrators can inspect active sessions at `GET /auth/sessions`
+and revoke another session through `POST /auth/sessions/{session_id}/revoke`.
+The API and admin panel expose only user identity plus creation, last-activity,
+idle-limit, and absolute-limit timestamps. They never expose token digests,
+cookies, IP addresses, or user agents. The current session uses the normal
+logout path so an administrator cannot accidentally strand the active control
+session.
 
 `LOGIN_RATE_LIMIT_PER_MINUTE` and `SENSITIVE_RATE_LIMIT_PER_MINUTE` configure
 shared Redis counters in Compose and production. Rate-limit identities are

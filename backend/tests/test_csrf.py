@@ -19,6 +19,7 @@ def production_settings():
             "PRIVACY_REFERENCE_KEY": "production-privacy-reference-key-distinct-and-long",
             "CORS_ORIGINS": "https://medi.example.org",
             "SEED_DEMO_DATA": "false",
+            "SESSION_IDLE_TIMEOUT_MINUTES": "60",
             "RATE_LIMIT_BACKEND": "redis",
             "RATE_LIMIT_REDIS_URL": "rediss://redis.example.org:6380/0",
             "SCAN_STORAGE_BACKEND": "s3",

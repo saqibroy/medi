@@ -1,8 +1,8 @@
 # Production Readiness Review
 
 Status: active on 2026-07-16; P0 supply-chain remediation and the repository
-operator-runbook package completed on 2026-07-22. The remaining Phase 4 gates
-are classified below.
+operator-runbook package and repository session controls completed on
+2026-07-22. The remaining Phase 4 gates are classified below.
 
 This review prevents two unsafe shortcuts: treating unfinished engineering as
 somebody else's approval problem, or inventing legal/deployment evidence that
@@ -32,7 +32,7 @@ contract, or approver supplies verifiable evidence.
 | Application secrets | Reject missing, reused, weak, or documented development secrets | Repository | Implemented and tested; the Phase 4 tracker is reconciled in this review. |
 | Secret delivery | Load runtime secrets from an approved secret manager | Deployment | No secret values belong in this repository, images, frontend bundles, logs, or samples. |
 | Supply chain | Secret, Python, npm, container, and workflow-integrity scanning | Repository | **P0 complete:** known high/critical Python/npm/container findings are remediated, every PR/main run scans secrets/dependencies/images, and GitHub Actions are pinned by immutable commit. Moderate Cornerstone/VTK advisories remain until a planned major viewer upgrade. |
-| Sessions | Idle expiry and administrator-visible active-session inventory | Repository + organization | Absolute expiry/revocation exists; approved idle duration and new inventory/revocation APIs remain. |
+| Sessions | Approved production idle duration and any forced organization-wide revocation policy | Repository + organization | **Repository complete:** sliding idle expiry, explicit production configuration, credential-free administrator inventory, per-session revocation, UI, audit, migration, and tenant tests are implemented. Target owners must approve the duration and any bulk policy. |
 | Authorization | Project-level membership if required and exhaustive object-route authorization coverage | Repository + organization | Tenant/role tests exist. First decide whether same-organization project isolation is a product requirement, then implement it; expand the route matrix independently. |
 | SSO/MFA | Approved SSO and MFA for sensitive-data deployments | Integration + organization | Do not add a provider until tenant, assurance, recovery, and contract requirements are approved. |
 | Shared rate limits | Authenticated, encrypted, highly available Redis with failover/alert evidence | Deployment | Application fail-closed Redis enforcement exists; target service evidence remains. |
@@ -60,9 +60,9 @@ contract, or approver supplies verifiable evidence.
 2. **P0/P1 complete:** add privacy-safe incident, degraded-service,
    key-compromise, deployment, and rollback runbooks without inventing target
    contacts, provider commands, thresholds, or legal decisions.
-3. **P1 next:** add session idle expiry plus active-session inventory and
-   revocation.
-4. **P1:** add bounded database pools, acquisition/statement timeouts, and
+3. **P1 complete:** add session idle expiry plus credential-free administrator
+   active-session inventory and per-session revocation.
+4. **P1 next:** add bounded database pools, acquisition/statement timeouts, and
    privacy-safe slow-query signals.
 5. **P1:** run application containers as non-root and make filesystems read-only
    except for explicitly mounted writable paths.
@@ -91,9 +91,9 @@ or pseudonymized data is enabled, the deployment owner must:
 
 ## Review Evidence
 
-- Current Compose database, Redis, backend, and frontend were healthy before
-  this review; backend readiness reported the database reachable, the frontend
-  returned HTTP 200, and PostgreSQL was at `20260716_0013`.
+- Current Compose database, Redis, backend, and frontend are healthy; backend
+  readiness reports the database reachable, the frontend returns HTTP 200, and
+  PostgreSQL is at `20260722_0014`.
 - The initial repository-history secret scan covered 33 commits with no leak
   finding.
 - The initial Python audit found known advisories in the old FastAPI/Starlette,
@@ -106,7 +106,8 @@ or pseudonymized data is enabled, the deployment owner must:
 - P0 completion evidence on 2026-07-22: `pip-audit` reported no known
   backend requirement vulnerabilities; `npm audit --omit=dev
   --audit-level=high` passed with only moderate Cornerstone/VTK advisories
-  requiring a major viewer upgrade; Gitleaks scanned 33 commits with no leaks;
+  requiring a major viewer upgrade; the latest Gitleaks run scanned 35 commits
+  with no leaks;
   Trivy found zero high/critical vulnerabilities in the rebuilt backend and
   frontend images.
 - Operator-runbook completion evidence on 2026-07-22: five documents define a
@@ -115,6 +116,14 @@ or pseudonymized data is enabled, the deployment owner must:
   immutable deployment/rollback procedure, and synthetic exercises. The CI
   verifier confirms required sections and local Markdown links; target drills
   and approvals remain external evidence.
+- Session-control completion evidence on 2026-07-22: all 136 backend tests pass;
+  the frontend production build passes; the PostgreSQL
+  upgrade/downgrade/upgrade rehearsal reaches `20260722_0014`; and a rebuilt
+  Compose smoke test proves admin-only inventory, credential-minimized response
+  fields, per-session revocation, and subsequent `401` rejection of the revoked
+  session. Supply-chain checks still report no Python advisories, no secret
+  leaks, and zero high/critical image findings; the three moderate viewer-chain
+  advisories remain tracked for a deliberate major upgrade.
 
 ## Primary References
 

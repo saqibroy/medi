@@ -2,7 +2,8 @@
 
 This repository is a production-minded research MVP. It uses
 React, TypeScript, Tailwind CSS, Cornerstone3D, FastAPI, Pydantic, SQLAlchemy,
-PostgreSQL, Alembic, expiring database-backed cookie sessions, signed CSRF
+PostgreSQL, Alembic, absolute/sliding-idle database-backed cookie sessions,
+administrator session revocation, signed CSRF
 protection, Redis-backed shared rate limits, role checks, and a local/S3
 private-storage boundary. Real DICOM/NIfTI parsing, KMS-encrypted S3
 writes, signed derived previews, a versioned quarantine gate, and a dedicated

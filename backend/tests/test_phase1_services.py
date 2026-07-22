@@ -89,6 +89,29 @@ def test_expired_session_cannot_be_resolved() -> None:
         db.close()
 
 
+def test_idle_session_cannot_be_resolved_and_active_session_is_touched() -> None:
+    db = build_session()
+    try:
+        seed_product_workspace(db)
+        token, _, _ = authenticate_user(db, "annotator@test.local", "password")
+        user_session = db.scalar(select(UserSession))
+        assert user_session is not None
+        previous_activity = datetime.now(timezone.utc) - timedelta(minutes=61)
+        user_session.last_seen_at = previous_activity
+        db.commit()
+
+        assert resolve_access_token(db, token) is None
+
+        user_session.last_seen_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        db.commit()
+        assert resolve_access_token(db, token) is not None
+        db.refresh(user_session)
+        refreshed_activity = user_session.last_seen_at.replace(tzinfo=timezone.utc) if user_session.last_seen_at.tzinfo is None else user_session.last_seen_at
+        assert refreshed_activity > previous_activity
+    finally:
+        db.close()
+
+
 def test_project_labels_and_export_are_project_scoped() -> None:
     db = build_session()
     try:

@@ -19,6 +19,7 @@ from .csrf import session_cookie_name
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
+SESSION_ACTIVITY_TOUCH_INTERVAL = timedelta(seconds=60)
 
 
 def hash_password(password: str, salt: str | None = None) -> str:
@@ -45,8 +46,9 @@ def create_access_token(db: Session, user_id: UUID) -> tuple[str, datetime]:
     """Create a random, expiring session and store only its digest."""
 
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=get_settings().session_ttl_minutes)
-    user_session = UserSession(user_id=user_id, token_digest=_token_digest(token), expires_at=expires_at)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=get_settings().session_ttl_minutes)
+    user_session = UserSession(user_id=user_id, token_digest=_token_digest(token), expires_at=expires_at, last_seen_at=now)
     db.add(user_session)
     db.commit()
     db.info["authenticated_session_id"] = user_session.id
@@ -60,15 +62,24 @@ def _token_digest(token: str) -> str:
 def resolve_access_session(db: Session, token: str) -> UserSession | None:
     """Resolve a raw bearer token to its active session without exposing it."""
 
+    now = datetime.now(timezone.utc)
+    idle_cutoff = now - timedelta(minutes=get_settings().session_idle_timeout_minutes)
     user_session = db.scalar(
         select(UserSession).where(
             UserSession.token_digest == _token_digest(token),
             UserSession.revoked_at.is_(None),
-            UserSession.expires_at > datetime.now(timezone.utc),
+            UserSession.expires_at > now,
+            UserSession.last_seen_at > idle_cutoff,
         )
     )
     if user_session is None or not user_session.user.is_active:
         return None
+    last_seen_at = user_session.last_seen_at
+    if last_seen_at.tzinfo is None:
+        last_seen_at = last_seen_at.replace(tzinfo=timezone.utc)
+    if now - last_seen_at >= SESSION_ACTIVITY_TOUCH_INTERVAL:
+        user_session.last_seen_at = now
+        db.commit()
     return user_session
 
 

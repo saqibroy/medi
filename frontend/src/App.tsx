@@ -22,6 +22,7 @@ import { ReviewSummaryPanel } from "./components/ReviewSummaryPanel";
 import { ScanList } from "./components/ScanList";
 import { ScanManager } from "./components/ScanManager";
 import { ScanMetadataPanel } from "./components/ScanMetadataPanel";
+import { SessionManagementPanel } from "./components/SessionManagementPanel";
 import { SliceNavigator } from "./components/SliceNavigator";
 import { WindowLevelControls } from "./components/WindowLevelControls";
 import { useAnnotations } from "./hooks/useAnnotations";
@@ -527,6 +528,7 @@ export default function App() {
       </div>
       <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white lg:h-full">
         <ScanMetadataPanel scanId={selectedScan?.id} csrfToken={csrfToken} />
+        {canManageWorkspace ? <SessionManagementPanel csrfToken={csrfToken} /> : null}
         {canManageWorkspace ? <DataGovernancePanel projectId={selectedProject?.id} csrfToken={csrfToken} /> : null}
         {canManageWorkspace ? <PrivacyGovernancePanel projectId={selectedProject?.id} csrfToken={csrfToken} /> : null}
         {canManageWorkspace ? <ExternalAIGovernancePanel projectId={selectedProject?.id} csrfToken={csrfToken} /> : null}

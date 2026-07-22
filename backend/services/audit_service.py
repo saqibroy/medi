@@ -49,6 +49,8 @@ class AuditRoute:
 AUDITED_ROUTES: dict[tuple[str, str], AuditRoute] = {
     ("POST", "/auth/login"): AuditRoute("auth.login"),
     ("POST", "/auth/logout"): AuditRoute("auth.logout"),
+    ("GET", "/auth/sessions"): AuditRoute("session.list", "organization"),
+    ("POST", "/auth/sessions/{session_id}/revoke"): AuditRoute("session.revoke", "session", "session_id"),
     ("GET", "/audit-events"): AuditRoute("audit.list", "organization"),
     ("POST", "/projects"): AuditRoute("project.create", "project"),
     ("PUT", "/projects/{project_id}"): AuditRoute("project.update", "project", "project_id"),

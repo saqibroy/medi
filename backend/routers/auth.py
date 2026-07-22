@@ -1,5 +1,8 @@
 """Authentication endpoints for the Medi product workspace."""
 
+from datetime import timedelta
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -7,8 +10,8 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import User
 from ..csrf import create_csrf_token, csrf_cookie_name, session_cookie_name, set_csrf_cookie, set_session_cookie
-from ..schemas import AuthSessionRead, CsrfTokenRead, LoginRequest, UserRead
-from ..security import bearer_scheme, get_current_user, revoke_access_token
+from ..schemas import ActiveSessionRead, AuthSessionRead, CsrfTokenRead, LoginRequest, UserRead
+from ..security import bearer_scheme, get_current_user, require_admin, revoke_access_token
 from ..settings import get_settings
 from ..services import auth_service
 from ..services.audit_service import mark_request_actor
@@ -48,6 +51,48 @@ async def me(current_user: User = Depends(get_current_user)) -> UserRead:
     """Return the active user for the current browser or API session."""
 
     return UserRead.model_validate(current_user)
+
+
+@router.get("/sessions", response_model=list[ActiveSessionRead])
+async def list_sessions(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> list[ActiveSessionRead]:
+    """Return credential-free active sessions for the current organization."""
+
+    current_session_id = getattr(request.state, "audit_actor_session_id", None)
+    idle_timeout = timedelta(minutes=get_settings().session_idle_timeout_minutes)
+    return [
+        ActiveSessionRead(
+            id=user_session.id,
+            user_id=user_session.user_id,
+            user_email=user_session.user.email,
+            created_at=user_session.created_at,
+            last_seen_at=user_session.last_seen_at,
+            idle_expires_at=user_session.last_seen_at + idle_timeout,
+            absolute_expires_at=user_session.expires_at,
+            current_session=user_session.id == current_session_id,
+        )
+        for user_session in auth_service.list_active_sessions(db, current_user)
+    ]
+
+
+@router.post("/sessions/{session_id}/revoke", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_session(
+    request: Request,
+    session_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> None:
+    """Revoke one active session belonging to the current organization."""
+
+    auth_service.revoke_organization_session(
+        db,
+        current_user,
+        session_id,
+        getattr(request.state, "audit_actor_session_id", None),
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

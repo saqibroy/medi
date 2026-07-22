@@ -40,6 +40,7 @@ class Settings:
     cors_origins: tuple[str, ...]
     seed_demo_data: bool
     session_ttl_minutes: int
+    session_idle_timeout_minutes: int
     login_rate_limit_per_minute: int
     sensitive_rate_limit_per_minute: int
     session_cookie_secure: bool
@@ -141,6 +142,14 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
     cors_origins = _read_origins(values.get("CORS_ORIGINS", default_origins))
     seed_demo_data = _read_boolean(values.get("SEED_DEMO_DATA", "false" if app_environment == "production" else "true"), "SEED_DEMO_DATA")
     session_ttl_minutes = _read_integer(values.get("SESSION_TTL_MINUTES", "480"), "SESSION_TTL_MINUTES", 5, 1440)
+    session_idle_timeout_minutes = _read_integer(
+        values.get("SESSION_IDLE_TIMEOUT_MINUTES", "60"),
+        "SESSION_IDLE_TIMEOUT_MINUTES",
+        5,
+        1440,
+    )
+    if session_idle_timeout_minutes > session_ttl_minutes:
+        raise ConfigurationError("SESSION_IDLE_TIMEOUT_MINUTES must not exceed SESSION_TTL_MINUTES")
     login_rate_limit = _read_integer(values.get("LOGIN_RATE_LIMIT_PER_MINUTE", "10"), "LOGIN_RATE_LIMIT_PER_MINUTE", 1, 1000)
     sensitive_rate_limit = _read_integer(values.get("SENSITIVE_RATE_LIMIT_PER_MINUTE", "60"), "SENSITIVE_RATE_LIMIT_PER_MINUTE", 1, 10000)
     session_cookie_secure = _read_boolean(values.get("SESSION_COOKIE_SECURE", "true" if app_environment == "production" else "false"), "SESSION_COOKIE_SECURE")
@@ -207,6 +216,8 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
             raise ConfigurationError("production requires a distinct PRIVACY_REFERENCE_KEY of at least 32 characters")
         if "CORS_ORIGINS" not in values:
             raise ConfigurationError("production requires explicit CORS_ORIGINS")
+        if "SESSION_IDLE_TIMEOUT_MINUTES" not in values:
+            raise ConfigurationError("production requires an explicit SESSION_IDLE_TIMEOUT_MINUTES")
         if seed_demo_data:
             raise ConfigurationError("SEED_DEMO_DATA must be false in production")
         if not session_cookie_secure:
@@ -230,6 +241,7 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
         cors_origins=cors_origins,
         seed_demo_data=seed_demo_data,
         session_ttl_minutes=session_ttl_minutes,
+        session_idle_timeout_minutes=session_idle_timeout_minutes,
         login_rate_limit_per_minute=login_rate_limit,
         sensitive_rate_limit_per_minute=sensitive_rate_limit,
         session_cookie_secure=session_cookie_secure,

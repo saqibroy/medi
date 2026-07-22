@@ -134,6 +134,19 @@ class AuthSessionRead(BaseModel):
     user: UserRead
 
 
+class ActiveSessionRead(BaseModel):
+    """Credential-free active-session metadata visible to administrators."""
+
+    id: UUID
+    user_id: UUID
+    user_email: str
+    created_at: datetime
+    last_seen_at: datetime
+    idle_expires_at: datetime
+    absolute_expires_at: datetime
+    current_session: bool
+
+
 class CsrfTokenRead(BaseModel):
     """Signed double-submit token that browser JavaScript may echo in a header."""
 

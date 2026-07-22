@@ -1,4 +1,4 @@
-import type { AuthResponse, CsrfResponse, User } from "../types/user";
+import type { ActiveSession, AuthResponse, CsrfResponse, User } from "../types/user";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -39,4 +39,19 @@ export async function logout(csrfToken: string): Promise<void> {
 
 export async function listUsers(csrfToken: string): Promise<User[]> {
   return request<User[]>("/users", { headers: { "X-CSRF-Token": csrfToken } });
+}
+
+export async function listActiveSessions(csrfToken: string): Promise<ActiveSession[]> {
+  return request<ActiveSession[]>("/auth/sessions", { headers: { "X-CSRF-Token": csrfToken } });
+}
+
+export async function revokeActiveSession(csrfToken: string, sessionId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/sessions/${sessionId}/revoke`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "X-CSRF-Token": csrfToken },
+  });
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+  }
 }
