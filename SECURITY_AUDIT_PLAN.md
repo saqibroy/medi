@@ -28,6 +28,10 @@ second store of patient data, credentials, or clinical free text.
   rows.
 - [x] Prove tenant isolation, non-admin denial, safe-field behavior, integrity
   verification, and database-level immutability with automated tests.
+- [x] Enforce an explicit authentication/role policy for all 88 API routes and
+  prove every parameterized route, collection, query, and request-body object
+  reference is cross-tenant opaque. Audit rows remain organization-scoped while
+  still recording the signed-in tenant's denied access attempts.
 - [x] Rebuild and run the complete application, rehearse migrations against
   PostgreSQL, and perform authenticated live smoke checks before publication.
 
@@ -87,6 +91,11 @@ Its local verification added signed-audit assertions to the 129-test backend
 suite and an authenticated synthetic smoke proving the request-create audit is
 present while the raw subject reference is absent from the API response and
 audit details.
+
+The object-authorization increment adds a fail-closed route inventory and
+two-organization matrix without weakening denied-attempt audit evidence. Its
+local verification passes all 151 backend tests and is recorded in
+`OBJECT_AUTHORIZATION_PLAN.md`.
 
 ## Remaining Production Gates
 

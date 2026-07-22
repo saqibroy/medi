@@ -2,8 +2,8 @@
 
 Status: active on 2026-07-16; P0 supply-chain remediation and the repository
 operator-runbook package, repository session controls, database-runtime
-controls, and application-container hardening completed on 2026-07-22. The
-remaining Phase 4 gates are classified below.
+controls, application-container hardening, and the object-authorization matrix
+completed on 2026-07-22. The remaining Phase 4 gates are classified below.
 
 This review prevents two unsafe shortcuts: treating unfinished engineering as
 somebody else's approval problem, or inventing legal/deployment evidence that
@@ -34,7 +34,7 @@ contract, or approver supplies verifiable evidence.
 | Secret delivery | Load runtime secrets from an approved secret manager | Deployment | No secret values belong in this repository, images, frontend bundles, logs, or samples. |
 | Supply chain | Secret, Python, npm, container, and workflow-integrity scanning | Repository | **P0 complete:** known high/critical Python/npm/container findings are remediated, every PR/main run scans secrets/dependencies/images, and GitHub Actions are pinned by immutable commit. Moderate Cornerstone/VTK advisories remain until a planned major viewer upgrade. |
 | Sessions | Approved production idle duration and any forced organization-wide revocation policy | Repository + organization | **Repository complete:** sliding idle expiry, explicit production configuration, credential-free administrator inventory, per-session revocation, UI, audit, migration, and tenant tests are implemented. Target owners must approve the duration and any bulk policy. |
-| Authorization | Project-level membership if required and exhaustive object-route authorization coverage | Repository + organization | Tenant/role tests exist. First decide whether same-organization project isolation is a product requirement, then implement it; expand the route matrix independently. |
+| Authorization | Project-level membership if required | Organization + repository | **Repository route matrix complete:** all 88 routes have explicit policies; every parameterized path, collection, query reference, and body reference has cross-tenant coverage. Decide same-organization project isolation separately before implementing membership semantics. |
 | SSO/MFA | Approved SSO and MFA for sensitive-data deployments | Integration + organization | Do not add a provider until tenant, assurance, recovery, and contract requirements are approved. |
 | Shared rate limits | Authenticated, encrypted, highly available Redis with failover/alert evidence | Deployment | Application fail-closed Redis enforcement exists; target service evidence remains. |
 | Audit context | Trusted-proxy-derived network context and an approved privacy retention rule | Organization + repository | Raw IP/user-agent storage remains intentionally absent until both policies exist. |
@@ -68,9 +68,11 @@ contract, or approver supplies verifiable evidence.
 5. **P1 complete:** run application containers as non-root with read-only roots,
    dropped capabilities, disabled privilege escalation, and verified writable
    paths.
-6. **P1 next:** close the object-authorization test matrix and annotation-history
-   tombstone gap.
-7. **P2:** address organization deletion, retained export artifacts, quotas,
+6. **P1 complete:** close the 88-route object-authorization matrix, including
+   every parameterized path plus collection, query, and body references.
+7. **P1 next:** replace annotation-history cascade deletion with retained
+   tombstones or durable references.
+8. **P2:** address organization deletion, retained export artifacts, quotas,
    and model-output lineage when their prerequisite product policies exist.
 
 ## What The Deployment Owner Must Eventually Do
@@ -148,6 +150,17 @@ or pseudonymized data is enabled, the deployment owner must:
   have no known high/critical findings; the three moderate viewer-chain
   advisories remain tracked. Target admission, runtime, digest, and rollout
   evidence remains external.
+- Object-authorization completion evidence on 2026-07-22: all 88 API routes
+  have an exact fail-closed authentication/role entry; all parameterized paths,
+  collections, scan query references, and request-body references are tested
+  with a synthetic second organization and return opaque results. Annotation
+  project, label, and assignee references are organization-scoped before
+  consistency validation, and annotation updates cannot reparent away from the
+  scan. All 151 backend tests, the frontend build, backend compilation, external-
+  AI egress check, operator-runbook verifier, and diff check pass. Project
+  membership within one organization remains a separate policy decision. The
+  rebuilt Compose stack is healthy; live/readiness, frontend HTTP `200`, and
+  container-hardening verification pass.
 
 ## Primary References
 

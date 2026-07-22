@@ -1265,7 +1265,7 @@ async def test_annotation_create_review_and_export_routes(tmp_path: Path) -> Non
         assert created.json()["assigned_to_user_id"] == user_by_email["annotator@test.local"]["id"]
         assert reassigned.status_code == 200
         assert reassigned.json()["assigned_to_user_id"] == user_by_email["reviewer@test.local"]["id"]
-        assert rejected_assignment.status_code == 400
+        assert rejected_assignment.status_code == 404
         assert polygon.status_code == 201
         assert approved_polygon.status_code == 201
         assert forbidden_review.status_code == 403

@@ -144,6 +144,9 @@ Status:
 - [x] Scan and annotation access is organization-scoped through projects.
 - [x] Annotation creation validates scan and label project consistency.
 - [x] Role-based authorization enforces admin, annotator, and reviewer mutation rules.
+- [x] A fail-closed 88-route policy matrix and complete cross-organization
+  object-path tests enforce opaque tenant boundaries; annotation project,
+  label, and assignee references are scoped before validation.
 
 ## Frontend Plan
 
