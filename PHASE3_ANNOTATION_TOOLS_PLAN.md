@@ -175,6 +175,8 @@ Frontend/manual checks:
 36. [x] Add exhaustive object-route authorization coverage and prevent
     cross-organization project, label, or assignee references from leaking
     existence or reparenting an annotation away from its scan.
+37. [x] Retain an immutable, value-free lineage tombstone when annotation
+    deletion removes raw revision history and sensitive edit values.
 
 ## Phase 3 Exit Criteria
 

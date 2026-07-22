@@ -261,6 +261,51 @@ class AnnotationHistory(Base):
     annotation: Mapped[Annotation] = relationship(back_populates="history_entries")
 
 
+class AnnotationHistoryTombstone(Base):
+    """Immutable, data-minimized evidence retained after annotation deletion."""
+
+    __tablename__ = "annotation_history_tombstones"
+    __table_args__ = (
+        UniqueConstraint("annotation_id", name="uq_annotation_history_tombstone_annotation"),
+        CheckConstraint("history_entry_count >= 0", name="ck_annotation_history_tombstone_count"),
+        CheckConstraint(
+            "deletion_source IN ('annotation_api', 'data_lifecycle')",
+            name="ck_annotation_history_tombstone_source",
+        ),
+        Index("ix_annotation_history_tombstones_org_deleted", "organization_id", "deleted_at"),
+        Index("ix_annotation_history_tombstones_project", "project_id"),
+        Index("ix_annotation_history_tombstones_scan", "scan_id"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False
+    )
+    # These identifiers intentionally have no mutable foreign keys: the rows
+    # they reference may be removed by the approved deletion workflow.
+    project_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    scan_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    annotation_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    deleted_by_user_id: Mapped[PythonUUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    deletion_source: Mapped[str] = mapped_column(String(30), nullable=False)
+    history_entry_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    action_counts: Mapped[dict] = mapped_column(JSON, nullable=False)
+    changed_fields: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    first_history_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_history_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    history_lineage_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    integrity_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+@event.listens_for(AnnotationHistoryTombstone, "before_update")
+@event.listens_for(AnnotationHistoryTombstone, "before_delete")
+def _reject_annotation_history_tombstone_mutation(*_: object) -> None:
+    """Keep retained annotation-history evidence append-only through the ORM."""
+
+    raise ValueError("annotation history tombstones are append-only")
+
+
 class SegmentationMask(Base):
     """Metadata for a binary segmentation mask stored outside annotation JSON."""
 

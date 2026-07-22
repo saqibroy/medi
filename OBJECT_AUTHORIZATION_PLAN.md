@@ -44,7 +44,8 @@ Completed locally on 2026-07-22 using synthetic, two-organization fixtures:
 Target identity-provider policy, SSO/MFA, and any same-organization project
 membership requirement remain outside this completed repository increment.
 
-## Next Repository Task
+## Follow-on
 
-Replace annotation-history cascade deletion with retained tombstones or durable
-references before describing annotation history as immutable.
+The annotation-history tombstone task is now complete and evidenced in
+`ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`. Retained private release/export
+artifacts are the next repository task.

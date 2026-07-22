@@ -361,19 +361,31 @@ def search_annotations(
     return list(db.scalars(statement))
 
 
-def delete_annotation(db: Session, annotation_id: UUID) -> None:
-    """Delete one annotation; no response body is needed for a 204."""
+def _delete_annotation(db: Session, annotation: Annotation, deleted_by_user_id: UUID | None) -> None:
+    """Retain minimized lineage evidence and delete one annotation atomically."""
 
-    annotation = get_annotation_or_404(db, annotation_id)
+    from .annotation_history_tombstone_service import retain_annotation_history_tombstones
     from .segmentation_mask_service import delete_mask_files_for_annotation
 
+    retain_annotation_history_tombstones(
+        db,
+        [annotation],
+        deleted_by_user_id=deleted_by_user_id,
+        deletion_source="annotation_api",
+    )
     delete_mask_files_for_annotation(db, annotation)
     db.delete(annotation)
     db.commit()
 
 
+def delete_annotation(db: Session, annotation_id: UUID) -> None:
+    """Delete one annotation; no response body is needed for a 204."""
+
+    _delete_annotation(db, get_annotation_or_404(db, annotation_id), None)
+
+
 def delete_annotation_for_user(db: Session, annotation_id: UUID, current_user: User) -> None:
     """Delete an annotation after checking organization access."""
 
-    get_annotation_for_user_or_404(db, annotation_id, current_user)
-    delete_annotation(db, annotation_id)
+    annotation = get_annotation_for_user_or_404(db, annotation_id, current_user)
+    _delete_annotation(db, annotation, current_user.id)

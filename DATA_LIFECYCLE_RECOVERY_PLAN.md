@@ -31,6 +31,9 @@ approved operators, and customer authorization remain deployment gates.
   exclude `s3:DeleteObjectVersion`.
 - [x] Produce a checksum-protected deletion receipt containing only stable IDs,
   counts, state, timestamps, backup disposition, and approval/operator IDs.
+- [x] Before annotation, scan, or project deletion cascades raw annotation
+  revisions, retain one append-only value-free tombstone per annotation and
+  include tombstone counts in the checksum-protected receipt.
 
 ## Recovery Automation
 
@@ -71,6 +74,11 @@ approved operators, and customer authorization remain deployment gates.
   tests so the persistent demo dataset is not destructively changed.
 - [x] GitHub pull-request #12 checks pass before merge, including the fresh-
   volume encrypted recovery drill.
+
+The later annotation-history tombstone increment extends this workflow without
+changing the approved destructive boundary. Direct and operator deletion now
+preserve stable scope/count/summary/hash evidence while removing raw geometry
+and notes; current verification is in `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`.
 
 ## Remaining Deployment Gates
 

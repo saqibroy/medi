@@ -97,14 +97,21 @@ two-organization matrix without weakening denied-attempt audit evidence. Its
 local verification passes all 151 backend tests and is recorded in
 `OBJECT_AUTHORIZATION_PLAN.md`.
 
+The annotation-history retention increment replaces cascade loss with an
+append-only, value-free tombstone for direct and lifecycle deletion. It retains
+controlled summaries plus keyed lineage/integrity hashes while removing raw
+geometry and notes. Its 153-test and migration evidence is recorded in
+`ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`.
+
 ## Remaining Production Gates
 
 - [ ] Export events to independently controlled append-only/WORM-capable
   storage and verify the keyed hashes after export.
 - [ ] Approve an audit retention period, archival access process, and deletion
   exception policy with legal/security stakeholders.
-- [ ] Replace annotation-history cascade deletion with retained tombstones or
-  durable audit references before describing annotation history as immutable.
+- [x] Replace annotation-history cascade loss with immutable, data-minimized
+  tombstones while allowing raw geometry/notes to follow approved deletion
+  policy.
 - [ ] Add safe network context only after a trusted-proxy policy and privacy
   review define what may be retained.
 - [ ] Monitor integrity verification and alert on gaps or failed audit writes.
