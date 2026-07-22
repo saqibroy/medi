@@ -387,10 +387,10 @@ def accept_privacy_request(db: Session, request_id: UUID, payload: Any, current_
     linked_id = payload.linked_deletion_request_id
     if request.request_type == "erasure":
         if linked_id is None:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Erasure acceptance requires a deletion request")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Erasure acceptance requires a deletion request")
         _validate_deletion_link(db, request, linked_id, current_user)
     elif linked_id is not None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Deletion requests may only be linked to erasure")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Deletion requests may only be linked to erasure")
     event = _append_request_event(
         db,
         request,
@@ -408,7 +408,7 @@ def fulfill_privacy_request(db: Session, request_id: UUID, payload: Any, current
     if privacy_request_status(events) != "accepted":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Privacy request must be accepted before fulfillment")
     if payload.outcome_code != EXPECTED_OUTCOMES[request.request_type]:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Outcome does not match privacy request type")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Outcome does not match privacy request type")
     linked_id = next(
         (event.linked_deletion_request_id for event in reversed(events) if event.action == "accepted"),
         None,

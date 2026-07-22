@@ -124,7 +124,7 @@ def _scope_context(db: Session, organization_id: UUID, scope_type: str, scope_id
         if scan is None or scan.project_id is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Governance scope not found")
         return {"organization_id": organization_id, "project_id": scan.project_id, "scan_id": scan.id}
-    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported governance scope")
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unsupported governance scope")
 
 
 def _hold_events(db: Session, hold_ids: Iterable[UUID]) -> dict[UUID, list[LegalHoldEvent]]:

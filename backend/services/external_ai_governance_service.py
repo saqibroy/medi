@@ -226,7 +226,7 @@ def create_data_flow(db: Session, payload: Any, current_user: User) -> dict[str,
     if not set(payload.data_classes).issubset(set(provider.data_classes)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Data flow contains a data class not approved by the provider policy")
     if payload.expires_at is not None and _aware(payload.expires_at) <= _now():
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Data-flow expiry must be in the future")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Data-flow expiry must be in the future")
     existing = list(
         db.scalars(
             select(ExternalAIDataFlowApproval).where(

@@ -204,14 +204,18 @@ Use these before pushing production-minded changes:
 ```bash
 .venv/bin/python -m compileall backend
 .venv/bin/python scripts/verify_external_ai_egress.py
+.venv/bin/python -m pip_audit -r backend/requirements.txt
+PYTHON_BIN=.venv/bin/python bash scripts/verify_supply_chain.sh
 .venv/bin/python -m pytest backend/tests
 cd frontend
+npm audit --omit=dev --audit-level=high
 npm run build
 ```
 
 The GitHub Actions workflow in `.github/workflows/ci.yml` runs the same backend
 and frontend checks, plus an Alembic migration and seed pass against a fresh
-SQLite database.
+SQLite database. CI also runs pinned Gitleaks, Python/npm vulnerability audits,
+and Trivy high/critical scans for the backend and frontend images.
 
 ## Product Flow
 

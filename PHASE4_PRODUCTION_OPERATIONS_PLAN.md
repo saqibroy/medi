@@ -118,8 +118,10 @@ Acceptance evidence:
   are missing or still use documented development values.
 - [ ] Load secrets from a deployment secret manager; never bake them into images,
   frontend bundles, Compose files, logs, or example datasets.
-- [ ] Add automated secret scanning and dependency/container vulnerability
-  scanning to CI.
+- [x] Add automated secret scanning and dependency/container vulnerability
+  scanning to CI. The P0 repository boundary is complete and tracked in
+  `PRODUCTION_READINESS_REVIEW.md`; moderate Cornerstone/VTK advisories remain
+  deferred to a future major viewer upgrade.
 
 ## Identity, Sessions, And Authorization
 
@@ -304,8 +306,11 @@ Useful primary references:
   and rollback procedures for PostgreSQL in `POSTGRES_MIGRATION_RUNBOOK.md`.
 - [x] Remove automatic demo seeding from production startup; development seeding
   remains explicit through `SEED_DEMO_DATA=true`.
-- [ ] Pin and scan runtime images, run containers as non-root, and use read-only
-  filesystems where possible.
+- [~] Pin and scan runtime images, run containers as non-root, and use read-only
+  filesystems where possible. CI now scans backend/frontend images at the
+  high/critical gate, the backend image upgrades vulnerable packaging tools, and
+  the frontend runtime updates nginx/Alpine packages during build; non-root
+  users, read-only filesystems, and digest-pinned base images remain P1 work.
 - [ ] Add operator runbooks for deploy, rollback, degraded storage, database
   outage, queue outage, key compromise, and security incident.
 
@@ -349,7 +354,11 @@ Useful primary references:
     governed privacy-request workflows are implemented and locally verified.
     Target controller/processor records, identity/case tooling, operator
     exercises, and legal approval remain deployment gates.
-13. [ ] Run a production-readiness review and close every applicable gate.
+13. [x] Complete the P0 production-readiness dependency and supply-chain
+    security baseline without inventing target, operator, integration, or legal
+    evidence.
+14. [ ] Add privacy-safe operator runbooks for security incidents, degraded
+    storage/database/Redis, key compromise, deploy, and rollback.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
@@ -362,13 +371,15 @@ Current repository increment complete: external-AI egress denial and approved-
 provider/data-flow governance are evidenced in
 `EXTERNAL_AI_GOVERNANCE_PLAN.md`. Current repository increment complete:
 processing/DPIA evidence and privacy-request governance are evidenced in
-`PRIVACY_OPERATIONS_PLAN.md`. Next repository increment: the Phase 4 production-
-readiness review and explicit remaining-gate inventory.
+`PRIVACY_OPERATIONS_PLAN.md`. Current repository increment complete: the Phase
+4 production-readiness inventory and P0 dependency/supply-chain security
+baseline are evidenced in `PRODUCTION_READINESS_REVIEW.md`.
 
 ## Phase 4 Exit Criteria
 
-- [ ] Production configuration fails closed on missing secrets and unsafe
-  defaults.
+- [x] Production configuration fails closed on development database/secret
+  defaults, missing or reused signing/reference keys, demo seeding, insecure
+  cookies, memory-only rate limits, non-TLS Redis, local storage, and non-KMS S3.
 - [x] PostgreSQL migrations, encrypted disposable backup/restore, and rollback
   are rehearsed. Target managed-backup evidence remains a gate above.
 - [ ] Private encrypted storage and tenant-safe access are implemented.
