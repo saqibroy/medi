@@ -300,6 +300,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
   and remaining deployment gates.
 - `DATA_LIFECYCLE_RECOVERY_PLAN.md` for recovery automation, retention, holds,
   deletion approval, operator boundaries, and remaining deployment evidence.
+- `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md` for the immutable, value-free evidence
+  retained when direct or governed lifecycle deletion removes raw revisions.
 - `EXTERNAL_AI_GOVERNANCE_PLAN.md` for default egress denial, provider and
   dataset-flow approvals, decision evidence, and remaining deployment gates.
 - `PRIVACY_OPERATIONS_PLAN.md` for processing/DPIA evidence, privacy-request

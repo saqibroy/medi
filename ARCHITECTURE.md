@@ -194,6 +194,14 @@ backup expiry. Its signed success audit is committed in the same database
 transaction as the receipt/lifecycle events; failures append a signed error
 audit beside the failed lifecycle event.
 
+Before direct annotation deletion or operator project/scan deletion removes raw
+revision rows, `annotation_history_tombstone_service.py` creates one immutable
+tombstone per annotation. It stores stable organization/project/scan/annotation
+and actor/source IDs, controlled action/field summaries, timestamps, and keyed
+lineage/integrity hashes. It never stores the revision geometry, notes, names,
+pixels, filenames, storage keys, or medical metadata that deletion is meant to
+remove. Frozen dataset releases retain their existing minimized lineage.
+
 The normal S3 runtime role still cannot delete object versions. The operator
 must use separately approved credentials, and target backup-vault/Object Lock,
 organization-wide deletion, policy approval, and signed drills remain Phase 4

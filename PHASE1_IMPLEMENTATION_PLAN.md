@@ -392,8 +392,8 @@ CI verification:
   medical-image intake, sensitive reads, signed URLs, exports, administration,
   annotations, reviews, masks, and deletions. Events use allowlisted fields,
   keyed integrity hashes, admin-only reads, and ORM/database mutation guards.
-  WORM export, retention approval, safe network context, and annotation-history
-  tombstoning remain Phase 4 gates.
+  WORM export, retention approval, and safe network context remain Phase 4
+  gates. Deleted annotation history now leaves a value-free immutable tombstone.
 - Production S3 infrastructure now has deployable KMS encryption, versioning,
   public-access blocking, TLS/KMS deny policies, least-privilege runtime access,
   data-class lifecycle tagging, a read-only verifier, CI linting, and backup/
@@ -503,5 +503,9 @@ CI verification:
     `no-new-privileges`, restricted `/tmp`, and only the backend development
     storage volume writable. Runtime CI proves denial and required write paths;
     target controls remain in `CONTAINER_HARDENING_PLAN.md`.
-13. Next: close the object-route authorization test matrix before implementing
-    retained annotation-history tombstones.
+13. Completed repository boundary: close the fail-closed 88-route object-
+    authorization matrix across paths, collections, queries, and body refs.
+14. Completed repository boundary: replace annotation-history cascade loss
+    with value-free immutable tombstones for direct and lifecycle deletion.
+15. Next: design retained private dataset-release/export artifacts with
+    immutable checksums and explicit lifecycle semantics.

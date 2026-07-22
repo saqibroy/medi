@@ -2,8 +2,9 @@
 
 Status: active on 2026-07-16; P0 supply-chain remediation and the repository
 operator-runbook package, repository session controls, database-runtime
-controls, application-container hardening, and the object-authorization matrix
-completed on 2026-07-22. The remaining Phase 4 gates are classified below.
+controls, application-container hardening, the object-authorization matrix,
+and annotation-history tombstones completed on 2026-07-22. The remaining Phase
+4 gates are classified below.
 
 This review prevents two unsafe shortcuts: treating unfinished engineering as
 somebody else's approval problem, or inventing legal/deployment evidence that
@@ -39,8 +40,8 @@ contract, or approver supplies verifiable evidence.
 | Shared rate limits | Authenticated, encrypted, highly available Redis with failover/alert evidence | Deployment | Application fail-closed Redis enforcement exists; target service evidence remains. |
 | Audit context | Trusted-proxy-derived network context and an approved privacy retention rule | Organization + repository | Raw IP/user-agent storage remains intentionally absent until both policies exist. |
 | Independent audit retention | Append-only/WORM export, integrity monitoring, retention, and alerting | Integration + deployment | Database immutability exists; independent retention still requires a target sink and operator. |
-| Annotation history | Replace cascade removal with retained tombstones or references | Repository | P1 repository task before claiming annotation-history immutability. |
-| Private objects | Retained private export artifacts and deleted-data tombstones | Repository + deployment | Original/preview/mask storage is tenant-scoped; retained export/tombstone semantics and target S3 evidence remain. |
+| Annotation history | Approved retention period and independent WORM evidence | Organization + integration + deployment | **Repository tombstone complete:** direct and lifecycle deletion retain immutable value-free scope/count/summary/hash evidence while raw geometry and notes are deleted. |
+| Private objects | Retained private export artifacts and any object-level deletion tombstones | Repository + deployment | Original/preview/mask storage is tenant-scoped and database history tombstones are complete; retained export artifact semantics and target S3 evidence remain. |
 | Recovery | Automated managed backups, separate credentials, failure alerts, and signed target drills | Deployment + organization | CI restore drills are evidence of repository behavior, not evidence of target backup operations. |
 | Deletion | Organization-wide execution plus queue/cache/export/backup enumeration | Repository + deployment | Project/scan deletion and receipts exist; organization scope and target-service propagation remain. |
 | Privacy operations | Approved roles/lawful bases, Article 9 conditions, ROPA, DPIA, contracts/transfers, identity/case tooling, secure delivery, and rights exercises | Organization + integration + deployment | Medi stores controlled references and workflows only. Actual approvals, identity proof, correspondence, and delivered data remain outside the repository. |
@@ -70,10 +71,11 @@ contract, or approver supplies verifiable evidence.
    paths.
 6. **P1 complete:** close the 88-route object-authorization matrix, including
    every parameterized path plus collection, query, and body references.
-7. **P1 next:** replace annotation-history cascade deletion with retained
-   tombstones or durable references.
-8. **P2:** address organization deletion, retained export artifacts, quotas,
-   and model-output lineage when their prerequisite product policies exist.
+7. **P1 complete:** replace annotation-history cascade loss with immutable,
+   value-free tombstones for direct and lifecycle deletion.
+8. **P2 next:** design retained private dataset-release/export artifacts, then
+   address organization deletion, quotas, and model-output lineage when their
+   prerequisite product policies exist.
 
 ## What The Deployment Owner Must Eventually Do
 
@@ -97,7 +99,7 @@ or pseudonymized data is enabled, the deployment owner must:
 
 - Current Compose database, Redis, backend, and frontend are healthy; backend
   readiness reports the database reachable, the frontend returns HTTP 200, and
-  PostgreSQL is at `20260722_0014`.
+  PostgreSQL is at `20260722_0015`.
 - The initial repository-history secret scan covered 33 commits with no leak
   finding.
 - The initial Python audit found known advisories in the old FastAPI/Starlette,
@@ -161,6 +163,15 @@ or pseudonymized data is enabled, the deployment owner must:
   membership within one organization remains a separate policy decision. The
   rebuilt Compose stack is healthy; live/readiness, frontend HTTP `200`, and
   container-hardening verification pass.
+- Annotation-history tombstone completion evidence on 2026-07-22: direct and
+  approved lifecycle deletion retain only stable scope/actor/source IDs,
+  controlled counts and field/action summaries, timestamps, and keyed hashes.
+  Raw geometry and notes are removed, frozen release manifests remain stable,
+  and ORM plus PostgreSQL/SQLite triggers reject tombstone mutation. All 153
+  backend tests, the frontend build, repository checks, and the PostgreSQL
+  upgrade/downgrade/upgrade rehearsal through `20260722_0015` pass. The rebuilt
+  Compose stack is healthy at that migration head; live/readiness, frontend
+  HTTP `200`, and container-hardening verification pass.
 
 ## Primary References
 

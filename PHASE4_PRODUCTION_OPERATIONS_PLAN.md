@@ -61,8 +61,10 @@ Not production-ready yet:
 - A versioned metadata-screening quarantine gate is enforced, but it does not
   yet provide validated OCR/defacing, UID pseudonymization, or legal proof of
   anonymization.
-- Annotation history is append-oriented but not immutable; cascade deletion can
-  remove it with the annotation.
+- Raw annotation history remains policy-deletable because it can contain
+  geometry or notes. Before any annotation, scan, or project deletion, Medi now
+  creates an immutable value-free tombstone with controlled summaries and keyed
+  integrity evidence; see `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`.
 - Dataset releases are immutable and reproducible in the application database;
   target S3 VersionId evidence, retained portable artifacts, and independent
   WORM replication remain deployment gates.
@@ -176,13 +178,15 @@ Acceptance evidence:
   read-only routing, ORM guards, and PostgreSQL/SQLite triggers.
 - [ ] Export audit events to append-only/WORM-capable storage with integrity
   verification and an approved retention period.
-- [ ] Replace annotation-history cascade deletion with a tombstone or retained
-  audit reference before claiming immutability.
+- [x] Replace raw annotation-history cascade loss with an immutable,
+  data-minimized tombstone before direct annotation or approved lifecycle
+  deletion. Raw geometry/notes still follow deletion policy; only stable IDs,
+  controlled summaries, timestamps, and keyed hashes remain.
 - [x] Add tests proving normal administrators cannot alter audit history.
 
 Implementation and verification evidence is recorded in
-`SECURITY_AUDIT_PLAN.md`. WORM export, retention approval, safe network context,
-and annotation-history tombstoning remain open production gates.
+`SECURITY_AUDIT_PLAN.md`. WORM export, retention approval, and safe network
+context remain open production gates.
 
 ## Dataset And Annotation Versioning
 
@@ -224,8 +228,10 @@ objects, so the combined gate remains open.
   quarantined objects, and deleted-data tombstones.
 
 Lifecycle tags/rules now cover originals, masks, metadata, previews, exports,
-and quarantine. Deleted-data tombstones remain open until the deletion data
-model is implemented. Target-account deployment evidence is still required.
+and quarantine. Database annotation-history tombstones are implemented and do
+not contain object data; retained private export artifacts and any future
+object-level tombstone class still require explicit lifecycle rules. Target-
+account deployment evidence is still required.
 
 ## Backup, Restore, Retention, And Deletion
 
@@ -395,7 +401,11 @@ Useful primary references:
     and body references. Annotation project/label/assignee IDs now return opaque
     cross-tenant `404` responses, and updates cannot reparent annotations away
     from their scan. Same-organization project membership remains undecided.
-19. [ ] Implement retained annotation-history tombstones or durable references.
+19. [x] Implement immutable, value-free annotation-history tombstones for
+    direct annotation deletion and approved project/scan lifecycle deletion,
+    include counts in deletion evidence, and verify release stability.
+20. [ ] Design retained private dataset-release/export artifacts with immutable
+    checksums and explicit storage lifecycle semantics.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.

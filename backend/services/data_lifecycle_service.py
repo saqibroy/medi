@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from ..models import (
     Annotation,
     AnnotationHistory,
+    AnnotationHistoryTombstone,
     DataDeletionEvent,
     DataDeletionReceipt,
     DataDeletionRequest,
@@ -31,6 +32,7 @@ from ..models import (
     User,
 )
 from .audit_service import calculate_integrity_hash
+from .annotation_history_tombstone_service import retain_annotation_history_tombstones
 from .dataset_release_service import release_status, sha256_json
 from .storage_service import StoragePurgeResult, get_private_storage
 
@@ -285,6 +287,11 @@ def inventory_scope(db: Session, organization_id: UUID, scope_type: str, scope_i
         if annotation_ids
         else 0
     )
+    tombstone_count = (
+        db.scalar(select(func.count()).select_from(AnnotationHistoryTombstone).where(AnnotationHistoryTombstone.scan_id.in_(scan_ids))) or 0
+        if scan_ids
+        else 0
+    )
     mask_count = (
         db.scalar(select(func.count()).select_from(SegmentationMask).where(SegmentationMask.annotation_id.in_(annotation_ids))) or 0
         if annotation_ids
@@ -302,6 +309,7 @@ def inventory_scope(db: Session, organization_id: UUID, scope_type: str, scope_i
         "labels": label_count,
         "annotations": len(annotation_ids),
         "annotation_history": history_count,
+        "annotation_history_tombstones": tombstone_count,
         "segmentation_masks": mask_count,
         "dataset_releases": release_count,
         "object_references": original_references + mask_count,
@@ -605,6 +613,15 @@ def execute_deletion_request(
     try:
         purge = _purge_storage(request, project.id)
         revoked_releases = _revoke_releases(db, request, project.id, operator.id)
+        annotations = list(
+            db.scalars(select(Annotation).where(Annotation.scan_id.in_([scan.id for scan in scans])))
+        )
+        retained_tombstones = retain_annotation_history_tombstones(
+            db,
+            annotations,
+            deleted_by_user_id=operator.id,
+            deletion_source="data_lifecycle",
+        )
         if request.scope_type == "scan":
             db.delete(scans[0])
         else:
@@ -625,6 +642,9 @@ def execute_deletion_request(
             "labels": live_inventory["labels"],
             "annotations": live_inventory["annotations"],
             "annotation_history": live_inventory["annotation_history"],
+            "annotation_history_tombstones_retained": (
+                live_inventory["annotation_history_tombstones"] + len(retained_tombstones)
+            ),
             "segmentation_masks": live_inventory["segmentation_masks"],
         }
         receipt_material = {

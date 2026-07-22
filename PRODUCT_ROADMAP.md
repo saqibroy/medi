@@ -268,5 +268,11 @@ Definition of done:
     tenant-scoped; and annotations cannot be reparented away from their scan.
     Same-organization project membership remains a separate product decision.
     Evidence is in `OBJECT_AUTHORIZATION_PLAN.md`.
-14. Next: replace annotation-history cascade deletion with retained tombstones
-    or durable references before describing annotation history as immutable.
+14. Completed repository boundary: direct annotation deletion and approved
+    project/scan lifecycle deletion now replace raw revision history with an
+    immutable, value-free tombstone. Stable scope/source identifiers, controlled
+    summaries, timestamps, and keyed integrity hashes remain; geometry, notes,
+    names, pixels, filenames, storage keys, and metadata do not. Evidence is in
+    `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`.
+15. Next: design retained private dataset-release/export artifacts with
+    immutable checksums and explicit lifecycle semantics.

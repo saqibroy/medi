@@ -11,7 +11,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import DatabaseError
 
-from backend.models import DataRetentionPolicy, Organization, SecurityAuditEvent, User
+from backend.models import AnnotationHistory, AnnotationHistoryTombstone, DataRetentionPolicy, Organization, SecurityAuditEvent, User
 from backend.security import hash_password
 from backend.services import data_lifecycle_service
 from backend.services.audit_service import verify_integrity
@@ -202,6 +202,12 @@ async def test_deletion_requires_policy_hold_clearance_separate_approval_and_ope
             json=_policy_payload(0, "POLICY-EXECUTION-000"),
             headers=auth_headers(admin_token),
         )
+        annotation = (await client.get("/annotations", headers=auth_headers(admin_token))).json()[0]
+        history_update = await client.put(
+            f"/annotations/{annotation['id']}",
+            json={"notes": "Synthetic lifecycle detail must be removed"},
+            headers=auth_headers(admin_token),
+        )
         release = await client.post(f"/projects/{project_id}/releases", headers=auth_headers(admin_token))
         hold = await client.post(
             "/governance/legal-holds",
@@ -245,6 +251,7 @@ async def test_deletion_requires_policy_hold_clearance_separate_approval_and_ope
         assert "retention" in retention_blocked.json()["detail"]
         assert cancelled_retained.json()["status"] == "cancelled"
         assert policy.status_code == 201
+        assert history_update.status_code == 200
         assert release.status_code == 201
         assert requested.status_code == 201
         assert requested.json()["inventory"]["scans"] == 3
@@ -284,6 +291,19 @@ async def test_deletion_requires_policy_hold_clearance_separate_approval_and_ope
             receipt_id = receipt.id
             receipt_hash = receipt.receipt_sha256
             assert verify_deletion_receipt(receipt)
+            retained_tombstone = db.scalar(
+                select(AnnotationHistoryTombstone).where(
+                    AnnotationHistoryTombstone.annotation_id == UUID(annotation["id"])
+                )
+            )
+            assert retained_tombstone is not None
+            assert retained_tombstone.deletion_source == "data_lifecycle"
+            assert retained_tombstone.history_entry_count == 1
+            assert retained_tombstone.action_counts == {"updated": 1}
+            assert receipt.deleted_counts["annotation_history_tombstones_retained"] == 1
+            assert db.scalar(
+                select(AnnotationHistory).where(AnnotationHistory.annotation_id == UUID(annotation["id"]))
+            ) is None
             operator_audit = db.scalar(
                 select(SecurityAuditEvent).where(
                     SecurityAuditEvent.action == "deletion_request.execute",
@@ -311,7 +331,15 @@ async def test_deletion_requires_policy_hold_clearance_separate_approval_and_ope
         assert loaded.json()["receipt"]["revoked_releases"] == 1
         assert loaded.json()["receipt"]["object_versions_deleted"] == 2
         serialized = json.dumps(loaded.json())
-        for private_value in ("Brain MRI", "test.nii.gz", "synthetic source", "synthetic mask", "storage_key", "file_path"):
+        for private_value in (
+            "Brain MRI",
+            "test.nii.gz",
+            "synthetic source",
+            "synthetic mask",
+            "Synthetic lifecycle detail must be removed",
+            "storage_key",
+            "file_path",
+        ):
             assert private_value not in serialized
 
 
