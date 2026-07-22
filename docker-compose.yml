@@ -68,14 +68,22 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    user: "10001:10001"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 10s
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
     volumes:
-      - scan_storage:/app/backend/data/sample_scan
+      - scan_storage:/app/backend/data/sample_scan:rw
     ports:
       - "8000:8000"
 
@@ -87,14 +95,22 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    user: "101:101"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 5s
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
     ports:
-      - "8080:80"
+      - "8080:8080"
 
 volumes:
   postgres_data:

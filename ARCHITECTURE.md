@@ -10,6 +10,9 @@ private-storage boundary. Real DICOM/NIfTI parsing, KMS-encrypted S3
 writes, signed derived previews, a versioned quarantine gate, and a dedicated
 append-only security-event ledger are implemented. Immutable dataset releases
 also freeze approved training-data inputs and their deterministic evidence.
+The application images run with numeric non-root identities, read-only root
+filesystems, no Linux capabilities or privilege escalation, and explicit
+temporary/persistent writable paths verified in CI.
 Independent WORM export, retention approval, and broader compliance operations
 remain explicit Phase 4 gates.
 
@@ -34,6 +37,22 @@ The production architecture must enforce these boundaries:
 
 The detailed implementation and release evidence are tracked in
 `PHASE4_PRODUCTION_OPERATIONS_PLAN.md`.
+
+## Application Container Boundary
+
+Compose fixes the backend at UID/GID `10001:10001` and Nginx at `101:101`.
+Both application roots are read-only, all Linux capabilities are dropped, and
+`no-new-privileges` is enabled. Nginx listens on unprivileged port `8080` and
+keeps its PID and request/proxy temporary state in a 16 MiB `/tmp` tmpfs. The
+backend receives a 64 MiB `/tmp` tmpfs for imaging preview work and runtime
+caches plus the only persistent writable application mount: the development
+`scan_storage` volume. Temporary mounts are `nodev`, `nosuid`, and `noexec`.
+
+The runtime verifier rejects unexpected writable mounts and proves both denied
+root-path writes and required temporary/storage writes. This Compose evidence
+does not replace target admission policy, workload identity, network policy,
+resource limits, immutable digests, or managed private storage. See
+`CONTAINER_HARDENING_PLAN.md`.
 
 ## Component Diagram
 

@@ -80,6 +80,20 @@ migrations, seeds synthetic demo users, and stores uploaded scan files in the
 `scan_storage` Docker volume. Copy `.env.example` to a local ignored `.env` if
 you need to override its local settings.
 
+The backend and frontend images run as fixed non-root users with read-only root
+filesystems, all Linux capabilities dropped, and privilege escalation disabled.
+Only bounded `/tmp` tmpfs mounts and the backend's development `scan_storage`
+volume are writable. Verify the running boundary with:
+
+```bash
+python3 scripts/verify_container_hardening.py
+```
+
+Existing local volumes created by an older root-running backend may require the
+reviewed one-time ownership procedure in
+[CONTAINER_HARDENING_PLAN.md](CONTAINER_HARDENING_PLAN.md). Do not infer a
+production volume migration from that development command.
+
 For production, set `APP_ENV=production`, a non-development `DATABASE_URL`,
 reviewed `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`,
 `DATABASE_POOL_TIMEOUT_SECONDS`, `DATABASE_STATEMENT_TIMEOUT_MS`, and

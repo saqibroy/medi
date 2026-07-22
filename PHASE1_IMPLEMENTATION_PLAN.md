@@ -495,5 +495,10 @@ CI verification:
     acquisition/statement timeouts, and privacy-safe slow-query signals. Target
     capacity, alert routing, threshold approval, and exercises remain in
     `DATABASE_RUNTIME_PLAN.md`.
-12. Next: run backend/frontend containers as non-root and use read-only
-    filesystems except for explicitly verified writable mounts.
+12. Completed repository boundary: run backend/frontend containers with fixed
+    non-root UIDs, read-only roots, all capabilities dropped,
+    `no-new-privileges`, restricted `/tmp`, and only the backend development
+    storage volume writable. Runtime CI proves denial and required write paths;
+    target controls remain in `CONTAINER_HARDENING_PLAN.md`.
+13. Next: close the object-route authorization test matrix before implementing
+    retained annotation-history tombstones.
