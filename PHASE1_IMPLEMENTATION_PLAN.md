@@ -437,6 +437,11 @@ CI verification:
   application and KMS key compromise, deployment, and rollback. Target-owned
   contacts, provider commands, thresholds, legal decisions, and exercises stay
   explicit deployment gates; CI validates the runbook package structure.
+- Session controls now enforce sliding idle expiry alongside absolute expiry,
+  require an explicit production idle duration, and provide audited,
+  organization-scoped administrator inventory/revocation. Only user identity
+  and bounded session timestamps leave the API; credentials, digests, IP
+  addresses, and user agents remain excluded.
 
 ## Next Engineering Priorities
 
@@ -477,5 +482,9 @@ CI verification:
    security incidents, degraded services, key compromise, deploy, and rollback.
    Target contacts, legal notification decisions, provider-specific commands,
    thresholds, and exercises remain deployment inputs.
-10. Next: add session idle expiry and administrator-visible active-session
-    inventory/revocation without storing raw session credentials.
+10. Completed repository boundary: add session idle expiry and administrator-
+    visible active-session inventory/revocation without storing or returning raw
+    session credentials or network context. Target idle-duration approval and
+    any organization-wide bulk policy remain deployment inputs.
+11. Next: add bounded database pools, acquisition/statement timeouts, and
+    privacy-safe slow-query signals.

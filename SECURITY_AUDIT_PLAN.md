@@ -19,6 +19,9 @@ second store of patient data, credentials, or clinical free text.
   decisions, sensitive pixel/mask reads, signed-URL issuance, exports, project
   and label administration, annotation changes/reviews/deletions, and mask
   changes/deletions.
+- [x] Record administrator active-session listing and forced revocation using
+  organization/session IDs only; never copy user email, token digest, activity
+  metadata, network context, or credentials into audit details.
 - [x] Record retention-policy, legal-hold, deletion-request approval/cancellation,
   and successful operator execution using only stable IDs and controlled scalar
   details; governance payloads, inventories, and receipts do not enter audit

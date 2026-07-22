@@ -49,10 +49,11 @@ Not production-ready yet:
 
 - Development Compose intentionally seeds synthetic demo data; production
   deployment must set `SEED_DEMO_DATA=false` and now fails startup if it does not.
-- Database-backed sessions have absolute expiry and logout revocation. Browser
-  credentials use HttpOnly, SameSite cookies plus signed CSRF protection, and
-  production configuration requires Secure host-only cookies. Real-ingress TLS
-  evidence, active-session inventory, and idle timeout remain absent.
+- Database-backed sessions have absolute and sliding idle expiry plus logout and
+  administrator revocation. Browser credentials use HttpOnly, SameSite cookies
+  plus signed CSRF protection, and production configuration requires Secure
+  host-only cookies and an explicit idle duration. Real-ingress TLS, approved
+  target duration, and any bulk organization-revocation policy remain gates.
 - Production configuration now requires an explicit token secret and exact CORS
   origins; local-only defaults remain available only for development.
 - Production code supports private KMS-encrypted S3 storage, but target-account
@@ -130,8 +131,10 @@ Acceptance evidence:
 - [x] Use `Secure`, `HttpOnly`, `SameSite` cookies for browser sessions with
   signed, session-bound double-submit CSRF protection. Production ingress
   verification remains tracked in `SESSION_AND_RATE_LIMIT_PLAN.md`.
-- [ ] Add idle timeout and active-session inventory. Logout revocation,
-  inactive-user enforcement, and absolute expiry are implemented.
+- [x] Add sliding idle timeout plus organization-scoped administrator active-
+  session inventory/revocation. The response contains user identity and bounded
+  timestamps but no token/digest, cookie, IP, or user-agent data. Target idle-
+  duration approval and any organization-wide bulk policy remain external.
 - [x] Configure exact allowed origins from environment variables.
 - [ ] Preserve deny-by-default roles and add project-level membership if users
   must not see every project in their organization.
@@ -331,8 +334,9 @@ Useful primary references:
    tracking remains a separate controlled integration.
 5. [x] Add database-backed expiring sessions, logout revocation, exact CORS,
    HttpOnly/SameSite browser cookies, signed CSRF protection, and shared Redis
-   rate limits for login, upload, reprocessing, and exports. Target TLS/managed
-   Redis evidence, idle timeout, and active-session inventory remain gates.
+   rate limits for login, upload, reprocessing, and exports. Sliding idle expiry
+   and administrator inventory/revocation are now implemented; target TLS,
+   managed Redis, idle-duration approval, and any bulk policy remain gates.
 6. [x] Implement the storage abstraction and private S3 backend with
    tenant-scoped keys, traversal-safe local storage, KMS-encrypted writes,
    original/preview/reprocess/mask integration, and authorized short-lived
@@ -366,8 +370,11 @@ Useful primary references:
     storage/database/Redis, key compromise, deploy, and rollback, plus a CI
     structure/link verifier. Target contacts, commands, thresholds, legal
     decisions, and exercises remain deployment gates.
-15. [ ] Add session idle expiry and administrator-visible active-session
-    inventory/revocation without exposing raw session credentials.
+15. [x] Add session idle expiry and administrator-visible, organization-scoped
+    active-session inventory/revocation without exposing raw session
+    credentials, digests, cookies, IP addresses, or user agents.
+16. [ ] Add bounded database connection pools, acquisition/statement timeouts,
+    and privacy-safe slow-query visibility.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
@@ -386,6 +393,9 @@ baseline are evidenced in `PRODUCTION_READINESS_REVIEW.md`.
 Current repository increment complete: the incident, degraded-service,
 key-compromise, deployment, and rollback package is indexed in
 `OPERATOR_RUNBOOKS.md` and structurally verified in CI.
+Current repository increment complete: sliding session idle expiry and audited
+administrator inventory/revocation are evidenced in
+`SESSION_AND_RATE_LIMIT_PLAN.md`.
 
 ## Phase 4 Exit Criteria
 

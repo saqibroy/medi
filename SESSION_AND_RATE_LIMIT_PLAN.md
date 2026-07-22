@@ -24,6 +24,10 @@ been verified until target-environment evidence exists.
   policy is explicitly configured.
 - [x] Require encrypted Redis transport for production connections outside a
   private same-host boundary.
+- [x] Enforce sliding idle expiry without extending the absolute session limit;
+  require an explicit production idle duration.
+- [x] Expose organization-scoped active-session inventory and revocation only
+  to administrators, with no token, network-address, or user-agent data.
 
 ## Implementation
 
@@ -33,21 +37,27 @@ been verified until target-environment evidence exists.
 - [x] Add Redis to the local production-like Compose stack.
 - [x] Convert the frontend to credentialed cookies and in-memory CSRF state.
 - [x] Add backend and frontend regression coverage.
+- [x] Add last-activity migration, idle enforcement, administrator inventory/
+  revocation APIs, audit events, and an admin UI panel.
 
 ## Verification Evidence
 
-- [x] All 102 backend tests pass.
+- [x] All 136 backend tests pass, including idle-expiry, tenant isolation,
+  administrator authorization, credential minimization, revocation, and audit
+  coverage.
 - [x] Frontend production build passes and contains no `medi_token` storage.
-- [x] PostgreSQL migration upgrade/downgrade rehearsal passes at
-  `20260716_0009`.
+- [x] PostgreSQL migration upgrade/downgrade/upgrade rehearsal passes at
+  `20260722_0014`.
 - [x] Infrastructure templates/configuration lint successfully.
 - [x] Rebuilt Compose services are healthy, use Redis, and pass live cookie,
-  CSRF-rejection, logout-revocation, and rate-limit smoke tests.
+  CSRF-rejection, logout-revocation, rate-limit, administrator session-list,
+  role-denial, and revoked-session rejection smoke tests.
 
 ## Remaining Deployment Gates
 
 - [ ] Terminate TLS and verify production `Secure` cookies at the real ingress.
 - [ ] Provision authenticated, encrypted, highly available managed Redis and
   exercise outage alerts/failover.
-- [ ] Approve trusted-proxy address handling, session idle timeout, active
-  session inventory, and forced organization-wide revocation policy.
+- [ ] Approve trusted-proxy address handling, the target production idle
+  duration, and forced organization-wide revocation policy. The repository
+  implements per-session inventory/revocation but does not invent a bulk policy.

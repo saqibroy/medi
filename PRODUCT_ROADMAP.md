@@ -245,6 +245,10 @@ Definition of done:
    rollback. `OPERATOR_RUNBOOKS.md` separates executable repository guidance
    from target-owned contacts, commands, thresholds, exercises, and legal
    decisions; CI verifies required coverage and local links.
-10. Next: add session idle expiry plus administrator-visible active-session
-    inventory and revocation, retaining only keyed token digests and safe
-    operational metadata.
+10. Completed repository boundary: sessions now enforce a configurable sliding
+    idle limit beneath absolute expiry, production requires an explicit idle
+    duration, and organization administrators can list/revoke active sessions
+    through audited API/UI controls. Inventory exposes user identity and bounded
+    timestamps but no token digest, IP address, user agent, cookie, or secret.
+11. Next: add bounded database connection pools, acquisition/statement
+    timeouts, and privacy-safe slow-query visibility.
