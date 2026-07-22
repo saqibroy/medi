@@ -1,7 +1,8 @@
 # Production Readiness Review
 
-Status: active on 2026-07-16; P0 supply-chain remediation completed on
-2026-07-22. The remaining Phase 4 gates are classified below.
+Status: active on 2026-07-16; P0 supply-chain remediation and the repository
+operator-runbook package completed on 2026-07-22. The remaining Phase 4 gates
+are classified below.
 
 This review prevents two unsafe shortcuts: treating unfinished engineering as
 somebody else's approval problem, or inventing legal/deployment evidence that
@@ -42,23 +43,25 @@ contract, or approver supplies verifiable evidence.
 | Recovery | Automated managed backups, separate credentials, failure alerts, and signed target drills | Deployment + organization | CI restore drills are evidence of repository behavior, not evidence of target backup operations. |
 | Deletion | Organization-wide execution plus queue/cache/export/backup enumeration | Repository + deployment | Project/scan deletion and receipts exist; organization scope and target-service propagation remain. |
 | Privacy operations | Approved roles/lawful bases, Article 9 conditions, ROPA, DPIA, contracts/transfers, identity/case tooling, secure delivery, and rights exercises | Organization + integration + deployment | Medi stores controlled references and workflows only. Actual approvals, identity proof, correspondence, and delivered data remain outside the repository. |
-| Incident response | Breach assessment, notification ownership, evidence preservation, and service-specific response runbooks | Organization + repository | P0/P1 runbook work can define safe mechanics; named people, legal deadlines, and escalation contacts require target approval. |
+| Incident response | Breach assessment, notification ownership, evidence preservation, and target exercises | Organization + repository | **Repository complete:** `SECURITY_INCIDENT_RUNBOOK.md` defines safe mechanics and legal handoff. Named people, legal decisions, severity/contact rules, and signed target exercises still require approval. |
 | External AI | Local/private inference preference and proxy/firewall/DNS enforcement | Deployment + integration | Default application egress is denied. No provider or patient-data flow may be inferred from a feature flag. |
 | Model outputs | Version outputs and distinguish them from human annotations | Repository | Deferred until an approved inference path exists; the schema must precede actual model output ingestion. |
 | Reliability | Deployment probes/alerts and privacy-safe error tracking | Deployment + integration + repository | Local/Compose health and safe request logs exist; target alert and error-provider evidence remains. |
 | Capacity | Per-user/per-organization quotas | Organization + repository | Implement after tier, service-account, and trusted identity rules are approved. |
 | Database runtime | Pool bounds, acquisition timeout, statement timeout, and slow-query visibility | Repository + deployment | P1 repository task; target sizing and alert thresholds remain deployment evidence. |
 | Containers | Pinned/scanned images, non-root users, and read-only filesystems where feasible | Repository | Scanning begins in P0; user/filesystem hardening is a separate P1 change requiring writable-path tests. |
-| Operations | Deploy, rollback, degraded storage, database/Redis outage, key compromise, and security-incident runbooks | Repository + organization | P1 repository package; real contacts and service commands must be supplied for the target. |
+| Operations | Deploy, rollback, degraded storage, database/Redis outage, key compromise, and security-incident runbooks | Repository + organization | **Repository complete:** `OPERATOR_RUNBOOKS.md` indexes the CI-verified package. Real contacts, provider commands, thresholds, and exercise evidence must be supplied for the target. |
 
 ## Prioritized Repository Backlog
 
 1. **P0 complete:** upgrade vulnerable backend/frontend dependencies, preserve
    behavior through the test/build suite, add secret/dependency/container scans
    to CI, and pin GitHub Actions to immutable commits.
-2. **P0/P1 next:** add the privacy-safe security-incident and degraded-service
-   operator runbooks without inventing target contacts or legal decisions.
-3. **P1:** add session idle expiry plus active-session inventory and revocation.
+2. **P0/P1 complete:** add privacy-safe incident, degraded-service,
+   key-compromise, deployment, and rollback runbooks without inventing target
+   contacts, provider commands, thresholds, or legal decisions.
+3. **P1 next:** add session idle expiry plus active-session inventory and
+   revocation.
 4. **P1:** add bounded database pools, acquisition/statement timeouts, and
    privacy-safe slow-query signals.
 5. **P1:** run application containers as non-root and make filesystems read-only
@@ -106,6 +109,12 @@ or pseudonymized data is enabled, the deployment owner must:
   requiring a major viewer upgrade; Gitleaks scanned 33 commits with no leaks;
   Trivy found zero high/critical vulnerabilities in the rebuilt backend and
   frontend images.
+- Operator-runbook completion evidence on 2026-07-22: five documents define a
+  target worksheet, safe evidence boundary, incident/privacy handoff,
+  PostgreSQL/Redis/storage degradation, key-specific rotation limitations,
+  immutable deployment/rollback procedure, and synthetic exercises. The CI
+  verifier confirms required sections and local Markdown links; target drills
+  and approvals remain external evidence.
 
 ## Primary References
 

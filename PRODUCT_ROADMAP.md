@@ -240,6 +240,11 @@ Definition of done:
    secret, dependency, and container scans. Remaining moderate Cornerstone/VTK
    advisories require a future major viewer upgrade; target, operator,
    integration, and legal evidence remains explicitly separate.
-9. Next: add privacy-safe operator runbooks for security incidents, degraded
-   storage/database/Redis, key compromise, deploy, and rollback without
-   inventing target contacts or legal decisions.
+9. Completed repository boundary: privacy-safe runbooks now cover security
+   incidents, degraded storage/database/Redis, key compromise, deployment, and
+   rollback. `OPERATOR_RUNBOOKS.md` separates executable repository guidance
+   from target-owned contacts, commands, thresholds, exercises, and legal
+   decisions; CI verifies required coverage and local links.
+10. Next: add session idle expiry plus administrator-visible active-session
+    inventory and revocation, retaining only keyed token digests and safe
+    operational metadata.

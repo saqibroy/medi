@@ -176,6 +176,22 @@ Run `bash scripts/verify_backup_restore_drill.sh` for the encrypted disposable
 PostgreSQL plus synthetic private-object restore proof. It does not replace a
 signed target backup-vault drill.
 
+## Production Operator Runbooks
+
+Start with [OPERATOR_RUNBOOKS.md](OPERATOR_RUNBOOKS.md) for the target worksheet,
+privacy-safe evidence rules, health-check boundaries, and links to the security
+incident, degraded-service, key-compromise, deployment/rollback, PostgreSQL,
+and private-storage procedures. The repository validates that package with:
+
+```bash
+.venv/bin/python scripts/verify_operator_runbooks.py
+```
+
+The documents deliberately contain target-owned placeholders instead of
+invented contacts, provider commands, thresholds, or legal decisions. Complete
+and exercise those target inputs before processing identifiable or
+pseudonymized patient data.
+
 ## External AI Boundary
 
 External AI is disabled and has no provider-call implementation by default:
@@ -204,6 +220,7 @@ Use these before pushing production-minded changes:
 ```bash
 .venv/bin/python -m compileall backend
 .venv/bin/python scripts/verify_external_ai_egress.py
+.venv/bin/python scripts/verify_operator_runbooks.py
 .venv/bin/python -m pip_audit -r backend/requirements.txt
 PYTHON_BIN=.venv/bin/python bash scripts/verify_supply_chain.sh
 .venv/bin/python -m pytest backend/tests
@@ -227,6 +244,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
 - `PHASE3_FRONTEND_QA_CHECKLIST.md` for the browser QA pass before Phase 3 exit.
 - `PHASE4_PRODUCTION_OPERATIONS_PLAN.md` for production, medical-data security,
   privacy, backup, audit, versioning, and external-AI release gates.
+- `OPERATOR_RUNBOOKS.md` for security incidents, degraded services, key
+  compromise, deployment, rollback, and target-owned operational inputs.
 - `DATASET_RELEASE_PLAN.md` for immutable release boundaries, verified evidence,
   and remaining deployment gates.
 - `DATA_LIFECYCLE_RECOVERY_PLAN.md` for recovery automation, retention, holds,

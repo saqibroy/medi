@@ -432,6 +432,11 @@ CI verification:
   scan repository history for secrets, scan backend/frontend runtime images,
   pin GitHub Actions by immutable commit, and configure Dependabot. Remaining
   moderate Cornerstone/VTK advisories require a future major viewer upgrade.
+- Privacy-safe operator procedures now cover security incidents, personal-data
+  breach assessment handoff, degraded PostgreSQL/Redis/private storage,
+  application and KMS key compromise, deployment, and rollback. Target-owned
+  contacts, provider commands, thresholds, legal decisions, and exercises stay
+  explicit deployment gates; CI validates the runbook package structure.
 
 ## Next Engineering Priorities
 
@@ -468,7 +473,9 @@ CI verification:
    and legal evidence in `PRODUCTION_READINESS_REVIEW.md`. Dependency
    remediation and automated secret/dependency/container scanning are
    implemented for the high/critical gate.
-9. Next: add privacy-safe operator runbooks for security incidents, degraded
-   services, key compromise, deploy, and rollback. Target contacts, legal
-   notification decisions, and provider-specific commands remain deployment
-   inputs.
+9. Completed repository boundary: add privacy-safe operator runbooks for
+   security incidents, degraded services, key compromise, deploy, and rollback.
+   Target contacts, legal notification decisions, provider-specific commands,
+   thresholds, and exercises remain deployment inputs.
+10. Next: add session idle expiry and administrator-visible active-session
+    inventory/revocation without storing raw session credentials.
