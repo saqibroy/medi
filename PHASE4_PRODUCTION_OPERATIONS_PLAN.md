@@ -142,8 +142,10 @@ Acceptance evidence:
 - [x] Configure exact allowed origins from environment variables.
 - [ ] Preserve deny-by-default roles and add project-level membership if users
   must not see every project in their organization.
-- [ ] Add object-level authorization tests for every scan, mask, export, signed
-  URL, audit, and administrative endpoint.
+- [x] Add a fail-closed policy inventory for all 88 API routes and cross-tenant
+  tests for every parameterized scan, mask, export, signed-URL, audit, session,
+  privacy, external-AI, and administrative path. Collection and request-body
+  references are also tenant-scoped; see `OBJECT_AUTHORIZATION_PLAN.md`.
 - [ ] Plan SSO/MFA for deployments handling sensitive or regulated data.
 
 ## Abuse Protection
@@ -388,8 +390,12 @@ Useful primary references:
     except for explicitly verified writable mounts. Runtime CI proves the
     identity, mount, capability, privilege, health, denied-write, and
     required-write boundaries.
-18. [ ] Close the object-route authorization test matrix before implementing
-    retained annotation-history tombstones.
+18. [x] Close the object-route authorization matrix across all 88 API routes,
+    every parameterized object path, collection responses, query references,
+    and body references. Annotation project/label/assignee IDs now return opaque
+    cross-tenant `404` responses, and updates cannot reparent annotations away
+    from their scan. Same-organization project membership remains undecided.
+19. [ ] Implement retained annotation-history tombstones or durable references.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.

@@ -142,8 +142,10 @@ resource limits, immutable digests, or managed private storage. See
 8. `backend/routers/annotations.py` receives the payload as `AnnotationCreate`.
    Pydantic validates required fields, UUID shape, allowed annotation types, and
    non-negative `slice_index` before service code runs.
-9. `annotation_service.create_annotation()` verifies that the referenced scan
-   exists and that the requested slice is inside the scan volume.
+9. `annotation_service.create_annotation_for_user()` first resolves the scan,
+   project, label, and assignee inside the signed-in organization, then verifies
+   project consistency, geometry, and that the requested slice is inside the
+   scan volume. Updates cannot reparent an annotation away from its scan.
 10. SQLAlchemy creates an `Annotation` ORM object and commits it to PostgreSQL.
 11. The committed row is refreshed so generated fields like `id`, `created_at`,
    and `updated_at` are available.

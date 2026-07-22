@@ -172,6 +172,9 @@ Frontend/manual checks:
 33. [x] Add icon buttons and tooltips for annotation tools.
 34. [x] Add Phase 3 frontend QA checklist.
 35. [x] Execute Phase 3 frontend QA checklist and record evidence.
+36. [x] Add exhaustive object-route authorization coverage and prevent
+    cross-organization project, label, or assignee references from leaking
+    existence or reparenting an annotation away from its scan.
 
 ## Phase 3 Exit Criteria
 

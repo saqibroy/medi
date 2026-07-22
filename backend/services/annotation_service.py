@@ -68,15 +68,6 @@ def _organization_scoped_annotations(current_user: User) -> Select[tuple[Annotat
     )
 
 
-def _annotation_project_id(db: Session, annotation: Annotation) -> UUID | None:
-    """Resolve the project through the annotation first, then its scan."""
-
-    if annotation.project_id is not None:
-        return annotation.project_id
-    scan = db.get(Scan, annotation.scan_id)
-    return scan.project_id if scan is not None else None
-
-
 def _history_value(value: object) -> object:
     """Convert ORM values to JSON-safe audit payloads."""
 
@@ -134,6 +125,50 @@ def _validate_assigned_user(db: Session, assigned_to_user_id: UUID | None, proje
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assigned user does not belong to annotation project")
 
 
+def _validate_references_for_user(
+    db: Session,
+    current_user: User,
+    *,
+    project_id: UUID | None = None,
+    label_id: UUID | None = None,
+    assigned_to_user_id: UUID | None = None,
+) -> None:
+    """Reject missing and cross-organization references with the same opaque 404."""
+
+    if project_id is not None:
+        project = db.scalar(
+            select(Project).where(
+                Project.id == project_id,
+                Project.organization_id == current_user.organization_id,
+                Project.lifecycle_status != "deleted",
+            )
+        )
+        if project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    if label_id is not None:
+        label = db.scalar(
+            select(Label)
+            .join(Project, Label.project_id == Project.id)
+            .where(
+                Label.id == label_id,
+                Project.organization_id == current_user.organization_id,
+                Project.lifecycle_status != "deleted",
+            )
+        )
+        if label is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
+    if assigned_to_user_id is not None:
+        assigned_user = db.scalar(
+            select(User).where(
+                User.id == assigned_to_user_id,
+                User.organization_id == current_user.organization_id,
+                User.is_active.is_(True),
+            )
+        )
+        if assigned_user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned user not found")
+
+
 def list_annotations_for_user(db: Session, current_user: User, scan_id: UUID | None = None) -> list[Annotation]:
     """Return annotations visible to the signed-in user's organization."""
 
@@ -175,6 +210,13 @@ def create_annotation_for_user(db: Session, payload: AnnotationCreate, current_u
         project = db.get(Project, scan.project_id)
         if project is None or project.organization_id != current_user.organization_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+    _validate_references_for_user(
+        db,
+        current_user,
+        project_id=payload.project_id,
+        label_id=payload.label_id,
+        assigned_to_user_id=payload.assigned_to_user_id,
+    )
     if payload.assigned_to_user_id is None:
         payload = payload.model_copy(update={"assigned_to_user_id": current_user.id})
     return create_annotation(db, payload)
@@ -185,16 +227,18 @@ def update_annotation(db: Session, annotation_id: UUID, payload: AnnotationUpdat
 
     annotation = get_annotation_or_404(db, annotation_id)
     updates = payload.model_dump(exclude_unset=True)
+    scan = require_scan_ready(get_scan_or_404(db, annotation.scan_id))
+    if "project_id" in updates and updates["project_id"] is not None and updates["project_id"] != scan.project_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Annotation project does not match scan project")
+    project_id = updates.get("project_id") or scan.project_id
     if "label_id" in updates and updates["label_id"] is not None:
-        project_id = _annotation_project_id(db, annotation)
         label = db.get(Label, updates["label_id"])
         if label is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Label not found")
         if project_id is not None and label.project_id != project_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Label does not belong to annotation project")
     if "assigned_to_user_id" in updates:
-        _validate_assigned_user(db, updates["assigned_to_user_id"], _annotation_project_id(db, annotation))
-    scan = require_scan_ready(get_scan_or_404(db, annotation.scan_id))
+        _validate_assigned_user(db, updates["assigned_to_user_id"], project_id)
     validate_annotation_geometry(
         scan,
         updates.get("annotation_type", annotation.annotation_type),
@@ -218,6 +262,14 @@ def update_annotation_for_user(db: Session, annotation_id: UUID, payload: Annota
     """Patch an annotation after checking organization access."""
 
     get_annotation_for_user_or_404(db, annotation_id, current_user)
+    updates = payload.model_dump(exclude_unset=True)
+    _validate_references_for_user(
+        db,
+        current_user,
+        project_id=updates.get("project_id"),
+        label_id=updates.get("label_id"),
+        assigned_to_user_id=updates.get("assigned_to_user_id"),
+    )
     return update_annotation(db, annotation_id, payload, current_user)
 
 

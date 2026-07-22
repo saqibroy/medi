@@ -262,5 +262,11 @@ Definition of done:
     mount. CI proves denied root writes, required writable paths, and live
     health; target runtime policy and rollout evidence remain in
     `CONTAINER_HARDENING_PLAN.md`.
-13. Next: close the object-route authorization test matrix before addressing
-    retained annotation-history tombstones.
+13. Completed repository boundary: all 88 API routes now have a fail-closed
+    authentication/role policy matrix; every parameterized route and collection
+    is exercised against a second organization; body/query references are
+    tenant-scoped; and annotations cannot be reparented away from their scan.
+    Same-organization project membership remains a separate product decision.
+    Evidence is in `OBJECT_AUTHORIZATION_PLAN.md`.
+14. Next: replace annotation-history cascade deletion with retained tombstones
+    or durable references before describing annotation history as immutable.
