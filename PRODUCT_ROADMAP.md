@@ -250,5 +250,11 @@ Definition of done:
     duration, and organization administrators can list/revoke active sessions
     through audited API/UI controls. Inventory exposes user identity and bounded
     timestamps but no token digest, IP address, user agent, cookie, or secret.
-11. Next: add bounded database connection pools, acquisition/statement
-    timeouts, and privacy-safe slow-query visibility.
+11. Completed repository boundary: application PostgreSQL connections now use
+    explicit per-process pool/overflow bounds, acquisition and server-side
+    statement timeouts, pre-ping, and duration-only slow-query signals linked by
+    request ID. SQL, parameters, schema names, errors, and data values remain
+    excluded. Target sizing, thresholds, monitoring, and exercises remain in
+    `DATABASE_RUNTIME_PLAN.md`.
+12. Next: run application containers as non-root and make filesystems read-only
+    except for explicitly verified writable mounts.

@@ -28,6 +28,11 @@ docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c "CREATE DATABASE \"$test_database\";" >/dev/null
 
 export DATABASE_URL="postgresql+psycopg://postgres:postgres@localhost:5432/$test_database"
+export DATABASE_POOL_SIZE=3
+export DATABASE_MAX_OVERFLOW=1
+export DATABASE_POOL_TIMEOUT_SECONDS=2
+export DATABASE_STATEMENT_TIMEOUT_MS=250
+export DATABASE_SLOW_QUERY_THRESHOLD_MS=100
 
 "$python_bin" -m alembic upgrade head
 head_revision="$("$python_bin" -m alembic heads | awk 'NR == 1 { print $1 }')"
@@ -40,5 +45,7 @@ test -z "$("$python_bin" -m alembic current)"
 "$python_bin" -m alembic upgrade head
 current_revision="$("$python_bin" -m alembic current | awk 'NR == 1 { print $1 }')"
 test "$current_revision" = "$head_revision"
+
+"$python_bin" -m scripts.verify_database_runtime
 
 echo "PostgreSQL migration upgrade/downgrade cycle passed at $head_revision."

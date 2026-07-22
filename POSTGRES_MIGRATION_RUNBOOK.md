@@ -23,15 +23,19 @@ command and can destroy schema and data.
    revision. `alembic heads` must report one reviewed head.
 3. Confirm the production `APP_ENV=production` configuration is valid and that
    production secrets are loaded only by the deployment secret manager.
-4. Place the application in the planned maintenance/write-control state if the
+4. Confirm the reviewed application pool, overflow, acquisition timeout,
+   statement timeout, slow-query threshold, replica count, worker count, and
+   managed PostgreSQL connection budget. Reserve capacity for this migration,
+   monitoring, failover, and approved operators.
+5. Place the application in the planned maintenance/write-control state if the
    migration is not proven online-safe. Stop background writers first.
-5. Create an encrypted, access-controlled PostgreSQL backup and record its
+6. Create an encrypted, access-controlled PostgreSQL backup and record its
    location, checksum, timestamp, database version, and Alembic revision in the
    approved change record. Keep the backup outside the database volume.
-6. Restore that backup to an isolated non-production target and run the health
+7. Restore that backup to an isolated non-production target and run the health
    and data-integrity checks appropriate to the release. A backup is not
    considered valid until it has been restored successfully.
-7. Review each migration for locks, irreversible data changes, data backfills,
+8. Review each migration for locks, irreversible data changes, data backfills,
    and application-version compatibility. Large or destructive changes require
    a separately rehearsed expand/migrate/contract plan.
 
@@ -49,7 +53,10 @@ alembic current
 
 Then start the compatible backend release, verify `/health/ready`, run the
 approved smoke test, and monitor database errors, migration duration, and
-application error rates. Record the resulting revision and release commit.
+application error rates. Confirm the effective application statement timeout
+and pool configuration without printing the database URL. Monitor privacy-safe
+slow-query events by request ID; do not enable SQL or parameter logging. Record
+the resulting revision and release commit.
 
 ## Rollback Decision And Recovery
 
@@ -78,8 +85,12 @@ bash scripts/verify_postgres_migrations.sh
 ```
 
 It proves the complete migration chain can upgrade to the current head,
-downgrade to base, and upgrade again. GitHub Actions performs the same cycle on
-an ephemeral PostgreSQL service for every pull request and push to `main`.
+downgrade to base, and upgrade again. It also exhausts the bounded application
+pool to prove acquisition timeout and asks PostgreSQL to cancel a synthetic
+over-time statement. The runtime verifier refuses non-`medi_migration_`
+databases and statement timeouts above two seconds. GitHub Actions performs the
+same cycle and runtime verification on an ephemeral PostgreSQL service for
+every pull request and push to `main`.
 
 The separate encrypted restore rehearsal pairs PostgreSQL with a synthetic
 private-object snapshot and never targets the application database:

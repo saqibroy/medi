@@ -23,7 +23,7 @@ privacy, encryption, rate-limit, or audit controls to restore availability.
 
 | Service | Expected Medi behavior | Immediate safe action | Recovery proof |
 | --- | --- | --- | --- |
-| PostgreSQL | Liveness may remain 200; readiness returns 503 and database-backed routes fail | Remove the backend from ready traffic, stop writers/background work, preserve DB evidence, activate managed DB failover/recovery | Ready 200, expected Alembic revision, safe integrity/count checks, tenant smoke test |
+| PostgreSQL | Liveness may remain 200; readiness returns 503 and database-backed routes fail; pool acquisition and over-time statements fail within configured bounds | Remove the backend from ready traffic, stop writers/background work, preserve DB evidence, activate managed DB failover/recovery | Ready 200, expected Alembic revision, approved pool/timeout values, safe integrity/count checks, tenant smoke test |
 | Redis rate limiter | Readiness may remain 200; login and protected expensive routes return 503 because production rate limiting fails closed | Keep fail-closed behavior, pause affected workflows, restore the approved encrypted Redis service | Login and one approved expensive-route test no longer return limiter-unavailable; HA/alert state verified |
 | Private S3/KMS | Health probes may remain green; upload, preview, mask, release, export, or deletion operations can fail | Pause affected storage workflows, preserve object/version and KMS event references, do not switch production to local storage | Synthetic tenant-scoped put/read/signed-preview check, encryption/tag/version evidence, cross-tenant denial |
 | Backend process | Liveness/readiness fail or time out | Remove unhealthy instances from traffic; inspect safe platform status/log fields; restart/redeploy reviewed image | Sustained live/ready success and approved end-to-end smoke tests |
@@ -38,15 +38,22 @@ before claiming queue-outage coverage.
 
 1. Confirm failure from target monitoring and `/health/ready`; do not rely on
    liveness.
-2. Stop routing new work to unready backends and stop any independent writers.
-3. Do not run migrations, broad diagnostics, or automatic retry storms during
+2. Correlate `database_slow_query`, `database_unavailable`, managed-database,
+   and readiness signals using request IDs and safe time windows. Do not enable
+   SQL, parameter, schema-name, database-error, or data-value logging during
+   triage.
+3. Stop routing new work to unready backends and stop any independent writers.
+4. Do not run migrations, broad diagnostics, or automatic retry storms during
    an unstable database event.
-4. Use the target managed failover procedure. For restore or migration-related
+5. Check whether replica/worker scaling can exceed the approved connection
+   budget: `replicas × workers × (pool size + overflow)`. Preserve headroom for
+   migrations, monitoring, failover, and approved operators.
+6. Use the target managed failover procedure. For restore or migration-related
    failure, follow [POSTGRES_MIGRATION_RUNBOOK.md](POSTGRES_MIGRATION_RUNBOOK.md).
-5. Restore into an isolated target first if corruption or data loss is possible.
-6. Before traffic returns, verify revision, connectivity, audit triggers,
+7. Restore into an isolated target first if corruption or data loss is possible.
+8. Before traffic returns, verify revision, connectivity, audit triggers,
    organization/role isolation, scan/annotation counts or checksums using safe
-   aggregate evidence, and backup continuity.
+   aggregate evidence, approved pool/timeout settings, and backup continuity.
 
 ## Redis Degradation
 

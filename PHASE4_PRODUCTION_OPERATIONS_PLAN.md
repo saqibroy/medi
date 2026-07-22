@@ -74,6 +74,10 @@ Not production-ready yet:
   records exist, and Redis provides shared rate enforcement with hashed keys.
   Managed-Redis deployment evidence, monitoring, and error tracking remain
   absent.
+- Application PostgreSQL connections now have per-process pool/overflow bounds,
+  acquisition and statement timeouts, pre-ping, and duration-only slow-query
+  signals. Target connection budgets, approved thresholds, alert routing, and
+  exercise evidence remain deployment gates.
 
 ## Medical Image Intake And De-identification
 
@@ -305,8 +309,10 @@ Useful primary references:
   direct-peer Redis enforcement for multi-instance production.
 - [ ] Add per-user and per-organization quotas after product tiers, service
   accounts, and trusted-proxy identity rules are approved.
-- [ ] Add database connection-pool settings, statement timeouts, and slow-query
-  visibility.
+- [x] Add explicit database pool/overflow bounds, acquisition and server-side
+  statement timeouts, pre-ping, and privacy-safe slow-query visibility. Target
+  sizing, thresholds, monitoring, and exercises remain in
+  `DATABASE_RUNTIME_PLAN.md`.
 - [x] Define migration preflight, backup/restore rehearsal, forward deployment,
   and rollback procedures for PostgreSQL in `POSTGRES_MIGRATION_RUNBOOK.md`.
 - [x] Remove automatic demo seeding from production startup; development seeding
@@ -373,8 +379,11 @@ Useful primary references:
 15. [x] Add session idle expiry and administrator-visible, organization-scoped
     active-session inventory/revocation without exposing raw session
     credentials, digests, cookies, IP addresses, or user agents.
-16. [ ] Add bounded database connection pools, acquisition/statement timeouts,
-    and privacy-safe slow-query visibility.
+16. [x] Add bounded database connection pools, acquisition/statement timeouts,
+    and privacy-safe slow-query visibility without SQL, parameters, schema
+    names, errors, or data values in operational logs.
+17. [ ] Run application containers as non-root and make filesystems read-only
+    except for explicitly verified writable mounts.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
@@ -396,6 +405,9 @@ key-compromise, deployment, and rollback package is indexed in
 Current repository increment complete: sliding session idle expiry and audited
 administrator inventory/revocation are evidenced in
 `SESSION_AND_RATE_LIMIT_PLAN.md`.
+Current repository increment complete: application database pool bounds,
+timeouts, slow-query signals, and disposable PostgreSQL runtime proofs are
+evidenced in `DATABASE_RUNTIME_PLAN.md`.
 
 ## Phase 4 Exit Criteria
 

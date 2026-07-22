@@ -33,6 +33,11 @@ class Settings:
 
     environment: str
     database_url: str
+    database_pool_size: int
+    database_max_overflow: int
+    database_pool_timeout_seconds: int
+    database_statement_timeout_ms: int
+    database_slow_query_threshold_ms: int
     token_secret: str
     csrf_secret: str
     audit_signing_key: str
@@ -134,6 +139,28 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
         raise ConfigurationError("APP_ENV must be development, test, or production")
 
     database_url = values.get("DATABASE_URL", DEVELOPMENT_DATABASE_URL).strip()
+    database_pool_size = _read_integer(values.get("DATABASE_POOL_SIZE", "5"), "DATABASE_POOL_SIZE", 1, 50)
+    database_max_overflow = _read_integer(values.get("DATABASE_MAX_OVERFLOW", "5"), "DATABASE_MAX_OVERFLOW", 0, 50)
+    database_pool_timeout_seconds = _read_integer(
+        values.get("DATABASE_POOL_TIMEOUT_SECONDS", "5"),
+        "DATABASE_POOL_TIMEOUT_SECONDS",
+        1,
+        60,
+    )
+    database_statement_timeout_ms = _read_integer(
+        values.get("DATABASE_STATEMENT_TIMEOUT_MS", "30000"),
+        "DATABASE_STATEMENT_TIMEOUT_MS",
+        100,
+        300000,
+    )
+    database_slow_query_threshold_ms = _read_integer(
+        values.get("DATABASE_SLOW_QUERY_THRESHOLD_MS", "500"),
+        "DATABASE_SLOW_QUERY_THRESHOLD_MS",
+        10,
+        300000,
+    )
+    if database_slow_query_threshold_ms >= database_statement_timeout_ms:
+        raise ConfigurationError("DATABASE_SLOW_QUERY_THRESHOLD_MS must be lower than DATABASE_STATEMENT_TIMEOUT_MS")
     token_secret = values.get("TOKEN_SECRET", DEVELOPMENT_TOKEN_SECRET).strip()
     csrf_secret = values.get("CSRF_SECRET", DEVELOPMENT_CSRF_SECRET).strip()
     audit_signing_key = values.get("AUDIT_SIGNING_KEY", DEVELOPMENT_AUDIT_SIGNING_KEY).strip()
@@ -190,6 +217,8 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
     if app_environment == "production":
         if "DATABASE_URL" not in values or database_url == DEVELOPMENT_DATABASE_URL or "postgres:postgres@" in database_url:
             raise ConfigurationError("production requires a non-development DATABASE_URL")
+        if not database_url.startswith("postgresql+psycopg://"):
+            raise ConfigurationError("production DATABASE_URL must use postgresql+psycopg://")
         if "TOKEN_SECRET" not in values or token_secret == DEVELOPMENT_TOKEN_SECRET or len(token_secret) < 32:
             raise ConfigurationError("production requires a unique TOKEN_SECRET of at least 32 characters")
         if (
@@ -230,10 +259,24 @@ def get_settings(environment: dict[str, str] | None = None) -> Settings:
             raise ConfigurationError("production requires SCAN_STORAGE_BACKEND=s3")
         if storage_sse != "aws:kms" or storage_kms_key_id is None:
             raise ConfigurationError("production S3 storage requires SCAN_STORAGE_SSE=aws:kms and SCAN_STORAGE_KMS_KEY_ID")
+        for variable_name in (
+            "DATABASE_POOL_SIZE",
+            "DATABASE_MAX_OVERFLOW",
+            "DATABASE_POOL_TIMEOUT_SECONDS",
+            "DATABASE_STATEMENT_TIMEOUT_MS",
+            "DATABASE_SLOW_QUERY_THRESHOLD_MS",
+        ):
+            if variable_name not in values:
+                raise ConfigurationError(f"production requires explicit {variable_name}")
 
     return Settings(
         environment=app_environment,
         database_url=database_url,
+        database_pool_size=database_pool_size,
+        database_max_overflow=database_max_overflow,
+        database_pool_timeout_seconds=database_pool_timeout_seconds,
+        database_statement_timeout_ms=database_statement_timeout_ms,
+        database_slow_query_threshold_ms=database_slow_query_threshold_ms,
         token_secret=token_secret,
         csrf_secret=csrf_secret,
         audit_signing_key=audit_signing_key,

@@ -13,6 +13,11 @@ def production_settings():
         {
             "APP_ENV": "production",
             "DATABASE_URL": "postgresql+psycopg://medi:secret@db:5432/medi",
+            "DATABASE_POOL_SIZE": "5",
+            "DATABASE_MAX_OVERFLOW": "5",
+            "DATABASE_POOL_TIMEOUT_SECONDS": "5",
+            "DATABASE_STATEMENT_TIMEOUT_MS": "30000",
+            "DATABASE_SLOW_QUERY_THRESHOLD_MS": "500",
             "TOKEN_SECRET": "production-token-secret-longer-than-thirty-two",
             "CSRF_SECRET": "production-csrf-secret-distinct-and-long-enough",
             "AUDIT_SIGNING_KEY": "production-audit-key-distinct-and-long-enough",
