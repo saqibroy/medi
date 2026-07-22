@@ -33,6 +33,11 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@db:5432/medical_annotations}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
+      DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-5}
+      DATABASE_POOL_TIMEOUT_SECONDS: ${DATABASE_POOL_TIMEOUT_SECONDS:-5}
+      DATABASE_STATEMENT_TIMEOUT_MS: ${DATABASE_STATEMENT_TIMEOUT_MS:-30000}
+      DATABASE_SLOW_QUERY_THRESHOLD_MS: ${DATABASE_SLOW_QUERY_THRESHOLD_MS:-500}
       TOKEN_SECRET: ${TOKEN_SECRET:-dev-token-secret-change-before-production}
       CSRF_SECRET: ${CSRF_SECRET:-dev-csrf-secret-change-before-production}
       AUDIT_SIGNING_KEY: ${AUDIT_SIGNING_KEY:-dev-audit-signing-key-change-before-production}

@@ -107,6 +107,11 @@ jobs:
       - name: Rehearse PostgreSQL upgrade and rollback cycle
         env:
           DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/medi_migration_qa
+          DATABASE_POOL_SIZE: "3"
+          DATABASE_MAX_OVERFLOW: "1"
+          DATABASE_POOL_TIMEOUT_SECONDS: "2"
+          DATABASE_STATEMENT_TIMEOUT_MS: "250"
+          DATABASE_SLOW_QUERY_THRESHOLD_MS: "100"
         run: |
           set -euo pipefail
           alembic upgrade head
@@ -118,6 +123,7 @@ jobs:
           alembic upgrade head
           current_revision="$(alembic current | awk 'NR == 1 { print $1 }')"
           test "$current_revision" = "$head_revision"
+          python -m scripts.verify_database_runtime
 
   recovery-drill:
     name: Encrypted recovery drill

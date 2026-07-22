@@ -2,7 +2,8 @@
 
 This repository is a production-minded research MVP. It uses
 React, TypeScript, Tailwind CSS, Cornerstone3D, FastAPI, Pydantic, SQLAlchemy,
-PostgreSQL, Alembic, absolute/sliding-idle database-backed cookie sessions,
+PostgreSQL with bounded application pools and statement timeouts, Alembic,
+absolute/sliding-idle database-backed cookie sessions,
 administrator session revocation, signed CSRF
 protection, Redis-backed shared rate limits, role checks, and a local/S3
 private-storage boundary. Real DICOM/NIfTI parsing, KMS-encrypted S3
@@ -273,6 +274,14 @@ all geometry into one awkward shape.
 - Pydantic schemas define the public API contract and teach why validation
   belongs at the application boundary.
 - SQLAlchemy ORM models define persistent database structure and relationships.
+- The application PostgreSQL engine bounds steady/overflow connections and
+  checkout waits per process, pre-pings pooled connections, applies a
+  server-side statement timeout, and emits duration-only slow-query signals.
+  SQL, parameters, schema names, exception text, and data values are excluded;
+  the request ID connects a warning to the existing privacy-safe route log.
+  SQLAlchemy failures become a generic `503` and `database_unavailable` event
+  at the outer request boundary so default tracebacks cannot expose SQL or
+  values.
 - Explicitly mapped security-sensitive routes append organization-scoped audit
   events containing stable identifiers and allowlisted scalar details only.
   Keyed hashes support integrity verification, while ORM guards and PostgreSQL/

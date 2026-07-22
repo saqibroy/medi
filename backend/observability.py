@@ -9,13 +9,17 @@ import time
 from contextvars import ContextVar
 from uuid import uuid4
 
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 
 request_id_context: ContextVar[str | None] = ContextVar("request_id", default=None)
 request_logger = logging.getLogger("medi.request")
+database_logger = logging.getLogger("medi.database")
+
+
 class JsonFormatter(logging.Formatter):
     """Format only approved operational fields and redact sensitive values."""
 
@@ -31,20 +35,22 @@ class JsonFormatter(logging.Formatter):
             "path": getattr(record, "path", None),
             "status_code": getattr(record, "status_code", None),
             "duration_ms": getattr(record, "duration_ms", None),
+            "database_operation": getattr(record, "database_operation", None),
         }
         return json.dumps({key: value for key, value in payload.items() if value is not None}, separators=(",", ":"))
 
 
 def configure_logging() -> None:
-    """Install one stdout JSON handler without changing third-party loggers."""
+    """Install stdout JSON handlers without changing third-party loggers."""
 
-    if request_logger.handlers:
-        return
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter())
-    request_logger.addHandler(handler)
-    request_logger.setLevel(logging.INFO)
-    request_logger.propagate = False
+    for operational_logger in (request_logger, database_logger):
+        if operational_logger.handlers:
+            continue
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(JsonFormatter())
+        operational_logger.addHandler(handler)
+        operational_logger.setLevel(logging.INFO)
+        operational_logger.propagate = False
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -55,9 +61,23 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         context_token = request_id_context.set(request_id)
         started_at = time.perf_counter()
         status_code = 500
+        failure_logged = False
         try:
             response = await call_next(request)  # type: ignore[operator]
             status_code = response.status_code
+            response.headers["X-Request-ID"] = request_id
+            return response
+        except SQLAlchemyError:
+            # SQLAlchemy exception strings can contain statements and bind
+            # values. Convert them at the outer request boundary so neither the
+            # client nor the default ASGI traceback receives those details.
+            status_code = 503
+            failure_logged = True
+            request_logger.error(
+                "database_unavailable",
+                extra=_request_fields(request, request_id, status_code, started_at, event="database_unavailable"),
+            )
+            response = JSONResponse(status_code=status_code, content={"detail": "Database temporarily unavailable"})
             response.headers["X-Request-ID"] = request_id
             return response
         except Exception:
@@ -65,16 +85,23 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             request_logger.error("request_failed", extra=_request_fields(request, request_id, status_code, started_at))
             raise
         finally:
-            if status_code != 500:
+            if status_code != 500 and not failure_logged:
                 request_logger.info("request_completed", extra=_request_fields(request, request_id, status_code, started_at))
             request_id_context.reset(context_token)
 
 
-def _request_fields(request: Request, request_id: str, status_code: int, started_at: float) -> dict[str, object]:
+def _request_fields(
+    request: Request,
+    request_id: str,
+    status_code: int,
+    started_at: float,
+    *,
+    event: str | None = None,
+) -> dict[str, object]:
     """Return the small allowlist of fields that may leave the request boundary."""
 
     return {
-        "event": "request_completed" if status_code < 500 else "request_failed",
+        "event": event or ("request_completed" if status_code < 500 else "request_failed"),
         "request_id": request_id,
         "method": request.method,
         # path excludes query values, which can contain identifiers or free text.

@@ -80,8 +80,11 @@ migrations, seeds synthetic demo users, and stores uploaded scan files in the
 `scan_storage` Docker volume. Copy `.env.example` to a local ignored `.env` if
 you need to override its local settings.
 
-For production, set `APP_ENV=production`, a non-development `DATABASE_URL`, a
-unique `TOKEN_SECRET` of at least 32 characters, distinct `CSRF_SECRET` and
+For production, set `APP_ENV=production`, a non-development `DATABASE_URL`,
+reviewed `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`,
+`DATABASE_POOL_TIMEOUT_SECONDS`, `DATABASE_STATEMENT_TIMEOUT_MS`, and
+`DATABASE_SLOW_QUERY_THRESHOLD_MS`, a unique `TOKEN_SECRET` of at least 32
+characters, distinct `CSRF_SECRET` and
 `AUDIT_SIGNING_KEY` values of at least 32 characters, exact comma-separated
 HTTPS `CORS_ORIGINS`, `SEED_DEMO_DATA=false`, `SESSION_COOKIE_SECURE=true`,
 an explicitly approved `SESSION_IDLE_TIMEOUT_MINUTES` no greater than
@@ -90,6 +93,20 @@ an explicitly approved `SESSION_IDLE_TIMEOUT_MINUTES` no greater than
 `RATE_LIMIT_REDIS_URL`. The backend validates these before migrations run and
 refuses unsafe startup. Keep real values in the deployment secret manager,
 never in `.env.example`, images, or Git.
+
+Application PostgreSQL connections use a bounded per-process queue pool,
+bounded overflow, a connection-acquisition timeout, pre-ping, and a server-side
+statement timeout. Completed queries above the slow-query threshold emit only
+`database_slow_query`, the operation class, duration, and request correlation
+ID. SQL text, parameters, schema names, database errors, and data values are not
+logged. Database failures are converted to a generic `503` and value-free
+`database_unavailable` event before default server traceback handling. Total
+application capacity is approximately `replicas × workers ×
+(pool size + overflow)`; production owners must size that total below the
+managed PostgreSQL connection budget with headroom for migrations, monitoring,
+failover, and operators. See [DATABASE_RUNTIME_PLAN.md](DATABASE_RUNTIME_PLAN.md).
+SQLite remains a local/test fallback and does not prove PostgreSQL timeout
+behavior.
 
 Production scan storage also fails closed unless it uses a private S3 bucket
 with KMS encryption. Set `SCAN_STORAGE_BACKEND=s3`, `SCAN_STORAGE_BUCKET`,
@@ -184,6 +201,12 @@ required preflight, encrypted backup/restore rehearsal, forward deployment, and
 rollback procedure. A local disposable PostgreSQL migration cycle can be run
 with `bash scripts/verify_postgres_migrations.sh`; it is not a production
 rollback command.
+
+The disposable rehearsal also verifies application pool bounds,
+connection-acquisition timeout, the effective PostgreSQL statement timeout, and
+server cancellation of a synthetic slow statement. Its runtime probe refuses
+database names outside the `medi_migration_` prefix and test statement timeouts
+above two seconds.
 
 Run `bash scripts/verify_backup_restore_drill.sh` for the encrypted disposable
 PostgreSQL plus synthetic private-object restore proof. It does not replace a

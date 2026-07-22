@@ -442,6 +442,11 @@ CI verification:
   organization-scoped administrator inventory/revocation. Only user identity
   and bounded session timestamps leave the API; credentials, digests, IP
   addresses, and user agents remain excluded.
+- Database runtime controls now bound each process pool and overflow, fail
+  acquisition and over-time statements within configured limits, pre-ping
+  pooled connections, and emit duration-only slow-query signals correlated to
+  safe request logs. Production values require explicit target sizing; SQL,
+  parameters, schema names, errors, and data values remain excluded.
 
 ## Next Engineering Priorities
 
@@ -486,5 +491,9 @@ CI verification:
     visible active-session inventory/revocation without storing or returning raw
     session credentials or network context. Target idle-duration approval and
     any organization-wide bulk policy remain deployment inputs.
-11. Next: add bounded database pools, acquisition/statement timeouts, and
-    privacy-safe slow-query signals.
+11. Completed repository boundary: add bounded database pools,
+    acquisition/statement timeouts, and privacy-safe slow-query signals. Target
+    capacity, alert routing, threshold approval, and exercises remain in
+    `DATABASE_RUNTIME_PLAN.md`.
+12. Next: run backend/frontend containers as non-root and use read-only
+    filesystems except for explicitly verified writable mounts.

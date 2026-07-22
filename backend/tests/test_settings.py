@@ -5,12 +5,26 @@ import pytest
 from backend.settings import ConfigurationError, DEVELOPMENT_CORS_ORIGINS, get_settings
 
 
+DATABASE_RUNTIME_ENV = {
+    "DATABASE_POOL_SIZE": "5",
+    "DATABASE_MAX_OVERFLOW": "5",
+    "DATABASE_POOL_TIMEOUT_SECONDS": "5",
+    "DATABASE_STATEMENT_TIMEOUT_MS": "30000",
+    "DATABASE_SLOW_QUERY_THRESHOLD_MS": "500",
+}
+
+
 def test_development_defaults_are_local_and_seed_demo_data() -> None:
     settings = get_settings({})
 
     assert settings.environment == "development"
     assert settings.cors_origins == DEVELOPMENT_CORS_ORIGINS
     assert settings.seed_demo_data is True
+    assert settings.database_pool_size == 5
+    assert settings.database_max_overflow == 5
+    assert settings.database_pool_timeout_seconds == 5
+    assert settings.database_statement_timeout_ms == 30000
+    assert settings.database_slow_query_threshold_ms == 500
     assert settings.session_idle_timeout_minutes == 60
     assert settings.data_deletion_operator_enabled is False
     assert settings.external_ai_enabled is False
@@ -109,6 +123,7 @@ def test_production_accepts_explicit_safe_settings() -> None:
             "SCAN_STORAGE_REGION": "eu-central-1",
             "SCAN_STORAGE_SSE": "aws:kms",
             "SCAN_STORAGE_KMS_KEY_ID": "arn:aws:kms:eu-central-1:123456789012:key/test-key",
+            **DATABASE_RUNTIME_ENV,
         }
     )
 
@@ -122,6 +137,38 @@ def test_production_accepts_explicit_safe_settings() -> None:
     assert settings.rate_limit_backend == "redis"
     assert settings.data_deletion_operator_enabled is False
     assert settings.external_ai_enabled is False
+
+
+def test_production_requires_the_supported_postgresql_driver() -> None:
+    with pytest.raises(ConfigurationError, match=r"postgresql\+psycopg"):
+        get_settings({"APP_ENV": "production", "DATABASE_URL": "mysql://app:secret@db/medi"})
+
+
+def test_production_requires_explicit_database_runtime_controls() -> None:
+    environment = {
+        "APP_ENV": "production",
+        "DATABASE_URL": "postgresql+psycopg://medi_app:strong-password@db:5432/medi",
+        "TOKEN_SECRET": "a-unique-production-token-secret-with-adequate-length",
+        "CSRF_SECRET": "a-distinct-production-csrf-secret-with-adequate-length",
+        "AUDIT_SIGNING_KEY": "a-separate-production-audit-signing-key-with-length",
+        "PRIVACY_REFERENCE_KEY": "a-distinct-production-privacy-reference-key",
+        "CORS_ORIGINS": "https://medi.example.org",
+        "SEED_DEMO_DATA": "false",
+        "SESSION_IDLE_TIMEOUT_MINUTES": "30",
+        "RATE_LIMIT_BACKEND": "redis",
+        "RATE_LIMIT_REDIS_URL": "rediss://redis.example.org:6380/0",
+        "SCAN_STORAGE_BACKEND": "s3",
+        "SCAN_STORAGE_BUCKET": "medi-private-production",
+        "SCAN_STORAGE_REGION": "eu-central-1",
+        "SCAN_STORAGE_SSE": "aws:kms",
+        "SCAN_STORAGE_KMS_KEY_ID": "arn:aws:kms:eu-central-1:123456789012:key/test-key",
+        **DATABASE_RUNTIME_ENV,
+    }
+
+    for variable_name in DATABASE_RUNTIME_ENV:
+        incomplete = {key: value for key, value in environment.items() if key != variable_name}
+        with pytest.raises(ConfigurationError, match=variable_name):
+            get_settings(incomplete)
 
 
 def test_production_rejects_local_or_unencrypted_storage() -> None:
@@ -167,6 +214,11 @@ def test_cors_origins_must_be_exact_http_origins(origins: str) -> None:
     [
         ("SESSION_TTL_MINUTES", "four"),
         ("SESSION_IDLE_TIMEOUT_MINUTES", "0"),
+        ("DATABASE_POOL_SIZE", "0"),
+        ("DATABASE_MAX_OVERFLOW", "51"),
+        ("DATABASE_POOL_TIMEOUT_SECONDS", "0"),
+        ("DATABASE_STATEMENT_TIMEOUT_MS", "99"),
+        ("DATABASE_SLOW_QUERY_THRESHOLD_MS", "9"),
         ("LOGIN_RATE_LIMIT_PER_MINUTE", "0"),
         ("SENSITIVE_RATE_LIMIT_PER_MINUTE", "10001"),
         ("DATA_DELETION_OPERATOR_ENABLED", "sometimes"),
@@ -181,6 +233,11 @@ def test_session_and_rate_limit_settings_reject_invalid_values(variable_name: st
 def test_idle_timeout_cannot_exceed_absolute_session_lifetime() -> None:
     with pytest.raises(ConfigurationError, match="SESSION_IDLE_TIMEOUT_MINUTES"):
         get_settings({"SESSION_TTL_MINUTES": "30", "SESSION_IDLE_TIMEOUT_MINUTES": "60"})
+
+
+def test_slow_query_threshold_must_be_lower_than_statement_timeout() -> None:
+    with pytest.raises(ConfigurationError, match="DATABASE_SLOW_QUERY_THRESHOLD_MS"):
+        get_settings({"DATABASE_STATEMENT_TIMEOUT_MS": "500", "DATABASE_SLOW_QUERY_THRESHOLD_MS": "500"})
 
 
 @pytest.mark.parametrize(

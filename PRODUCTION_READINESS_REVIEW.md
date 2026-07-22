@@ -1,8 +1,9 @@
 # Production Readiness Review
 
 Status: active on 2026-07-16; P0 supply-chain remediation and the repository
-operator-runbook package and repository session controls completed on
-2026-07-22. The remaining Phase 4 gates are classified below.
+operator-runbook package, repository session controls, and database-runtime
+controls completed on 2026-07-22. The remaining Phase 4 gates are classified
+below.
 
 This review prevents two unsafe shortcuts: treating unfinished engineering as
 somebody else's approval problem, or inventing legal/deployment evidence that
@@ -48,7 +49,7 @@ contract, or approver supplies verifiable evidence.
 | Model outputs | Version outputs and distinguish them from human annotations | Repository | Deferred until an approved inference path exists; the schema must precede actual model output ingestion. |
 | Reliability | Deployment probes/alerts and privacy-safe error tracking | Deployment + integration + repository | Local/Compose health and safe request logs exist; target alert and error-provider evidence remains. |
 | Capacity | Per-user/per-organization quotas | Organization + repository | Implement after tier, service-account, and trusted identity rules are approved. |
-| Database runtime | Pool bounds, acquisition timeout, statement timeout, and slow-query visibility | Repository + deployment | P1 repository task; target sizing and alert thresholds remain deployment evidence. |
+| Database runtime | Approved connection budget, replica/worker sizing, thresholds, monitoring, and exercises | Deployment + organization | **Repository complete:** explicit pool/overflow bounds, acquisition/statement timeouts, pre-ping, privacy-safe slow-query signals, configuration validation, and disposable PostgreSQL proofs are implemented. Target sizing and alerts remain external. |
 | Containers | Pinned/scanned images, non-root users, and read-only filesystems where feasible | Repository | Scanning begins in P0; user/filesystem hardening is a separate P1 change requiring writable-path tests. |
 | Operations | Deploy, rollback, degraded storage, database/Redis outage, key compromise, and security-incident runbooks | Repository + organization | **Repository complete:** `OPERATOR_RUNBOOKS.md` indexes the CI-verified package. Real contacts, provider commands, thresholds, and exercise evidence must be supplied for the target. |
 
@@ -62,9 +63,9 @@ contract, or approver supplies verifiable evidence.
    contacts, provider commands, thresholds, or legal decisions.
 3. **P1 complete:** add session idle expiry plus credential-free administrator
    active-session inventory and per-session revocation.
-4. **P1 next:** add bounded database pools, acquisition/statement timeouts, and
-   privacy-safe slow-query signals.
-5. **P1:** run application containers as non-root and make filesystems read-only
+4. **P1 complete:** add bounded database pools, acquisition/statement timeouts,
+   pre-ping, and privacy-safe slow-query signals.
+5. **P1 next:** run application containers as non-root and make filesystems read-only
    except for explicitly mounted writable paths.
 6. **P1:** close the object-authorization test matrix and annotation-history
    tombstone gap.
@@ -106,7 +107,7 @@ or pseudonymized data is enabled, the deployment owner must:
 - P0 completion evidence on 2026-07-22: `pip-audit` reported no known
   backend requirement vulnerabilities; `npm audit --omit=dev
   --audit-level=high` passed with only moderate Cornerstone/VTK advisories
-  requiring a major viewer upgrade; the latest Gitleaks run scanned 35 commits
+  requiring a major viewer upgrade; the latest Gitleaks run scanned 36 commits
   with no leaks;
   Trivy found zero high/critical vulnerabilities in the rebuilt backend and
   frontend images.
@@ -124,6 +125,16 @@ or pseudonymized data is enabled, the deployment owner must:
   session. Supply-chain checks still report no Python advisories, no secret
   leaks, and zero high/critical image findings; the three moderate viewer-chain
   advisories remain tracked for a deliberate major upgrade.
+- Database-runtime completion evidence on 2026-07-22: all 148 backend tests and
+  the frontend production build pass; production configuration requires
+  explicit bounded values and the supported PostgreSQL driver; the disposable
+  PostgreSQL rehearsal proves pool/overflow limits, acquisition timeout,
+  effective statement timeout, and synthetic statement cancellation; and the
+  rebuilt Compose backend reports the configured `5 + 5` per-process bound,
+  five-second acquisition timeout, 30-second statement timeout, and a
+  duration-only correlated slow-query event. SQLAlchemy failures return a
+  generic `503` without exposing exception content. Target sizing, thresholds,
+  alerts, and exercises remain deployment evidence.
 
 ## Primary References
 

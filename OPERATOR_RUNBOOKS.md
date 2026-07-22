@@ -42,6 +42,8 @@ not in Git. An unset field blocks the associated production exercise or release.
 | Monitoring and immutable evidence locations | `<target-owned>` |
 | Ingress traffic-control procedure | `<target-owned>` |
 | Database, Redis, storage, KMS, and secret-manager procedures | `<target-owned>` |
+| Managed database connection budget and application replica/worker count | `<target-owned>` |
+| Approved database pool, acquisition, statement, slow-query, and alert thresholds | `<target-owned>` |
 | Approved RPO/RTO, severity, and rollback thresholds | `<target-owned>` |
 | Backup/restore and break-glass owners | `<target-owned>` |
 
