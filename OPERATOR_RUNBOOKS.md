@@ -23,6 +23,9 @@ deployment gates are approved, exercises must use **synthetic or properly anonym
   database migration and restore safety.
 - [STORAGE_OPERATIONS_RUNBOOK.md](STORAGE_OPERATIONS_RUNBOOK.md): private S3/KMS
   deployment, verification, recovery, and deletion.
+- [CONTAINER_HARDENING_PLAN.md](CONTAINER_HARDENING_PLAN.md): application
+  identities, writable-path boundary, local verification, ownership migration,
+  and remaining target runtime gates.
 
 ## Target Worksheet
 

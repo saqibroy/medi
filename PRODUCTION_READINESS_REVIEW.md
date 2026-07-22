@@ -1,9 +1,9 @@
 # Production Readiness Review
 
 Status: active on 2026-07-16; P0 supply-chain remediation and the repository
-operator-runbook package, repository session controls, and database-runtime
-controls completed on 2026-07-22. The remaining Phase 4 gates are classified
-below.
+operator-runbook package, repository session controls, database-runtime
+controls, and application-container hardening completed on 2026-07-22. The
+remaining Phase 4 gates are classified below.
 
 This review prevents two unsafe shortcuts: treating unfinished engineering as
 somebody else's approval problem, or inventing legal/deployment evidence that
@@ -50,7 +50,7 @@ contract, or approver supplies verifiable evidence.
 | Reliability | Deployment probes/alerts and privacy-safe error tracking | Deployment + integration + repository | Local/Compose health and safe request logs exist; target alert and error-provider evidence remains. |
 | Capacity | Per-user/per-organization quotas | Organization + repository | Implement after tier, service-account, and trusted identity rules are approved. |
 | Database runtime | Approved connection budget, replica/worker sizing, thresholds, monitoring, and exercises | Deployment + organization | **Repository complete:** explicit pool/overflow bounds, acquisition/statement timeouts, pre-ping, privacy-safe slow-query signals, configuration validation, and disposable PostgreSQL proofs are implemented. Target sizing and alerts remain external. |
-| Containers | Pinned/scanned images, non-root users, and read-only filesystems where feasible | Repository | Scanning begins in P0; user/filesystem hardening is a separate P1 change requiring writable-path tests. |
+| Containers | Immutable digests, target admission/runtime policy, and rollout evidence | Deployment | **Repository complete:** backend/frontend use fixed non-root UIDs, read-only roots, dropped capabilities, no privilege escalation, restricted tmpfs mounts, and only the backend development storage volume writable. CI proves required and denied writes. Target evidence remains in `CONTAINER_HARDENING_PLAN.md`. |
 | Operations | Deploy, rollback, degraded storage, database/Redis outage, key compromise, and security-incident runbooks | Repository + organization | **Repository complete:** `OPERATOR_RUNBOOKS.md` indexes the CI-verified package. Real contacts, provider commands, thresholds, and exercise evidence must be supplied for the target. |
 
 ## Prioritized Repository Backlog
@@ -65,9 +65,10 @@ contract, or approver supplies verifiable evidence.
    active-session inventory and per-session revocation.
 4. **P1 complete:** add bounded database pools, acquisition/statement timeouts,
    pre-ping, and privacy-safe slow-query signals.
-5. **P1 next:** run application containers as non-root and make filesystems read-only
-   except for explicitly mounted writable paths.
-6. **P1:** close the object-authorization test matrix and annotation-history
+5. **P1 complete:** run application containers as non-root with read-only roots,
+   dropped capabilities, disabled privilege escalation, and verified writable
+   paths.
+6. **P1 next:** close the object-authorization test matrix and annotation-history
    tombstone gap.
 7. **P2:** address organization deletion, retained export artifacts, quotas,
    and model-output lineage when their prerequisite product policies exist.
@@ -107,7 +108,7 @@ or pseudonymized data is enabled, the deployment owner must:
 - P0 completion evidence on 2026-07-22: `pip-audit` reported no known
   backend requirement vulnerabilities; `npm audit --omit=dev
   --audit-level=high` passed with only moderate Cornerstone/VTK advisories
-  requiring a major viewer upgrade; the latest Gitleaks run scanned 36 commits
+  requiring a major viewer upgrade; the latest Gitleaks run scanned 38 commits
   with no leaks;
   Trivy found zero high/critical vulnerabilities in the rebuilt backend and
   frontend images.
@@ -135,6 +136,18 @@ or pseudonymized data is enabled, the deployment owner must:
   duration-only correlated slow-query event. SQLAlchemy failures return a
   generic `503` without exposing exception content. Target sizing, thresholds,
   alerts, and exercises remain deployment evidence.
+- Container-hardening completion evidence on 2026-07-22: the backend runs as
+  `10001:10001` and Nginx as `101:101`; both roots are read-only, all
+  capabilities are dropped, privilege escalation is disabled, and only
+  restricted `/tmp` plus the backend scan volume are writable. The runtime
+  verifier passes against both the preserved local stack and a fully disposable
+  fresh-volume stack, proving denied application-path writes, required
+  temporary/storage writes, and all health endpoints. All 148 backend tests,
+  the frontend build, migration/runtime rehearsal, encrypted recovery drill,
+  policy/runbook checks, and supply-chain gate pass. Python and rebuilt images
+  have no known high/critical findings; the three moderate viewer-chain
+  advisories remain tracked. Target admission, runtime, digest, and rollout
+  evidence remains external.
 
 ## Primary References
 

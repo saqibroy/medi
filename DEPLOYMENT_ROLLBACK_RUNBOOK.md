@@ -48,6 +48,11 @@ names, database rows, signed URLs, or raw error payloads.
    available. A rollback plan that depends on rebuilding an old branch is not
    ready.
 8. Pause conflicting deletion, restore, key-rotation, and migration work.
+9. Confirm the target workload runs backend/frontend as the reviewed non-root
+   UIDs with read-only roots, no added capabilities, no privilege escalation,
+   and only approved temporary/storage writes. Review ownership migration and
+   rollback evidence before replacing any older root-running workload; see
+   `CONTAINER_HARDENING_PLAN.md`.
 
 ## Deploy
 
@@ -124,6 +129,7 @@ docker compose ps
 curl --fail --silent --show-error http://localhost:8000/health/live
 curl --fail --silent --show-error http://localhost:8000/health/ready
 curl --fail --silent --show-error http://localhost:8080/health
+python3 scripts/verify_container_hardening.py
 bash scripts/verify_postgres_migrations.sh
 bash scripts/verify_backup_restore_drill.sh
 ```

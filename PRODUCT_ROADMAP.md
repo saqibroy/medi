@@ -256,5 +256,11 @@ Definition of done:
     request ID. SQL, parameters, schema names, errors, and data values remain
     excluded. Target sizing, thresholds, monitoring, and exercises remain in
     `DATABASE_RUNTIME_PLAN.md`.
-12. Next: run application containers as non-root and make filesystems read-only
-    except for explicitly verified writable mounts.
+12. Completed repository boundary: backend/frontend images now use fixed
+    non-root identities, read-only roots, no Linux capabilities or privilege
+    escalation, bounded temporary filesystems, and one verified backend storage
+    mount. CI proves denied root writes, required writable paths, and live
+    health; target runtime policy and rollout evidence remain in
+    `CONTAINER_HARDENING_PLAN.md`.
+13. Next: close the object-route authorization test matrix before addressing
+    retained annotation-history tombstones.

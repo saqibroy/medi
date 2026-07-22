@@ -318,10 +318,12 @@ Useful primary references:
 - [x] Remove automatic demo seeding from production startup; development seeding
   remains explicit through `SEED_DEMO_DATA=true`.
 - [~] Pin and scan runtime images, run containers as non-root, and use read-only
-  filesystems where possible. CI now scans backend/frontend images at the
-  high/critical gate, the backend image upgrades vulnerable packaging tools, and
-  the frontend runtime updates nginx/Alpine packages during build; non-root
-  users, read-only filesystems, and digest-pinned base images remain P1 work.
+  filesystems where possible. CI scans backend/frontend images at the
+  high/critical gate and now starts both application images with fixed non-root
+  UIDs, read-only roots, all capabilities dropped, no privilege escalation,
+  restricted temporary filesystems, and only the verified backend storage
+  volume writable. Digest-pinned base images and target admission/runtime
+  evidence remain deployment work in `CONTAINER_HARDENING_PLAN.md`.
 - [x] Add repository operator runbooks for deploy, rollback, degraded storage,
   database/Redis outage, key compromise, and security incident. Redis is only
   the rate-limit store today; any future general queue requires its own pause,
@@ -382,8 +384,12 @@ Useful primary references:
 16. [x] Add bounded database connection pools, acquisition/statement timeouts,
     and privacy-safe slow-query visibility without SQL, parameters, schema
     names, errors, or data values in operational logs.
-17. [ ] Run application containers as non-root and make filesystems read-only
-    except for explicitly verified writable mounts.
+17. [x] Run application containers as non-root and make filesystems read-only
+    except for explicitly verified writable mounts. Runtime CI proves the
+    identity, mount, capability, privilege, health, denied-write, and
+    required-write boundaries.
+18. [ ] Close the object-route authorization test matrix before implementing
+    retained annotation-history tombstones.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
@@ -408,6 +414,9 @@ administrator inventory/revocation are evidenced in
 Current repository increment complete: application database pool bounds,
 timeouts, slow-query signals, and disposable PostgreSQL runtime proofs are
 evidenced in `DATABASE_RUNTIME_PLAN.md`.
+Current repository increment complete: backend/frontend non-root identities,
+read-only roots, restricted writable paths, and runtime Compose proofs are
+evidenced in `CONTAINER_HARDENING_PLAN.md`.
 
 ## Phase 4 Exit Criteria
 
@@ -423,6 +432,9 @@ evidenced in `DATABASE_RUNTIME_PLAN.md`.
   separate production gate above.
 - [x] Application/database audit records are immutable and dataset releases are
   reproducible. Independent WORM retention remains an explicit gate above.
+- [x] Backend/frontend application containers use non-root identities,
+  read-only roots, dropped capabilities, disabled privilege escalation, and
+  verified writable paths. Target admission/runtime evidence remains a gate.
 - [~] Retention/deletion and application-level external-AI egress policies are
   enforceable; target backup/operator and network proxy/firewall evidence
   remains required.
