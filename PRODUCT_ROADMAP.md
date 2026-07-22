@@ -233,6 +233,13 @@ Definition of done:
    erasure handoff to the existing deletion workflow are implemented. Target
    legal approval, real controller/processor evidence, identity tooling, and
    end-to-end operator exercises remain in `PRIVACY_OPERATIONS_PLAN.md`.
-8. Next: run the Phase 4 production-readiness review, inventory every remaining
-   repository versus target-deployment gate, and close the highest-risk
-   repository-controlled gaps without inventing external evidence.
+8. Completed repository boundary: the Phase 4 production-readiness inventory is
+   recorded in `PRODUCTION_READINESS_REVIEW.md`; vulnerable Python/npm/image
+   findings were remediated at the high/critical gate, GitHub Actions are
+   pinned by immutable commit, Dependabot is configured, and CI now runs
+   secret, dependency, and container scans. Remaining moderate Cornerstone/VTK
+   advisories require a future major viewer upgrade; target, operator,
+   integration, and legal evidence remains explicitly separate.
+9. Next: add privacy-safe operator runbooks for security incidents, degraded
+   storage/database/Redis, key compromise, deploy, and rollback without
+   inventing target contacts or legal decisions.

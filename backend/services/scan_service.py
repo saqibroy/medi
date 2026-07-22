@@ -57,7 +57,7 @@ def require_scan_ready(scan: Scan) -> Scan:
     if scan.ingestion_status in {"pending", "processing"}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan ingestion is not ready yet")
     if scan.ingestion_status == "failed":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=scan.ingestion_error or "Scan ingestion failed")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=scan.ingestion_error or "Scan ingestion failed")
     if scan.ingestion_status != "ready":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not available")
     return scan
@@ -207,7 +207,7 @@ def create_uploaded_scan_for_user(
         validate_upload_hint(original_filename, content_type)
         validate_upload_size(content)
     except ImagingIngestionError as error:
-        status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE if "size limit" in str(error) else status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+        status_code = status.HTTP_413_CONTENT_TOO_LARGE if "size limit" in str(error) else status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
         raise HTTPException(status_code=status_code, detail=str(error)) from error
 
     scan_id = uuid4()
@@ -261,7 +261,7 @@ def reprocess_scan_for_user(db: Session, scan_id: UUID, current_user: User) -> S
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only failed scans can be reprocessed")
     storage = _storage()
     if not storage.exists(scan.file_path) or not scan.storage_key:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Original scan file is unavailable for reprocessing")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Original scan file is unavailable for reprocessing")
 
     content = storage.get_bytes(scan.file_path)
     preview_prefix = f"{scan.storage_key}/derived/preview"

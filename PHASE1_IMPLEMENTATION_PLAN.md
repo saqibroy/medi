@@ -427,6 +427,11 @@ CI verification:
   aware deadlines, and executed-deletion-receipt enforcement for erasure.
   Target legal decisions and case/delivery tooling remain in
   `PRIVACY_OPERATIONS_PLAN.md`.
+- Production-readiness P0 supply-chain controls now upgrade vulnerable backend
+  dependencies, patch frontend transitive high findings through npm overrides,
+  scan repository history for secrets, scan backend/frontend runtime images,
+  pin GitHub Actions by immutable commit, and configure Dependabot. Remaining
+  moderate Cornerstone/VTK advisories require a future major viewer upgrade.
 
 ## Next Engineering Priorities
 
@@ -458,5 +463,12 @@ CI verification:
    data-minimized privacy-request lifecycle with keyed subject references,
    two-person identity verification, deadline evidence, and governed erasure
    handoff. Deployment gates remain in `PRIVACY_OPERATIONS_PLAN.md`.
-8. Next: run the Phase 4 production-readiness review and separate remaining
-   repository work from target-environment, operator, and legal evidence.
+8. Completed repository boundary: the Phase 4 production-readiness review now
+   separates repository work from target-environment, operator, integration,
+   and legal evidence in `PRODUCTION_READINESS_REVIEW.md`. Dependency
+   remediation and automated secret/dependency/container scanning are
+   implemented for the high/critical gate.
+9. Next: add privacy-safe operator runbooks for security incidents, degraded
+   services, key compromise, deploy, and rollback. Target contacts, legal
+   notification decisions, and provider-specific commands remain deployment
+   inputs.

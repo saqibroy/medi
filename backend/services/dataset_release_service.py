@@ -387,7 +387,7 @@ def get_release(db: Session, release_id: UUID, current_user: User) -> dict[str, 
 
 def revoke_release(db: Session, release_id: UUID, reason_code: str, current_user: User) -> dict[str, Any]:
     if reason_code not in REVOCATION_REASON_CODES:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported release revocation reason")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unsupported release revocation reason")
     release = db.get(DatasetRelease, release_id)
     if release is None or release.organization_id != current_user.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset release not found")
