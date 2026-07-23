@@ -144,7 +144,7 @@ Status:
 - [x] Scan and annotation access is organization-scoped through projects.
 - [x] Annotation creation validates scan and label project consistency.
 - [x] Role-based authorization enforces admin, annotator, and reviewer mutation rules.
-- [x] A fail-closed 88-route policy matrix and complete cross-organization
+- [x] A fail-closed 90-route policy matrix and complete cross-organization
   object-path tests enforce opaque tenant boundaries; annotation project,
   label, and assignee references are scoped before validation.
 
@@ -503,9 +503,13 @@ CI verification:
     `no-new-privileges`, restricted `/tmp`, and only the backend development
     storage volume writable. Runtime CI proves denial and required write paths;
     target controls remain in `CONTAINER_HARDENING_PLAN.md`.
-13. Completed repository boundary: close the fail-closed 88-route object-
+13. Completed repository boundary: close the fail-closed 90-route object-
     authorization matrix across paths, collections, queries, and body refs.
 14. Completed repository boundary: replace annotation-history cascade loss
     with value-free immutable tombstones for direct and lifecycle deletion.
-15. Next: design retained private dataset-release/export artifacts with
-    immutable checksums and explicit lifecycle semantics.
+15. Completed repository boundary: create tenant-private, content-addressed
+    dataset-release artifacts with append-only object evidence, verified
+    authenticated downloads, revocation-aware access, retained deletion
+    semantics, and legacy materialization.
+16. Next: design organization-wide governed deletion and revocation across
+    application and target-service state.

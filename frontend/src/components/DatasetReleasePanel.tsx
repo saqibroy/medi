@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { createDatasetRelease, getDatasetRelease, listDatasetReleases, revokeDatasetRelease } from "../api/projectsApi";
+import { createDatasetRelease, downloadDatasetReleaseArtifact, getDatasetRelease, listDatasetReleases, materializeDatasetReleaseArtifact, revokeDatasetRelease } from "../api/projectsApi";
 import type { DatasetRelease, DatasetReleaseReason, DatasetReleaseSummary } from "../types/project";
 
 interface DatasetReleasePanelProps {
@@ -77,6 +77,32 @@ export function DatasetReleasePanel({ projectId, csrfToken, canManage }: Dataset
     }
   }
 
+  async function handleMaterialize(releaseId: string): Promise<void> {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await materializeDatasetReleaseArtifact(releaseId, csrfToken);
+      setSelectedRelease(await getDatasetRelease(releaseId, csrfToken));
+      await refresh();
+    } catch (apiError) {
+      setError(apiError instanceof Error ? apiError.message : "Could not create retained release artifact");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleDownload(releaseId: string): Promise<void> {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await downloadDatasetReleaseArtifact(releaseId, csrfToken);
+    } catch (apiError) {
+      setError(apiError instanceof Error ? apiError.message : "Could not download retained release artifact");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   return (
     <section className="border-b border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-2">
@@ -115,10 +141,34 @@ export function DatasetReleasePanel({ projectId, csrfToken, canManage }: Dataset
         ))}
       </div>
       {selectedRelease ? (
-        <details className="mt-3" open>
-          <summary className="cursor-pointer text-xs font-medium text-slate-700">Release v{selectedRelease.version} manifest</summary>
-          <pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-950 p-2 text-[10px] text-slate-100">{JSON.stringify(selectedRelease.manifest, null, 2)}</pre>
-        </details>
+        <div className="mt-3 space-y-2">
+          <div className="rounded-md border border-slate-200 p-2 text-xs">
+            <p className="font-medium text-slate-700">Retained private artifact</p>
+            {selectedRelease.artifacts[0] ? (
+              <>
+                <p className="mt-1 font-mono text-[10px] text-slate-500">{selectedRelease.artifacts[0].checksum_sha256}</p>
+                <p className="mt-1 text-slate-500">{selectedRelease.artifacts[0].byte_size} bytes · checksum verified on download</p>
+                <button
+                  className="mt-2 rounded border border-slate-300 px-2 py-1 text-slate-700 disabled:text-slate-400"
+                  disabled={isLoading || selectedRelease.status === "revoked"}
+                  onClick={() => void handleDownload(selectedRelease.id)}
+                >
+                  {selectedRelease.status === "revoked" ? "Download disabled after revocation" : "Download retained artifact"}
+                </button>
+              </>
+            ) : canManage ? (
+              <button className="mt-2 rounded border border-slate-300 px-2 py-1" disabled={isLoading} onClick={() => void handleMaterialize(selectedRelease.id)}>
+                Create artifact for legacy release
+              </button>
+            ) : (
+              <p className="mt-1 text-slate-500">This legacy release has no retained artifact.</p>
+            )}
+          </div>
+          <details open>
+            <summary className="cursor-pointer text-xs font-medium text-slate-700">Release v{selectedRelease.version} manifest</summary>
+            <pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-950 p-2 text-[10px] text-slate-100">{JSON.stringify(selectedRelease.manifest, null, 2)}</pre>
+          </details>
+        </div>
       ) : null}
     </section>
   );

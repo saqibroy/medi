@@ -11,7 +11,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import DatabaseError
 
-from backend.models import AnnotationHistory, AnnotationHistoryTombstone, DataRetentionPolicy, Organization, SecurityAuditEvent, User
+from backend.models import AnnotationHistory, AnnotationHistoryTombstone, DataRetentionPolicy, DatasetReleaseArtifact, Organization, SecurityAuditEvent, User
 from backend.security import hash_password
 from backend.services import data_lifecycle_service
 from backend.services.audit_service import verify_integrity
@@ -255,6 +255,7 @@ async def test_deletion_requires_policy_hold_clearance_separate_approval_and_ope
         assert release.status_code == 201
         assert requested.status_code == 201
         assert requested.json()["inventory"]["scans"] == 3
+        assert requested.json()["inventory"]["dataset_release_artifacts"] == 1
         assert "name" not in requested.json()["inventory"]
         assert same_actor_approval.status_code == 409
         assert held_approval.status_code == 409
@@ -271,6 +272,13 @@ async def test_deletion_requires_policy_hold_clearance_separate_approval_and_ope
 
         session_factory = app.state.test_session_factory
         with session_factory() as db:
+            retained_artifact = db.scalar(
+                select(DatasetReleaseArtifact).where(
+                    DatasetReleaseArtifact.release_id == UUID(release.json()["id"])
+                )
+            )
+            assert retained_artifact is not None
+            retained_artifact_key = retained_artifact.storage_key
             operator = db.scalar(select(User).where(User.email == "deletion-operator@test.local"))
             assert operator is not None
             with pytest.raises(Exception, match="operator must differ"):
@@ -301,6 +309,7 @@ async def test_deletion_requires_policy_hold_clearance_separate_approval_and_ope
             assert retained_tombstone.history_entry_count == 1
             assert retained_tombstone.action_counts == {"updated": 1}
             assert receipt.deleted_counts["annotation_history_tombstones_retained"] == 1
+            assert receipt.deleted_counts["dataset_release_artifacts_retained"] == 1
             assert db.scalar(
                 select(AnnotationHistory).where(AnnotationHistory.annotation_id == UUID(annotation["id"]))
             ) is None
@@ -317,10 +326,16 @@ async def test_deletion_requires_policy_hold_clearance_separate_approval_and_ope
 
         assert not (tmp_path / "org" / project["organization_id"] / "project" / project_id).exists()
         assert not (tmp_path / "segmentation_masks" / "org" / project["organization_id"] / "project" / project_id).exists()
+        assert LocalPrivateStorage(tmp_path).exists(retained_artifact_key)
         projects_after = await client.get("/projects", headers=auth_headers(admin_token))
         assert all(item["id"] != project_id for item in projects_after.json())
         retained_release = await client.get(f"/dataset-releases/{release.json()['id']}", headers=auth_headers(admin_token))
         assert retained_release.json()["status"] == "revoked"
+        blocked_artifact = await client.get(
+            f"/dataset-releases/{release.json()['id']}/artifact",
+            headers=auth_headers(admin_token),
+        )
+        assert blocked_artifact.status_code == 410
         loaded = await client.get(
             f"/governance/deletion-requests/{requested.json()['id']}",
             headers=auth_headers(admin_token),

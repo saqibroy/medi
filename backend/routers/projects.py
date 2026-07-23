@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import CocoExportRead, CsvExportRead, DatasetReleaseRead, DatasetReleaseRevoke, DatasetReleaseSummaryRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectStatsRead, ProjectUpdate, ScanRead, SegmentationExportRead, YoloExportRead
+from ..schemas import CocoExportRead, CsvExportRead, DatasetReleaseArtifactRead, DatasetReleaseRead, DatasetReleaseRevoke, DatasetReleaseSummaryRead, LabelCreate, LabelRead, LabelUpdate, ProjectCreate, ProjectExportRead, ProjectRead, ProjectStatsRead, ProjectUpdate, ScanRead, SegmentationExportRead, YoloExportRead
 from ..security import get_current_user, require_admin
 from ..services import dataset_release_service, project_service, scan_service
 from ..services.audit_service import mark_request_target
@@ -78,6 +78,42 @@ async def get_dataset_release(
     """Return one stable release manifest without private storage paths."""
 
     return dataset_release_service.get_release(db, release_id, current_user)
+
+
+@router.post("/dataset-releases/{release_id}/artifact", response_model=DatasetReleaseArtifactRead)
+async def materialize_dataset_release_artifact(
+    request: Request,
+    release_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> DatasetReleaseArtifactRead:
+    """Idempotently create a retained artifact for a pre-existing release."""
+
+    artifact = dataset_release_service.materialize_release_artifact(db, release_id, current_user)
+    mark_request_target(request, release_id)
+    return artifact
+
+
+@router.get("/dataset-releases/{release_id}/artifact")
+async def download_dataset_release_artifact(
+    release_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """Stream integrity-checked bytes through the authenticated API boundary."""
+
+    artifact, content = dataset_release_service.download_release_artifact(db, release_id, current_user)
+    file_name = f"medi-release-{str(release_id)[:8]}-{artifact.checksum_sha256[:12]}.json"
+    return Response(
+        content=content,
+        media_type=artifact.media_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="{file_name}"',
+            "X-Content-SHA256": artifact.checksum_sha256,
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/dataset-releases/{release_id}/revoke", response_model=DatasetReleaseRead)

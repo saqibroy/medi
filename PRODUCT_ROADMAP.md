@@ -213,9 +213,9 @@ Definition of done:
    releases now freeze ready scan object versions/checksums, label taxonomy,
    approved annotation lineage, and segmentation masks. Superseding and
    revocation append lifecycle events; tenant-safe APIs, admin controls, audit
-   coverage, and checksum-stability tests are implemented. Target S3 VersionId,
-   retained artifact/WORM, and retention approval remain deployment gates in
-   `DATASET_RELEASE_PLAN.md`.
+   coverage, checksum-stability tests, and retained portable artifacts are
+   implemented. Target S3 VersionId, WORM, and retention approval remain
+   deployment gates in `DATASET_RELEASE_PLAN.md`.
 5. Completed repository boundary: encrypted PostgreSQL/synthetic-object restore
    drills, versioned retention/RPO/RTO policy, append-only legal holds,
    source-withdrawal release revocation, two-person project/scan deletion,
@@ -262,7 +262,7 @@ Definition of done:
     mount. CI proves denied root writes, required writable paths, and live
     health; target runtime policy and rollout evidence remain in
     `CONTAINER_HARDENING_PLAN.md`.
-13. Completed repository boundary: all 88 API routes now have a fail-closed
+13. Completed repository boundary: all 90 API routes now have a fail-closed
     authentication/role policy matrix; every parameterized route and collection
     is exercised against a second organization; body/query references are
     tenant-scoped; and annotations cannot be reparented away from their scan.
@@ -274,5 +274,14 @@ Definition of done:
     summaries, timestamps, and keyed integrity hashes remain; geometry, notes,
     names, pixels, filenames, storage keys, and metadata do not. Evidence is in
     `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`.
-15. Next: design retained private dataset-release/export artifacts with
-    immutable checksums and explicit lifecycle semantics.
+15. Completed repository boundary: each new immutable dataset release now
+    creates a private, content-addressed portable manifest artifact; legacy
+    releases can be materialized idempotently. Append-only metadata records
+    object version/checksum/size without exposing keys, downloads re-verify the
+    object and fail closed, revocation denies delivery, lifecycle deletion
+    retains separately namespaced artifacts, and the browser exposes safe
+    download controls. Transient live exports remain response-only. Target S3
+    VersionId, WORM, and approved retention evidence remain deployment gates in
+    `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
+16. Next: design organization-wide governed deletion and revocation across
+    sessions, caches/queues, retained releases, backups, and target services.

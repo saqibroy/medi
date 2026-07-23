@@ -6,6 +6,9 @@ and tenant-authorized short-lived preview URLs are implemented and tested for
 originals, previews, reprocessing, and segmentation masks. Encrypted disposable
 restore automation, every-version operator purge, versioned retention policies,
 legal holds, two-person approval, and value-free receipts are also implemented.
+Retained dataset-release manifests now use a separate tenant/project namespace,
+append-only object evidence, integrity-checked downloads, and a non-expiring
+`dataset-release` data class.
 Target bucket/vault deployment, approved policy values, alerts, organization
 deletion, and signed recovery/deletion drills remain production gates.
 
@@ -33,6 +36,7 @@ org/{organization_id}/project/{project_id}/scan/{scan_id}/derived/preview/{slice
 org/{organization_id}/project/{project_id}/scan/{scan_id}/metadata/ingestion.json
 org/{organization_id}/project/{project_id}/scan/{scan_id}/annotations/{annotation_id}/mask/{slice_index}.png
 org/{organization_id}/project/{project_id}/scan/{scan_id}/annotations/{annotation_id}/mask/{slice_index}.metadata.json
+org/{organization_id}/retained-release/project/{project_id}/release-artifact/{release_id}/{manifest_sha256}.json
 ```
 
 Rules:
@@ -43,6 +47,9 @@ Rules:
 - Public API responses may include scan IDs and metadata, but not storage keys.
 - Services may store object keys internally in `file_path` and `storage_key`
   until a dedicated object table is introduced.
+- Retained release keys sit outside the ordinary project/scan purge prefix;
+  deletion revokes access and records retention rather than silently destroying
+  immutable release evidence.
 
 ## Storage Interface
 
@@ -137,6 +144,9 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
     drills with synthetic evidence.
 12. [x] Add encrypted disposable PostgreSQL/object recovery automation in CI
     plus governed project/scan deletion and every-version operator purge.
+13. [x] Add content-addressed retained release artifacts, append-only storage
+    evidence, verified authenticated downloads, a separate non-expiring data
+    class, revocation-aware access, and legacy materialization.
 
 ## Acceptance Criteria
 
@@ -147,6 +157,9 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
 - Cross-organization tests prove signed URLs cannot be created for another
   tenant's scans.
 - Docker Compose remains local-only and requires no cloud credentials.
+- Retained release artifacts never expose storage keys, fail closed on object
+  version/checksum/size mismatch, survive project/scan deletion, and cannot be
+  downloaded after revocation.
 
 ## Repository Verification Evidence
 

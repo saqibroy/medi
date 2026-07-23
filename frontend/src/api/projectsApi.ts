@@ -1,4 +1,4 @@
-import type { DatasetRelease, DatasetReleaseReason, DatasetReleaseSummary, Label, Project, ProjectExportResponse, ProjectPayload } from "../types/project";
+import type { DatasetRelease, DatasetReleaseArtifact, DatasetReleaseReason, DatasetReleaseSummary, Label, Project, ProjectExportResponse, ProjectPayload } from "../types/project";
 import type { ProjectReviewStats, Scan } from "../types/scan";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -56,6 +56,31 @@ export async function revokeDatasetRelease(releaseId: string, reasonCode: Datase
     method: "POST",
     body: JSON.stringify({ reason_code: reasonCode }),
   });
+}
+
+export async function materializeDatasetReleaseArtifact(releaseId: string, csrfToken: string): Promise<DatasetReleaseArtifact> {
+  return request<DatasetReleaseArtifact>(`/dataset-releases/${releaseId}/artifact`, csrfToken, { method: "POST" });
+}
+
+export async function downloadDatasetReleaseArtifact(releaseId: string, csrfToken: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/dataset-releases/${releaseId}/artifact`, {
+    credentials: "include",
+    headers: { "X-CSRF-Token": csrfToken },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { detail?: string };
+    throw new Error(body.detail ?? `Artifact download failed: ${response.status}`);
+  }
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const fileName = disposition.match(/filename="([^"]+)"/)?.[1] ?? `medi-release-${releaseId.slice(0, 8)}.json`;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function exportProjectForMl(projectId: string, csrfToken: string): Promise<ProjectExportResponse> {

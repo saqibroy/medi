@@ -20,6 +20,7 @@ from ..models import (
     DataDeletionRequest,
     DataRetentionPolicy,
     DatasetRelease,
+    DatasetReleaseArtifact,
     DatasetReleaseEvent,
     Label,
     LegalHold,
@@ -273,15 +274,25 @@ def inventory_scope(db: Session, organization_id: UUID, scope_type: str, scope_i
     scan_ids = [scan.id for scan in scans]
     annotation_ids = list(db.scalars(select(Annotation.id).where(Annotation.scan_id.in_(scan_ids)))) if scan_ids else []
     release_count = 0
+    release_ids: list[UUID] = []
     if scope_type == "project":
-        release_count = db.scalar(select(func.count()).select_from(DatasetRelease).where(DatasetRelease.project_id == project.id)) or 0
+        release_ids = list(db.scalars(select(DatasetRelease.id).where(DatasetRelease.project_id == project.id)))
+        release_count = len(release_ids)
     else:
-        releases = db.scalars(select(DatasetRelease).where(DatasetRelease.project_id == project.id))
-        release_count = sum(
-            1
+        releases = list(db.scalars(select(DatasetRelease).where(DatasetRelease.project_id == project.id)))
+        release_ids = [
+            release.id
             for release in releases
             if any(scan.get("scan_id") == str(scope_id) for scan in release.manifest.get("dataset", {}).get("scans", []))
-        )
+        ]
+        release_count = len(release_ids)
+    release_artifact_count = 0
+    if release_ids:
+        release_artifact_count = db.scalar(
+            select(func.count())
+            .select_from(DatasetReleaseArtifact)
+            .where(DatasetReleaseArtifact.release_id.in_(release_ids))
+        ) or 0
     history_count = (
         db.scalar(select(func.count()).select_from(AnnotationHistory).where(AnnotationHistory.annotation_id.in_(annotation_ids))) or 0
         if annotation_ids
@@ -312,6 +323,7 @@ def inventory_scope(db: Session, organization_id: UUID, scope_type: str, scope_i
         "annotation_history_tombstones": tombstone_count,
         "segmentation_masks": mask_count,
         "dataset_releases": release_count,
+        "dataset_release_artifacts": release_artifact_count,
         "object_references": original_references + mask_count,
     }
 
@@ -646,6 +658,7 @@ def execute_deletion_request(
                 live_inventory["annotation_history_tombstones"] + len(retained_tombstones)
             ),
             "segmentation_masks": live_inventory["segmentation_masks"],
+            "dataset_release_artifacts_retained": live_inventory["dataset_release_artifacts"],
         }
         receipt_material = {
             "id": receipt_id,

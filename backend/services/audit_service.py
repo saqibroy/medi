@@ -57,6 +57,16 @@ AUDITED_ROUTES: dict[tuple[str, str], AuditRoute] = {
     ("GET", "/projects/{project_id}/releases"): AuditRoute("dataset_release.list", "project", "project_id"),
     ("POST", "/projects/{project_id}/releases"): AuditRoute("dataset_release.create", "dataset_release"),
     ("GET", "/dataset-releases/{release_id}"): AuditRoute("dataset_release.read", "dataset_release", "release_id"),
+    ("POST", "/dataset-releases/{release_id}/artifact"): AuditRoute(
+        "dataset_release_artifact.create",
+        "dataset_release",
+        "release_id",
+    ),
+    ("GET", "/dataset-releases/{release_id}/artifact"): AuditRoute(
+        "dataset_release_artifact.download",
+        "dataset_release",
+        "release_id",
+    ),
     ("POST", "/dataset-releases/{release_id}/revoke"): AuditRoute("dataset_release.revoke", "dataset_release", "release_id"),
     ("GET", "/governance/retention-policies"): AuditRoute("retention_policy.list", "organization"),
     ("POST", "/governance/retention-policies"): AuditRoute("retention_policy.create", "retention_policy"),
