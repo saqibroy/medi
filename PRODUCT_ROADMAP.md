@@ -219,8 +219,9 @@ Definition of done:
 5. Completed repository boundary: encrypted PostgreSQL/synthetic-object restore
    drills, versioned retention/RPO/RTO policy, append-only legal holds,
    source-withdrawal release revocation, two-person project/scan deletion,
-   every-version operator purge, and checksum receipts. Target infrastructure,
-   organization deletion, and approved policy values remain deployment gates in
+   every-version operator purge, and checksum receipts. Organization scope now
+   locks sessions, purges working data, and records target dispositions. Target
+   infrastructure and approved policy values remain deployment gates in
    `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
 6. Completed repository boundary: external AI defaults off with no provider
    call; provider/model versions, project flows, exact data classes/origins,
@@ -283,5 +284,13 @@ Definition of done:
     download controls. Transient live exports remain response-only. Target S3
     VersionId, WORM, and approved retention evidence remain deployment gates in
     `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
-16. Next: design organization-wide governed deletion and revocation across
-    sessions, caches/queues, retained releases, backups, and target services.
+16. Completed repository boundary: organization-scoped deletion now locks the
+    workspace and revokes sessions before purge, applies every child legal hold,
+    removes clinical working rows and ordinary object versions, tombstones
+    identities/projects, revokes releases/external-AI/processing approvals, and
+    records controlled cache/queue/retained-artifact/backup/target dispositions
+    in an integrity-protected receipt. Immutable evidence remains policy-bound.
+    See `ORGANIZATION_DELETION_PLAN.md`.
+17. Next: implement background ingestion jobs/workers for large studies and
+    integrate scoped cancellation/draining with governed deletion before a
+    queue is enabled.

@@ -53,5 +53,6 @@ gates.
 ## Follow-on
 
 Retained private dataset-release artifacts are now implemented and evidenced in
-`RETAINED_RELEASE_ARTIFACT_PLAN.md`. Organization-wide governed deletion and
-revocation is the next repository task.
+`RETAINED_RELEASE_ARTIFACT_PLAN.md`. Organization-wide governed deletion now
+retains the same value-free tombstones while removing tenant working data; see
+`ORGANIZATION_DELETION_PLAN.md`.

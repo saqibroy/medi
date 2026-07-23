@@ -82,9 +82,11 @@ keys, creator names, and image pixels are excluded by the release builder.
 These controls are an engineering foundation, not a lawful basis for retaining
 health-related data and not automatic GDPR compliance.
 
-## Next Repository Task
+## Follow-On Repository Boundary
 
-Design organization-wide governed deletion and revocation, including
-session/cache/queue, retained-release, backup, and target-service enumeration,
-without weakening immutable evidence or inventing an unapproved retention
-policy.
+Organization deletion is now implemented in
+`ORGANIZATION_DELETION_PLAN.md`. It revokes every release and workspace session,
+purges the ordinary project namespace, retains the separately namespaced
+artifact pending approved policy, blocks all authentication, and records the
+artifact count/disposition in the checksum-protected receipt. Exceptional
+erasure and target WORM/backup behavior remain approval and deployment gates.

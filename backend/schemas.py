@@ -20,7 +20,7 @@ DatasetReleaseStatus = Literal["active", "superseded", "revoked"]
 DatasetReleaseAction = Literal["created", "superseded", "revoked"]
 DatasetReleaseReason = Literal["quality_issue", "source_withdrawn", "policy_change", "superseded", "other"]
 GovernanceScope = Literal["organization", "project", "scan"]
-DeletionScope = Literal["project", "scan"]
+DeletionScope = GovernanceScope
 LegalHoldReason = Literal["litigation", "regulatory", "security_incident", "customer_request"]
 DeletionReason = Literal["erasure_request", "source_withdrawal", "contract_end", "duplicate_data"]
 UserRole = Literal["admin", "annotator", "reviewer"]
@@ -346,6 +346,7 @@ class DataDeletionReceiptRead(BaseModel):
     object_versions_deleted: int
     delete_markers_deleted: int
     revoked_releases: int
+    target_dispositions: dict[str, Any]
     backup_disposition: Literal["expires_per_policy", "not_applicable"]
     backup_expires_at: datetime | None
     approved_by_user_id: UUID

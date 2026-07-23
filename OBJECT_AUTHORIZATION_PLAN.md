@@ -55,5 +55,7 @@ The annotation-history tombstone and retained-release-artifact tasks are now
 complete and evidenced in `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md` and
 `RETAINED_RELEASE_ARTIFACT_PLAN.md`. The artifact materialization/download
 routes are included in the fail-closed matrix and cross-tenant probes.
-Organization-wide governed deletion and revocation is the next repository
-task.
+Organization-wide governed deletion and revocation is now complete and
+evidenced in `ORGANIZATION_DELETION_PLAN.md`. Its post-execution authentication
+tests preserve cross-tenant continuity while the deleted organization returns
+no accessible objects.

@@ -89,6 +89,13 @@ receipts count retained artifacts, source withdrawal revokes their releases,
 and authenticated downloads return `410` while the append-only object evidence
 remains. See `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
 
+The organization-deletion increment extends the same three-person workflow to
+the whole tenant. It locks authentication and sessions before purge, treats
+every child hold as blocking, deletes working rows and ordinary object versions,
+tombstones identities/projects, revokes releases and outbound approvals, and
+checksum-covers explicit target dispositions. Failure remains locked and the
+same request can retry. See `ORGANIZATION_DELETION_PLAN.md`.
+
 ## Remaining Deployment Gates
 
 - [ ] Approve organization-specific retention periods, RPO/RTO, lawful erasure
@@ -99,5 +106,5 @@ remains. See `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
   evidence, including every S3 version/delete marker and backup expiry.
 - [ ] Obtain privacy/security/legal approval before using these controls for
   identifiable or pseudonymized patient data.
-- [ ] Approve organization-deletion and exceptional-erasure behavior for
+- [ ] Approve retained-release and exceptional-erasure behavior for
   retained release artifacts and referenced object versions.

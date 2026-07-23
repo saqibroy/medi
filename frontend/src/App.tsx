@@ -529,7 +529,7 @@ export default function App() {
       <aside className="flex min-h-0 flex-col border-l border-slate-200 bg-white lg:h-full">
         <ScanMetadataPanel scanId={selectedScan?.id} csrfToken={csrfToken} />
         {canManageWorkspace ? <SessionManagementPanel csrfToken={csrfToken} /> : null}
-        {canManageWorkspace ? <DataGovernancePanel projectId={selectedProject?.id} csrfToken={csrfToken} /> : null}
+        {canManageWorkspace ? <DataGovernancePanel organizationId={user.organization_id} projectId={selectedProject?.id} csrfToken={csrfToken} /> : null}
         {canManageWorkspace ? <PrivacyGovernancePanel projectId={selectedProject?.id} csrfToken={csrfToken} /> : null}
         {canManageWorkspace ? <ExternalAIGovernancePanel projectId={selectedProject?.id} csrfToken={csrfToken} /> : null}
         <DatasetReleasePanel projectId={selectedProject?.id} csrfToken={csrfToken} canManage={canManageWorkspace} />

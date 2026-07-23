@@ -18,9 +18,19 @@ class Organization(Base):
     """A customer workspace that owns projects, users, and imaging datasets."""
 
     __tablename__ = "organizations"
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle_status IN ('active', 'deletion_in_progress', 'deleted')",
+            name="ck_organization_lifecycle_status",
+        ),
+    )
 
     id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="active", server_default="active"
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     users: Mapped[list["User"]] = relationship(back_populates="organization")
@@ -564,7 +574,10 @@ class DataDeletionRequest(Base):
 
     __tablename__ = "data_deletion_requests"
     __table_args__ = (
-        CheckConstraint("scope_type IN ('project', 'scan')", name="ck_data_deletion_request_scope"),
+        CheckConstraint(
+            "scope_type IN ('organization', 'project', 'scan')",
+            name="ck_data_deletion_request_scope",
+        ),
         CheckConstraint(
             "reason_code IN ('erasure_request', 'source_withdrawal', 'contract_end', 'duplicate_data')",
             name="ck_data_deletion_request_reason",
@@ -658,6 +671,7 @@ class DataDeletionReceipt(Base):
     object_versions_deleted: Mapped[int] = mapped_column(Integer, nullable=False)
     delete_markers_deleted: Mapped[int] = mapped_column(Integer, nullable=False)
     revoked_releases: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_dispositions: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     backup_disposition: Mapped[str] = mapped_column(String(30), nullable=False)
     backup_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)

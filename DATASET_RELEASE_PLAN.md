@@ -64,5 +64,6 @@ must not alter its stored manifest or checksum.
   authorization, integrity-checked download, and storage lifecycle semantics.
 - [ ] Configure and prove long-term S3 Object Lock or independent WORM
   replication when the approved customer release policy requires it.
-- [ ] Approve retention, legal-hold, source-withdrawal, and organization-deletion
-  behavior for releases and their referenced object versions.
+- [ ] Approve retention, legal-hold, source-withdrawal, and exceptional-erasure
+  behavior for releases and their referenced object versions. Repository
+  organization deletion revokes all releases and retains inaccessible evidence.
