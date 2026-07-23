@@ -196,6 +196,8 @@ or pseudonymized data is enabled, the deployment owner must:
   runbook/container checks, diff validation, rebuilt Compose health at
   `20260723_0017`, and authenticated live probes pass. Final target approvals
   and signed deployment evidence remain in `ORGANIZATION_DELETION_PLAN.md`.
+  Pull request #31 passed seven gates, merged as `1ff77e4`, and post-merge
+  `main` run `30009558996` passed the same seven gates.
 
 ## Primary References
 
