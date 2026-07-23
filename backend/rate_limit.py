@@ -18,6 +18,9 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 
+RATE_LIMIT_WINDOW_SECONDS = 60
+
+
 @dataclass(frozen=True)
 class RateLimitRule:
     name: str
@@ -77,7 +80,7 @@ class RequestRateLimitMiddleware(BaseHTTPMiddleware):
         app: object,
         login_limit: int,
         sensitive_limit: int,
-        window_seconds: int = 60,
+        window_seconds: int = RATE_LIMIT_WINDOW_SECONDS,
         backend: str = "memory",
         redis_url: str | None = None,
         identity_secret: str = "development-rate-limit-key",

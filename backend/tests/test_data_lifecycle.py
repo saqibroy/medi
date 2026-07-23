@@ -11,7 +11,25 @@ from alembic.config import Config
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import DatabaseError
 
-from backend.models import AnnotationHistory, AnnotationHistoryTombstone, DataRetentionPolicy, DatasetReleaseArtifact, Organization, SecurityAuditEvent, User
+from backend.models import (
+    AnnotationHistory,
+    AnnotationHistoryTombstone,
+    DataDeletionEvent,
+    DataRetentionPolicy,
+    DatasetReleaseArtifact,
+    DatasetReleaseEvent,
+    ExternalAIDataFlowApproval,
+    ExternalAIDataFlowEvent,
+    ExternalAIProviderApproval,
+    ExternalAIProviderEvent,
+    Organization,
+    PrivacyProcessingRecordEvent,
+    Project,
+    Scan,
+    SecurityAuditEvent,
+    User,
+    UserSession,
+)
 from backend.security import hash_password
 from backend.services import data_lifecycle_service
 from backend.services.audit_service import verify_integrity
@@ -63,6 +81,31 @@ def _policy_payload(days: int = 0, reference: str = "POLICY-2026-001") -> dict[s
         "backup_retention_days": 30,
         "rpo_hours": 4,
         "rto_hours": 8,
+    }
+
+
+def _processing_payload(policy_id: str) -> dict[str, object]:
+    return {
+        "activity_key": "synthetic-organization-deletion",
+        "organization_role": "processor",
+        "purpose_code": "research_dataset_annotation",
+        "lawful_basis": "contract",
+        "health_data_processed": True,
+        "article9_condition": "research_statistics",
+        "data_subject_categories": ["research_participants"],
+        "personal_data_categories": ["pseudonymized_medical_images"],
+        "recipient_categories": ["authorized_workspace_users"],
+        "processor_references": ["PROCESSOR-SYNTHETIC"],
+        "processing_locations": ["eu-test-1"],
+        "transfer_mechanism": "not_applicable",
+        "transfer_safeguard_reference": None,
+        "retention_policy_id": policy_id,
+        "security_measure_references": ["SECURITY-SYNTHETIC"],
+        "dpia_required": True,
+        "dpia_outcome": "approved",
+        "dpia_reference": "DPIA-SYNTHETIC",
+        "dpo_review_reference": "DPO-SYNTHETIC",
+        "approval_reference": "ROPA-SYNTHETIC",
     }
 
 
@@ -359,6 +402,284 @@ async def test_deletion_requires_policy_hold_clearance_separate_approval_and_ope
 
 
 @pytest.mark.anyio
+async def test_organization_deletion_locks_access_purges_working_data_and_enumerates_targets(
+    tmp_path: Path,
+) -> None:
+    app = build_test_app(tmp_path)
+    _add_governance_admins(app)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        admin_token = await login(client, "admin@test.local")
+        privacy_token = await login(client, "privacy-admin@test.local")
+        outside_token = await login(client, "outside-admin@test.local")
+        project = (await client.get("/projects", headers=auth_headers(admin_token))).json()[0]
+        organization_id = project["organization_id"]
+
+        policy = await client.post(
+            "/governance/retention-policies",
+            json=_policy_payload(),
+            headers=auth_headers(admin_token),
+        )
+        release = await client.post(
+            f"/projects/{project['id']}/releases",
+            headers=auth_headers(admin_token),
+        )
+        processing_record = await client.post(
+            "/governance/privacy/processing-records",
+            json=_processing_payload(policy.json()["id"]),
+            headers=auth_headers(admin_token),
+        )
+        assert policy.status_code == 201
+        assert release.status_code == 201
+        assert processing_record.status_code == 201
+
+        session_factory = app.state.test_session_factory
+        with session_factory() as db:
+            admin = db.scalar(select(User).where(User.email == "admin@test.local"))
+            assert admin is not None
+            now = admin.created_at
+            provider = ExternalAIProviderApproval(
+                organization_id=admin.organization_id,
+                provider_key="synthetic-provider",
+                version=1,
+                display_name="Synthetic Provider",
+                model_name="synthetic-model",
+                model_version="v1",
+                purpose_code="quality_assurance",
+                endpoint_origin="https://synthetic.invalid",
+                region_code="eu-test-1",
+                data_classes=["deidentified_metadata"],
+                retention_days=0,
+                training_use_allowed=False,
+                subprocessors=[],
+                transfer_mechanism="not_applicable",
+                contract_owner_reference="CONTRACT-SYNTHETIC",
+                approval_reference="PROVIDER-SYNTHETIC",
+                created_by_user_id=admin.id,
+                created_at=now,
+            )
+            db.add(provider)
+            db.flush()
+            flow = ExternalAIDataFlowApproval(
+                organization_id=admin.organization_id,
+                project_id=UUID(project["id"]),
+                provider_approval_id=provider.id,
+                purpose_code="quality_assurance",
+                data_classes=["deidentified_metadata"],
+                approval_reference="FLOW-SYNTHETIC",
+                expires_at=None,
+                created_by_user_id=admin.id,
+                created_at=now,
+            )
+            db.add(flow)
+            db.flush()
+            db.add_all(
+                [
+                    ExternalAIProviderEvent(
+                        provider_approval_id=provider.id,
+                        organization_id=admin.organization_id,
+                        action="approved",
+                        actor_user_id=admin.id,
+                        occurred_at=now,
+                    ),
+                    ExternalAIDataFlowEvent(
+                        data_flow_id=flow.id,
+                        organization_id=admin.organization_id,
+                        action="approved",
+                        actor_user_id=admin.id,
+                        occurred_at=now,
+                    ),
+                ]
+            )
+            db.commit()
+            provider_id = provider.id
+            flow_id = flow.id
+
+        held_project = await client.post(
+            "/governance/legal-holds",
+            json={
+                "scope_type": "project",
+                "scope_id": project["id"],
+                "reason_code": "customer_request",
+                "approval_reference": "HOLD-ORG-DELETE",
+            },
+            headers=auth_headers(admin_token),
+        )
+        requested = await client.post(
+            "/governance/deletion-requests",
+            json={
+                "scope_type": "organization",
+                "scope_id": organization_id,
+                "reason_code": "contract_end",
+                "approval_reference": "DELETE-ORG-001",
+            },
+            headers=auth_headers(admin_token),
+        )
+        held_approval = await client.post(
+            f"/governance/deletion-requests/{requested.json()['id']}/approve",
+            headers=auth_headers(privacy_token),
+        )
+        released_hold = await client.post(
+            f"/governance/legal-holds/{held_project.json()['id']}/release",
+            headers=auth_headers(privacy_token),
+        )
+        approved = await client.post(
+            f"/governance/deletion-requests/{requested.json()['id']}/approve",
+            headers=auth_headers(privacy_token),
+        )
+
+        assert requested.status_code == 201
+        assert requested.json()["inventory"]["users"] == 5
+        assert requested.json()["inventory"]["active_sessions"] == 2
+        assert requested.json()["inventory"]["dataset_release_artifacts"] == 1
+        assert requested.json()["inventory"]["external_ai_providers"] == 1
+        assert requested.json()["inventory"]["privacy_processing_records"] == 1
+        assert requested.json()["inventory"]["background_queue_jobs"] == 0
+        assert held_approval.status_code == 409
+        assert released_hold.status_code == 200
+        assert approved.status_code == 200
+
+        prefix = f"org/{organization_id}/project/{project['id']}"
+        LocalPrivateStorage(tmp_path).put_bytes(
+            f"{prefix}/scan/synthetic/original/volume.bin",
+            b"synthetic organization source",
+        )
+        LocalPrivateStorage(tmp_path / "segmentation_masks").put_bytes(
+            f"{prefix}/scan/synthetic/annotations/synthetic/mask/000000.png",
+            b"synthetic organization mask",
+        )
+
+        with session_factory() as db:
+            operator = db.scalar(
+                select(User).where(User.email == "deletion-operator@test.local")
+            )
+            retained_artifact = db.scalar(
+                select(DatasetReleaseArtifact).where(
+                    DatasetReleaseArtifact.release_id == UUID(release.json()["id"])
+                )
+            )
+            assert operator is not None and retained_artifact is not None
+            retained_artifact_key = retained_artifact.storage_key
+            receipt = execute_deletion_request(
+                db,
+                UUID(requested.json()["id"]),
+                operator.id,
+                requested.json()["id"],
+            )
+            assert verify_deletion_receipt(receipt)
+            assert receipt.scope_type == "organization"
+            assert receipt.deleted_counts["organization_tombstones"] == 1
+            assert receipt.deleted_counts["user_tombstones"] == 5
+            assert receipt.deleted_counts["sessions_removed"] == 2
+            assert receipt.revoked_releases == 1
+            assert receipt.target_dispositions["sessions"] == {
+                "status": "revoked_and_removed",
+                "count": 2,
+            }
+            assert receipt.target_dispositions["rate_limit_cache"] == {
+                "status": "hashed_peer_counters_expire_by_ttl",
+                "organization_scoped_entries": 0,
+                "maximum_ttl_seconds": 60,
+            }
+            assert receipt.target_dispositions["background_queue"] == {
+                "status": "not_configured",
+                "jobs": 0,
+            }
+            assert (
+                receipt.target_dispositions["retained_release_storage"]["status"]
+                == "access_revoked_artifacts_retained_pending_approved_policy"
+            )
+            assert (
+                receipt.target_dispositions["external_ai_targets"][
+                    "processing_records_revoked"
+                ]
+                == 1
+            )
+            organization = db.get(Organization, UUID(organization_id))
+            assert organization is not None
+            assert organization.lifecycle_status == "deleted"
+            assert organization.name.startswith("Deleted organization ")
+            assert db.scalar(
+                select(UserSession)
+                .join(User, User.id == UserSession.user_id)
+                .where(User.organization_id == UUID(organization_id))
+            ) is None
+            users = list(
+                db.scalars(select(User).where(User.organization_id == UUID(organization_id)))
+            )
+            assert users
+            assert all(not user.is_active for user in users)
+            assert all(user.email.endswith("@invalid.local") for user in users)
+            projects = list(
+                db.scalars(
+                    select(Project).where(Project.organization_id == UUID(organization_id))
+                )
+            )
+            assert projects
+            assert all(project.lifecycle_status == "deleted" for project in projects)
+            assert db.scalar(
+                select(Scan)
+                .join(Project, Project.id == Scan.project_id)
+                .where(Project.organization_id == UUID(organization_id))
+            ) is None
+            release_events = list(
+                db.scalars(
+                    select(DatasetReleaseEvent).where(
+                        DatasetReleaseEvent.release_id == UUID(release.json()["id"])
+                    )
+                )
+            )
+            assert any(event.action == "revoked" for event in release_events)
+            provider_events = list(
+                db.scalars(
+                    select(ExternalAIProviderEvent).where(
+                        ExternalAIProviderEvent.provider_approval_id == provider_id
+                    )
+                )
+            )
+            flow_events = list(
+                db.scalars(
+                    select(ExternalAIDataFlowEvent).where(
+                        ExternalAIDataFlowEvent.data_flow_id == flow_id
+                    )
+                )
+            )
+            assert any(event.action == "revoked" for event in provider_events)
+            assert any(event.action == "revoked" for event in flow_events)
+            processing_events = list(
+                db.scalars(
+                    select(PrivacyProcessingRecordEvent).where(
+                        PrivacyProcessingRecordEvent.processing_record_id
+                        == UUID(processing_record.json()["id"])
+                    )
+                )
+            )
+            assert any(event.action == "revoked" for event in processing_events)
+
+        assert not (tmp_path / "org" / organization_id / "project").exists()
+        assert not (
+            tmp_path / "segmentation_masks" / "org" / organization_id / "project"
+        ).exists()
+        assert LocalPrivateStorage(tmp_path).exists(retained_artifact_key)
+        assert (
+            await client.get("/projects", headers=auth_headers(admin_token))
+        ).status_code == 401
+        client.cookies.clear()
+        login_csrf = (await client.get("/auth/csrf")).json()["csrf_token"]
+        failed_login = await client.post(
+            "/auth/login",
+            json={"email": "admin@test.local", "password": "password"},
+            headers={"X-CSRF-Token": login_csrf},
+        )
+        assert failed_login.status_code == 401
+        assert (
+            await client.get("/projects", headers=auth_headers(outside_token))
+        ).status_code == 200
+
+
+@pytest.mark.anyio
 async def test_operator_failure_is_recorded_without_deleting_database_rows(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -416,6 +737,100 @@ async def test_operator_failure_is_recorded_without_deleting_database_rows(
         assert loaded.json()["status"] == "failed"
         assert any(item["id"] == scan["id"] for item in scans_after.json())
         assert "restricted storage failure" not in loaded.text
+
+
+@pytest.mark.anyio
+async def test_failed_organization_purge_stays_locked_and_can_be_retried(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = build_test_app(tmp_path)
+    _add_governance_admins(app)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        admin_token = await login(client, "admin@test.local")
+        privacy_token = await login(client, "privacy-admin@test.local")
+        project = (await client.get("/projects", headers=auth_headers(admin_token))).json()[0]
+        await client.post(
+            "/governance/retention-policies",
+            json=_policy_payload(),
+            headers=auth_headers(admin_token),
+        )
+        requested = await client.post(
+            "/governance/deletion-requests",
+            json={
+                "scope_type": "organization",
+                "scope_id": project["organization_id"],
+                "reason_code": "contract_end",
+                "approval_reference": "DELETE-ORG-RETRY",
+            },
+            headers=auth_headers(admin_token),
+        )
+        approved = await client.post(
+            f"/governance/deletion-requests/{requested.json()['id']}/approve",
+            headers=auth_headers(privacy_token),
+        )
+        assert approved.status_code == 200
+
+        original_purge = data_lifecycle_service._purge_storage
+
+        def fail_purge(*_: object) -> None:
+            raise RuntimeError("simulated organization storage failure")
+
+        monkeypatch.setattr(data_lifecycle_service, "_purge_storage", fail_purge)
+        session_factory = app.state.test_session_factory
+        with session_factory() as db:
+            operator = db.scalar(
+                select(User).where(User.email == "deletion-operator@test.local")
+            )
+            assert operator is not None
+            operator_id = operator.id
+            with pytest.raises(RuntimeError, match="organization storage failure"):
+                execute_deletion_request(
+                    db,
+                    UUID(requested.json()["id"]),
+                    operator_id,
+                    requested.json()["id"],
+                )
+            organization = db.get(Organization, UUID(project["organization_id"]))
+            assert organization is not None
+            assert organization.lifecycle_status == "deletion_in_progress"
+            assert db.scalar(
+                select(UserSession)
+                .join(User, User.id == UserSession.user_id)
+                .where(
+                    User.organization_id == UUID(project["organization_id"]),
+                    UserSession.revoked_at.is_(None),
+                )
+            ) is None
+            assert db.scalar(
+                select(Scan)
+                .join(Project, Project.id == Scan.project_id)
+                .where(Project.organization_id == UUID(project["organization_id"]))
+            ) is not None
+            actions = list(
+                db.scalars(
+                    select(DataDeletionEvent.action).where(
+                        DataDeletionEvent.request_id == UUID(requested.json()["id"])
+                    )
+                )
+            )
+            assert actions[-1] == "failed"
+
+        monkeypatch.setattr(data_lifecycle_service, "_purge_storage", original_purge)
+        with session_factory() as db:
+            receipt = execute_deletion_request(
+                db,
+                UUID(requested.json()["id"]),
+                operator_id,
+                requested.json()["id"],
+            )
+            assert verify_deletion_receipt(receipt)
+            organization = db.get(Organization, UUID(project["organization_id"]))
+            assert organization is not None
+            assert organization.lifecycle_status == "deleted"
 
 
 def test_governance_orm_and_database_records_are_append_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

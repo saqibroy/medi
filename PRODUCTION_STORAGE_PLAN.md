@@ -147,6 +147,8 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
 13. [x] Add content-addressed retained release artifacts, append-only storage
     evidence, verified authenticated downloads, a separate non-expiring data
     class, revocation-aware access, and legacy materialization.
+14. [x] Add organization-wide exact ordinary-prefix purge, retained-prefix
+    exclusion/revocation, target disposition evidence, and fail-closed retry.
 
 ## Acceptance Criteria
 
@@ -160,6 +162,9 @@ For local development, keep `SCAN_STORAGE_BACKEND=local` and the Docker
 - Retained release artifacts never expose storage keys, fail closed on object
   version/checksum/size mismatch, survive project/scan deletion, and cannot be
   downloaded after revocation.
+- Organization deletion purges every ordinary project version/delete marker,
+  leaves retained artifacts inaccessible pending approved policy, and remains
+  locked if target storage fails.
 
 ## Repository Verification Evidence
 

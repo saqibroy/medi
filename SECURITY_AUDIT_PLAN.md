@@ -112,6 +112,11 @@ bytes remain in private storage, while the audit target is the stable release
 UUID only. Its evidence is recorded in
 `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
 
+The organization-deletion increment retains append-only audit identifiers while
+removing working medical data and mutable user identity. Its signed execution
+event and checksum receipt use stable IDs and controlled target dispositions
+only; see `ORGANIZATION_DELETION_PLAN.md`.
+
 ## Remaining Production Gates
 
 - [ ] Export events to independently controlled append-only/WORM-capable

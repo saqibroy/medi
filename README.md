@@ -195,14 +195,17 @@ VersionId, WORM, and retention approval remain gates in
 `DATASET_RELEASE_PLAN.md` and `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
 
 Administrators manage versioned retention/RPO/RTO policy, legal holds, and
-two-person project/scan deletion requests under `/governance`. These records,
+two-person organization/project/scan deletion requests under `/governance`. These records,
 their lifecycle events, and value-free deletion receipts are append-only. The
 web runtime cannot execute deletion. Execution requires the separately enabled
 `backend.data_lifecycle_cli`, a matching request-ID confirmation, and an admin
 operator distinct from requester and approver; production S3 execution also
 requires a separate workload identity allowed to remove versions. Keep
 `DATA_DELETION_OPERATOR_ENABLED=false` in normal application environments.
-See `DATA_LIFECYCLE_RECOVERY_PLAN.md` and `STORAGE_OPERATIONS_RUNBOOK.md`.
+Organization scope first locks the workspace and revokes every session, then
+purges working data while retaining policy-bound immutable evidence. See
+`ORGANIZATION_DELETION_PLAN.md`, `DATA_LIFECYCLE_RECOVERY_PLAN.md`, and
+`STORAGE_OPERATIONS_RUNBOOK.md`.
 
 Administrators manage privacy evidence under `/governance/privacy`. Processing
 activity records are immutable, monotonic versions that pin the declared role,
@@ -309,6 +312,8 @@ Start with `PRODUCT_ROADMAP.md`, then read:
   and remaining deployment gates.
 - `DATA_LIFECYCLE_RECOVERY_PLAN.md` for recovery automation, retention, holds,
   deletion approval, operator boundaries, and remaining deployment evidence.
+- `ORGANIZATION_DELETION_PLAN.md` for fail-closed workspace shutdown, target
+  disposition enumeration, and remaining policy/target evidence.
 - `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md` for the immutable, value-free evidence
   retained when direct or governed lifecycle deletion removes raw revisions.
 - `EXTERNAL_AI_GOVERNANCE_PLAN.md` for default egress denial, provider and

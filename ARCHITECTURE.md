@@ -206,12 +206,28 @@ backup expiry. Its signed success audit is committed in the same database
 transaction as the receipt/lifecycle events; failures append a signed error
 audit beside the failed lifecycle event.
 
+Organization execution first commits a fail-closed
+`deletion_in_progress` workspace state and revokes every session, so an object
+purge cannot race continued API use. It then purges only the ordinary project
+tree, removes clinical working rows and sessions, tombstones user/project/
+organization identifiers, and appends release, external-AI, and processing-
+record revocations. If storage fails, the workspace remains locked and the same
+approved request can retry the idempotent purge. Authentication requires both
+an active user and an active organization.
+
 Retained release artifacts use a separate organization-level prefix outside the
 ordinary project/scan purge tree. Deletion inventory and the final receipt
 record their retained count, affected releases are revoked, and further
-artifact download is denied. This is a repository mechanism, not approval to
-retain health-related annotation data: organization deletion, retention,
+artifact download is denied. Organization deletion revokes artifact access but
+does not erase this evidence without an approved exception. This is a repository
+mechanism, not approval to retain health-related annotation data: retention,
 legal-hold, backup, and exceptional-erasure policy remain explicit gates.
+
+Receipts enumerate PostgreSQL, sessions, the TTL-only HMAC peer rate-limit
+cache, the currently absent background queue, ordinary and retained object
+namespaces, external-AI targets, and backups. A future target or queue must add
+its own cancellation/deletion adapter before it can be enabled. See
+`ORGANIZATION_DELETION_PLAN.md`.
 
 Before direct annotation deletion or operator project/scan deletion removes raw
 revision rows, `annotation_history_tombstone_service.py` creates one immutable
@@ -223,7 +239,7 @@ remove. Frozen dataset releases retain their existing minimized lineage.
 
 The normal S3 runtime role still cannot delete object versions. The operator
 must use separately approved credentials, and target backup-vault/Object Lock,
-organization-wide deletion, policy approval, and signed drills remain Phase 4
+organization-deletion policy approval, and signed drills remain Phase 4
 gates. `scripts/verify_backup_restore_drill.sh` proves the encrypted recovery
 sequence only on disposable PostgreSQL databases and synthetic objects.
 

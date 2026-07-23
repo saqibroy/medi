@@ -13,6 +13,8 @@ a background ingestion worker.
 - Let the frontend poll scan status without changing the viewer contract.
 - Reuse the same parser code for initial ingestion and admin reprocess.
 - Keep job execution idempotent so retries do not corrupt previews.
+- Cancel or drain organization/project/scan jobs before governed deletion
+  removes their database rows or object prefixes.
 
 ## Recommended Stack
 
@@ -57,6 +59,9 @@ Rules:
 - `job_key` should be unique for active jobs, such as
   `scan:{scan_id}:ingest:{attempt_number}`.
 - Store safe errors only. Parser tracebacks belong in logs, not API metadata.
+- A deletion lock prevents new jobs for the scope; pending jobs become
+  `cancelled`, and an already-running worker must observe cancellation before
+  committing previews or ready state.
 
 ## Upload Flow
 
@@ -158,6 +163,8 @@ Each log line should include `organization_id`, `project_id`, `scan_id`,
    `INGESTION_MODE=worker`.
 6. Add polling-friendly frontend refresh for pending/processing scans.
 7. Add operational docs for starting workers and clearing failed jobs.
+8. Replace the current `background_queue: not_configured` deletion disposition
+   with counted cancellation/drain evidence and tests.
 
 ## Acceptance Criteria
 
@@ -168,3 +175,5 @@ Each log line should include `organization_id`, `project_id`, `scan_id`,
 - Existing synchronous tests remain available for local development.
 - Cross-organization access rules remain unchanged for pending, failed, and
   ready scans.
+- Organization/project/scan deletion cannot race a queued/running job or allow a
+  worker to recreate purged data.

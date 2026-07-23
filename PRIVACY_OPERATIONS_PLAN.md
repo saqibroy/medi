@@ -90,6 +90,12 @@ Local evidence:
 - [ ] Exercise access, correction, restriction, objection, portability, and
   erasure end to end with synthetic evidence in the target environment.
 
+Governed organization deletion now revokes every processing-record version,
+retains minimized privacy-case evidence, and removes workspace access/working
+medical data. Legal applicability, open-case procedures, retained evidence, and
+target exercises still require privacy/legal approval; see
+`ORGANIZATION_DELETION_PLAN.md`.
+
 ## Primary References
 
 - [GDPR official text](https://eur-lex.europa.eu/eli/reg/2016/679/oj), especially

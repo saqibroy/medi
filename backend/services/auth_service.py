@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ..models import User, UserSession
+from ..models import Organization, User, UserSession
 from ..security import create_access_token, verify_password
 from ..settings import get_settings
 
@@ -15,7 +15,15 @@ from ..settings import get_settings
 def authenticate_user(db: Session, email: str, password: str) -> tuple[str, User, datetime]:
     """Validate credentials and return a raw session for cookie issuance."""
 
-    user = db.scalar(select(User).where(User.email == email.lower(), User.is_active.is_(True)))
+    user = db.scalar(
+        select(User)
+        .join(Organization, Organization.id == User.organization_id)
+        .where(
+            User.email == email.lower(),
+            User.is_active.is_(True),
+            Organization.lifecycle_status == "active",
+        )
+    )
     if user is None or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     token, expires_at = create_access_token(db, user.id)

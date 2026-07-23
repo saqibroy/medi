@@ -34,7 +34,7 @@ contract, or approver supplies verifiable evidence.
 | Application secrets | Reject missing, reused, weak, or documented development secrets | Repository | Implemented and tested; the Phase 4 tracker is reconciled in this review. |
 | Secret delivery | Load runtime secrets from an approved secret manager | Deployment | No secret values belong in this repository, images, frontend bundles, logs, or samples. |
 | Supply chain | Secret, Python, npm, container, and workflow-integrity scanning | Repository | **P0 complete:** known high/critical Python/npm/container findings are remediated, every PR/main run scans secrets/dependencies/images, and GitHub Actions are pinned by immutable commit. Moderate Cornerstone/VTK advisories remain until a planned major viewer upgrade. |
-| Sessions | Approved production idle duration and any forced organization-wide revocation policy | Repository + organization | **Repository complete:** sliding idle expiry, explicit production configuration, credential-free administrator inventory, per-session revocation, UI, audit, migration, and tenant tests are implemented. Target owners must approve the duration and any bulk policy. |
+| Sessions | Approved production idle duration and organization-wide operator policy | Repository + organization | **Repository complete:** sliding idle expiry, explicit production configuration, credential-free administrator inventory, per-session revocation, and fail-closed organization-deletion revocation are implemented. Target owners must approve durations and operator policy. |
 | Authorization | Project-level membership if required | Organization + repository | **Repository route matrix complete:** all 90 routes have explicit policies; every parameterized path, collection, query reference, and body reference has cross-tenant coverage. Decide same-organization project isolation separately before implementing membership semantics. |
 | SSO/MFA | Approved SSO and MFA for sensitive-data deployments | Integration + organization | Do not add a provider until tenant, assurance, recovery, and contract requirements are approved. |
 | Shared rate limits | Authenticated, encrypted, highly available Redis with failover/alert evidence | Deployment | Application fail-closed Redis enforcement exists; target service evidence remains. |
@@ -43,7 +43,7 @@ contract, or approver supplies verifiable evidence.
 | Annotation history | Approved retention period and independent WORM evidence | Organization + integration + deployment | **Repository tombstone complete:** direct and lifecycle deletion retain immutable value-free scope/count/summary/hash evidence while raw geometry and notes are deleted. |
 | Private objects | Target S3/WORM evidence and any future object-level deletion tombstones | Deployment + repository | **Repository release-artifact boundary complete:** retained manifests are tenant-private, content-addressed, append-only, integrity-checked, revocation-aware, and separately classified with no automatic expiry. Target S3 VersionId, WORM, approved retention, and any future object tombstones remain open. |
 | Recovery | Automated managed backups, separate credentials, failure alerts, and signed target drills | Deployment + organization | CI restore drills are evidence of repository behavior, not evidence of target backup operations. |
-| Deletion | Organization-wide execution plus queue/cache/export/backup enumeration | Repository + deployment | Project/scan deletion and receipts exist; organization scope and target-service propagation remain. |
+| Deletion | Target operator, backup, and configured-service proof | Deployment + organization | **Repository complete:** organization/project/scan execution, session lockout, working-row/object purge, retained-evidence revocation, cache/queue/export/backup enumeration, integrity receipts, and failure retry are implemented. Target evidence and policy approvals remain. |
 | Privacy operations | Approved roles/lawful bases, Article 9 conditions, ROPA, DPIA, contracts/transfers, identity/case tooling, secure delivery, and rights exercises | Organization + integration + deployment | Medi stores controlled references and workflows only. Actual approvals, identity proof, correspondence, and delivered data remain outside the repository. |
 | Incident response | Breach assessment, notification ownership, evidence preservation, and target exercises | Organization + repository | **Repository complete:** `SECURITY_INCIDENT_RUNBOOK.md` defines safe mechanics and legal handoff. Named people, legal decisions, severity/contact rules, and signed target exercises still require approval. |
 | External AI | Local/private inference preference and proxy/firewall/DNS enforcement | Deployment + integration | Default application egress is denied. No provider or patient-data flow may be inferred from a feature flag. |
@@ -75,9 +75,11 @@ contract, or approver supplies verifiable evidence.
    value-free tombstones for direct and lifecycle deletion.
 8. **P2 complete:** implement retained private dataset-release artifacts with
    immutable object evidence and explicit lifecycle/access semantics.
-9. **P2 next:** design organization-wide governed deletion and revocation,
-   then address quotas and model-output lineage when their prerequisite product
-   policies exist.
+9. **P2 complete:** implement fail-closed organization-wide governed deletion,
+   revocation, and target-disposition evidence.
+10. **P2 next:** implement the planned background ingestion job/worker boundary
+    and deletion-aware scoped queue cancellation. Address quotas and model-
+    output lineage when their prerequisite product policies exist.
 
 ## What The Deployment Owner Must Eventually Do
 
@@ -99,9 +101,10 @@ or pseudonymized data is enabled, the deployment owner must:
 
 ## Review Evidence
 
-- Current Compose database, Redis, backend, and frontend are healthy; backend
-  readiness reports the database reachable, the frontend returns HTTP 200, and
-  PostgreSQL is at `20260723_0016`.
+- Current pre-change Compose database, Redis, backend, and frontend were healthy;
+  backend readiness reported the database reachable and the frontend returned
+  HTTP 200. Final rebuilt evidence for migration `20260723_0017` is tracked in
+  `ORGANIZATION_DELETION_PLAN.md`.
 - The initial repository-history secret scan covered 33 commits with no leak
   finding.
 - The initial Python audit found known advisories in the old FastAPI/Starlette,
@@ -183,6 +186,16 @@ or pseudonymized data is enabled, the deployment owner must:
   build, CloudFormation lint, repository verifiers, PostgreSQL
   upgrade/downgrade/upgrade through `20260723_0016`, rebuilt Compose health,
   container hardening, and authenticated synthetic smoke pass.
+- Organization-deletion completion evidence on 2026-07-23: organization scope
+  locks the workspace and revokes sessions before purge, applies every child
+  hold, removes working rows and ordinary object versions, tombstones mutable
+  identities, revokes releases/outbound approvals, retains policy-bound
+  evidence, and checksum-covers target dispositions. Storage failure remains
+  locked and the same request retries safely. All 157 backend tests, frontend
+  build, PostgreSQL migration rehearsal, encrypted recovery, static policy/
+  runbook/container checks, diff validation, rebuilt Compose health at
+  `20260723_0017`, and authenticated live probes pass. Final target approvals
+  and signed deployment evidence remain in `ORGANIZATION_DELETION_PLAN.md`.
 
 ## Primary References
 

@@ -52,8 +52,9 @@ Not production-ready yet:
 - Database-backed sessions have absolute and sliding idle expiry plus logout and
   administrator revocation. Browser credentials use HttpOnly, SameSite cookies
   plus signed CSRF protection, and production configuration requires Secure
-  host-only cookies and an explicit idle duration. Real-ingress TLS, approved
-  target duration, and any bulk organization-revocation policy remain gates.
+  host-only cookies and an explicit idle duration. Real-ingress TLS and approved
+  target duration/operator policy remain gates; governed organization deletion
+  now revokes every session before purge.
 - Production configuration now requires an explicit token secret and exact CORS
   origins; local-only defaults remain available only for development.
 - Production code supports private KMS-encrypted S3 storage, but target-account
@@ -71,9 +72,8 @@ Not production-ready yet:
   VersionId, independent WORM, and approved retention evidence remain gates;
   see `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
 - Encrypted disposable restore drills, versioned policy, legal holds, and
-  project/scan deletion evidence are implemented, but approved values,
-  organization deletion, target backup/vault controls, and signed drills remain
-  incomplete.
+  organization/project/scan deletion evidence are implemented, but approved
+  values, target backup/vault controls, and signed drills remain incomplete.
 - Request logging is structured and payload-safe, append-only security audit
   records exist, and Redis provides shared rate enforcement with hashed keys.
   Managed-Redis deployment evidence, monitoring, and error tracking remain
@@ -141,8 +141,9 @@ Acceptance evidence:
   verification remains tracked in `SESSION_AND_RATE_LIMIT_PLAN.md`.
 - [x] Add sliding idle timeout plus organization-scoped administrator active-
   session inventory/revocation. The response contains user identity and bounded
-  timestamps but no token/digest, cookie, IP, or user-agent data. Target idle-
-  duration approval and any organization-wide bulk policy remain external.
+  timestamps but no token/digest, cookie, IP, or user-agent data. Organization
+  deletion adds governed bulk revocation; target idle duration/operator approval
+  remains external.
 - [x] Configure exact allowed origins from environment variables.
 - [ ] Preserve deny-by-default roles and add project-level membership if users
   must not see every project in their organization.
@@ -247,7 +248,7 @@ still require explicit review.
   restore drills in CI; signed target-vault drills remain open.
 - [x] Store versioned retention by medical-data class, audit events, backups,
   and dataset releases without assuming production durations.
-- [ ] Add organization/project/scan deletion workflows that enumerate database
+- [x] Add organization/project/scan deletion workflows that enumerate database
   rows, object versions, previews, masks, exports, queues, caches, and backups.
 - [x] Support append-only organization/project/scan legal holds and prevent
   approval or execution while a valid hold applies.
@@ -256,10 +257,13 @@ still require explicit review.
 - [x] Document how deletion propagates into expiring backups and how exceptions
   are communicated.
 
-Project and scan requests, exact-prefix purge, database cleanup/tombstoning,
-release revocation, and receipts are implemented. Organization-wide execution,
-queue/cache/retained-export enumeration, and target backup evidence keep the
-combined deletion gate open.
+Organization/project/scan requests, exact-prefix version purge, database
+cleanup/tombstoning, session/release/external-control revocation, and
+checksum-covered target dispositions are implemented. Redis holds only
+TTL-bounded HMAC peer counters, no background queue exists yet, transient
+exports are response-only, retained releases stay policy-bound, and backups
+expire per the recorded policy. Target backup/operator evidence keeps the
+deployment gate open.
 
 ## GDPR And Privacy Operations
 
@@ -357,7 +361,7 @@ Useful primary references:
    HttpOnly/SameSite browser cookies, signed CSRF protection, and shared Redis
    rate limits for login, upload, reprocessing, and exports. Sliding idle expiry
    and administrator inventory/revocation are now implemented; target TLS,
-   managed Redis, idle-duration approval, and any bulk policy remain gates.
+   managed Redis, idle-duration approval, and operator policy remain gates.
 6. [x] Implement the storage abstraction and private S3 backend with
    tenant-scoped keys, traversal-safe local storage, KMS-encrypted writes,
    original/preview/reprocess/mask integration, and authorized short-lived
@@ -372,9 +376,9 @@ Useful primary references:
    manifests plus retained private portable artifacts. Target S3 VersionId,
    WORM, and retention gates remain in `DATASET_RELEASE_PLAN.md`.
 10. [x] Complete the repository boundary for encrypted recovery drills,
-    versioned retention, legal hold, source withdrawal, two-person project/scan
-    deletion, every-version purge, and verified receipts. Target infrastructure,
-    organization deletion, and policy approvals remain in
+    versioned retention, legal hold, source withdrawal, two-person organization/
+    project/scan deletion, every-version purge, and verified receipts. Target
+    infrastructure and policy approvals remain in
     `DATA_LIFECYCLE_RECOVERY_PLAN.md`. The drill requires a sustained queryable
     PostgreSQL state before starting so bootstrap restarts cannot produce a
     false-ready CI race.
@@ -414,8 +418,12 @@ Useful primary references:
     integrity-checked authenticated downloads, legacy materialization,
     revocation-aware delivery, explicit non-expiring storage classification,
     deletion inventory/receipt evidence, and browser controls.
-21. [ ] Design organization-wide governed deletion and revocation across
+21. [x] Implement organization-wide governed deletion and revocation across
     sessions, caches/queues, retained releases, backups, and target services.
+    The fail-closed boundary and remaining target/policy gates are recorded in
+    `ORGANIZATION_DELETION_PLAN.md`.
+22. [ ] Implement background ingestion jobs/workers and deletion-aware scoped
+    cancellation/draining before enabling a queue.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
@@ -423,6 +431,9 @@ Current repository increment complete: immutable dataset releases and
 annotation manifests are evidenced in `DATASET_RELEASE_PLAN.md`.
 Current repository increment complete: retained private release artifacts are
 evidenced in `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
+Current repository increment complete: organization-wide governed shutdown,
+working-data purge, revocation, and target enumeration are evidenced in
+`ORGANIZATION_DELETION_PLAN.md`.
 Current repository increment complete: backup/restore automation plus
 retention, legal-hold, source-withdrawal, and verified project/scan deletion are
 evidenced in `DATA_LIFECYCLE_RECOVERY_PLAN.md`.

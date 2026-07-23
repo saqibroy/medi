@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
 
-import { approveDeletionRequest, cancelDeletionRequest, createDeletionRequest, createLegalHold, createRetentionPolicy, listDeletionRequests, listLegalHolds, listRetentionPolicies, releaseLegalHold } from "../api/governanceApi";
+import { approveDeletionRequest, cancelDeletionRequest, createDeletionRequest, createLegalHold, createOrganizationDeletionRequest, createOrganizationLegalHold, createRetentionPolicy, listDeletionRequests, listLegalHolds, listRetentionPolicies, releaseLegalHold } from "../api/governanceApi";
 import type { DeletionRequest, LegalHold, RetentionPolicy, RetentionPolicyPayload } from "../types/governance";
 
 interface Props {
+  organizationId: string;
   projectId?: string;
   csrfToken: string;
 }
@@ -19,7 +20,7 @@ const emptyPolicy: Record<keyof Omit<RetentionPolicyPayload, "approval_reference
   rto_hours: "",
 };
 
-export function DataGovernancePanel({ projectId, csrfToken }: Props) {
+export function DataGovernancePanel({ organizationId, projectId, csrfToken }: Props) {
   const [policies, setPolicies] = useState<RetentionPolicy[]>([]);
   const [holds, setHolds] = useState<LegalHold[]>([]);
   const [deletions, setDeletions] = useState<DeletionRequest[]>([]);
@@ -27,6 +28,8 @@ export function DataGovernancePanel({ projectId, csrfToken }: Props) {
   const [policyReference, setPolicyReference] = useState("");
   const [holdReference, setHoldReference] = useState("");
   const [deletionReference, setDeletionReference] = useState("");
+  const [organizationHoldReference, setOrganizationHoldReference] = useState("");
+  const [organizationDeletionReference, setOrganizationDeletionReference] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -68,6 +71,8 @@ export function DataGovernancePanel({ projectId, csrfToken }: Props) {
 
   const projectHolds = holds.filter((hold) => hold.scope_type === "project" && hold.scope_id === projectId);
   const projectDeletions = deletions.filter((request) => request.scope_type === "project" && request.scope_id === projectId);
+  const organizationHolds = holds.filter((hold) => hold.scope_type === "organization" && hold.scope_id === organizationId);
+  const organizationDeletions = deletions.filter((request) => request.scope_type === "organization" && request.scope_id === organizationId);
 
   return (
     <details className="border-b border-slate-200 bg-white p-4">
@@ -86,6 +91,20 @@ export function DataGovernancePanel({ projectId, csrfToken }: Props) {
         </div>
         <button disabled={loading} className="rounded bg-slate-900 px-2 py-1 text-xs text-white">Create new policy version</button>
       </form>
+      <div className="mt-4 space-y-2 rounded border border-red-200 bg-red-50 p-2">
+        <p className="text-xs font-semibold text-red-900">Organization shutdown controls</p>
+        <p className="text-[10px] text-red-800">Execution locks every account, revokes sessions and releases, and purges working medical data. Immutable evidence and retained artifacts follow approved policy.</p>
+        <div className="flex gap-1">
+          <input className="min-w-0 flex-1 rounded border border-red-200 px-2 py-1 text-xs" placeholder="Organization hold ticket" value={organizationHoldReference} onChange={(event) => setOrganizationHoldReference(event.target.value)} />
+          <button disabled={!organizationHoldReference || loading} className="rounded border border-amber-500 px-2 py-1 text-xs text-amber-900" onClick={() => void run(() => createOrganizationLegalHold(csrfToken, organizationId, organizationHoldReference))}>Hold</button>
+        </div>
+        {organizationHolds.map((hold) => <div className="flex items-center justify-between text-xs" key={hold.id}><span>{hold.approval_reference}: {hold.status}</span>{hold.status === "active" ? <button className="text-amber-900 underline" disabled={loading} onClick={() => void run(() => releaseLegalHold(csrfToken, hold.id))}>Release by second admin</button> : null}</div>)}
+        <div className="flex gap-1">
+          <input className="min-w-0 flex-1 rounded border border-red-200 px-2 py-1 text-xs" placeholder="Organization deletion ticket" value={organizationDeletionReference} onChange={(event) => setOrganizationDeletionReference(event.target.value)} />
+          <button disabled={!organizationDeletionReference || !policies[0] || loading} className="rounded bg-red-800 px-2 py-1 text-xs text-white" onClick={() => void run(() => createOrganizationDeletionRequest(csrfToken, organizationId, organizationDeletionReference))}>Request shutdown</button>
+        </div>
+        {organizationDeletions.map((request) => <div className="rounded border border-red-200 bg-white p-2 text-xs" key={request.id}><p>{request.approval_reference}: {request.status}</p><p className="text-[10px] text-slate-500">Earliest: {new Date(request.earliest_execute_at).toLocaleString()}</p>{request.status === "requested" ? <div className="mt-1 flex gap-2"><button className="text-red-800 underline" disabled={loading} onClick={() => void run(() => approveDeletionRequest(csrfToken, request.id))}>Approve as second admin</button><button className="text-slate-600 underline" disabled={loading} onClick={() => void run(() => cancelDeletionRequest(csrfToken, request.id))}>Cancel</button></div> : null}{request.receipt ? <p className="mt-1 truncate font-mono text-[10px]" title={request.receipt.receipt_sha256}>{request.receipt.receipt_sha256}</p> : null}</div>)}
+      </div>
       <div className="mt-4 space-y-2">
         <p className="text-xs font-semibold text-slate-700">Selected project controls</p>
         <div className="flex gap-1">

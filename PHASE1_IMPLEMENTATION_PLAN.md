@@ -414,8 +414,9 @@ CI verification:
   deletion requests, requester/approver/operator separation, source-withdrawal
   release revocation, every-version storage purge, checksum receipts, and an
   encrypted disposable database/object recovery drill are implemented. The web
-  runtime cannot execute deletion and the operator flag defaults off. Target
-  vault/role evidence, approved values, and organization deletion remain in
+  runtime cannot execute deletion and the operator flag defaults off.
+  Organization scope now adds session lockout, working-data purge, and target
+  dispositions. Target vault/role evidence and approved values remain in
   `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
 - External AI now defaults off with no provider client. Append-only provider
   versions and project data-flow approvals, exact HTTPS deployment origins,
@@ -492,8 +493,9 @@ CI verification:
    thresholds, and exercises remain deployment inputs.
 10. Completed repository boundary: add session idle expiry and administrator-
     visible active-session inventory/revocation without storing or returning raw
-    session credentials or network context. Target idle-duration approval and
-    any organization-wide bulk policy remain deployment inputs.
+    session credentials or network context. Governed organization deletion now
+    adds bulk revocation; target idle-duration/operator approval remains a
+    deployment input.
 11. Completed repository boundary: add bounded database pools,
     acquisition/statement timeouts, and privacy-safe slow-query signals. Target
     capacity, alert routing, threshold approval, and exercises remain in
@@ -511,5 +513,10 @@ CI verification:
     dataset-release artifacts with append-only object evidence, verified
     authenticated downloads, revocation-aware access, retained deletion
     semantics, and legacy materialization.
-16. Next: design organization-wide governed deletion and revocation across
-    application and target-service state.
+16. Completed repository boundary: add fail-closed organization deletion,
+    session shutdown, identity/project tombstones, working-data purge,
+    release/external-control revocation, and explicit target dispositions.
+    Evidence and remaining policy/target gates are in
+    `ORGANIZATION_DELETION_PLAN.md`.
+17. Next: implement background ingestion jobs/workers and deletion-aware scoped
+    queue cancellation before replacing the synchronous imaging path.

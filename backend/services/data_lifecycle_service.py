@@ -22,16 +22,25 @@ from ..models import (
     DatasetRelease,
     DatasetReleaseArtifact,
     DatasetReleaseEvent,
+    ExternalAIDataFlowApproval,
+    ExternalAIDataFlowEvent,
+    ExternalAIProviderApproval,
+    ExternalAIProviderEvent,
     Label,
     LegalHold,
     LegalHoldEvent,
     Organization,
+    PrivacyProcessingRecord,
+    PrivacyProcessingRecordEvent,
+    PrivacyRequest,
     Project,
     Scan,
     SecurityAuditEvent,
     SegmentationMask,
     User,
+    UserSession,
 )
+from ..rate_limit import RATE_LIMIT_WINDOW_SECONDS
 from .audit_service import calculate_integrity_hash
 from .annotation_history_tombstone_service import retain_annotation_history_tombstones
 from .dataset_release_service import release_status, sha256_json
@@ -104,7 +113,12 @@ def current_retention_policy(db: Session, organization_id: UUID) -> DataRetentio
 
 def _scope_context(db: Session, organization_id: UUID, scope_type: str, scope_id: UUID) -> dict[str, UUID | None]:
     if scope_type == "organization":
-        if scope_id != organization_id:
+        organization = db.get(Organization, organization_id)
+        if (
+            scope_id != organization_id
+            or organization is None
+            or organization.lifecycle_status == "deleted"
+        ):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Governance scope not found")
         return {"organization_id": organization_id, "project_id": None, "scan_id": None}
     if scope_type == "project":
@@ -249,6 +263,9 @@ def _applicable_active_holds(
     for hold in holds:
         if hold_status(events[hold.id]) != "active":
             continue
+        if scope_type == "organization":
+            applicable.append(hold)
+            continue
         matches = hold.scope_type == "organization" and hold.scope_id == organization_id
         matches = matches or (hold.scope_type == "project" and hold.scope_id == context["project_id"])
         matches = matches or (hold.scope_type == "scan" and hold.scope_id == context["scan_id"])
@@ -270,6 +287,107 @@ def _scope_rows(db: Session, organization_id: UUID, scope_type: str, scope_id: U
 
 
 def inventory_scope(db: Session, organization_id: UUID, scope_type: str, scope_id: UUID) -> dict[str, int]:
+    if scope_type == "organization":
+        _scope_context(db, organization_id, scope_type, scope_id)
+        projects = list(db.scalars(select(Project).where(Project.organization_id == organization_id)))
+        project_ids = [project.id for project in projects]
+        scans = (
+            list(db.scalars(select(Scan).where(Scan.project_id.in_(project_ids))))
+            if project_ids
+            else []
+        )
+        scan_ids = [scan.id for scan in scans]
+        annotation_ids = (
+            list(db.scalars(select(Annotation.id).where(Annotation.scan_id.in_(scan_ids))))
+            if scan_ids
+            else []
+        )
+        users = list(db.scalars(select(User).where(User.organization_id == organization_id)))
+        user_ids = [user.id for user in users]
+        release_ids = list(
+            db.scalars(select(DatasetRelease.id).where(DatasetRelease.organization_id == organization_id))
+        )
+
+        def count(model: Any, *criteria: Any) -> int:
+            statement = select(func.count()).select_from(model)
+            if criteria:
+                statement = statement.where(*criteria)
+            return db.scalar(statement) or 0
+
+        return {
+            "users": len(users),
+            "active_users": sum(1 for user in users if user.is_active),
+            "sessions": count(UserSession, UserSession.user_id.in_(user_ids)) if user_ids else 0,
+            "active_sessions": (
+                count(UserSession, UserSession.user_id.in_(user_ids), UserSession.revoked_at.is_(None))
+                if user_ids
+                else 0
+            ),
+            "projects": len(projects),
+            "project_tombstones": sum(1 for project in projects if project.lifecycle_status == "deleted"),
+            "scans": len(scans),
+            "labels": count(Label, Label.project_id.in_(project_ids)) if project_ids else 0,
+            "annotations": len(annotation_ids),
+            "annotation_history": (
+                count(AnnotationHistory, AnnotationHistory.annotation_id.in_(annotation_ids))
+                if annotation_ids
+                else 0
+            ),
+            "annotation_history_tombstones": count(
+                AnnotationHistoryTombstone,
+                AnnotationHistoryTombstone.organization_id == organization_id,
+            ),
+            "segmentation_masks": (
+                count(SegmentationMask, SegmentationMask.annotation_id.in_(annotation_ids))
+                if annotation_ids
+                else 0
+            ),
+            "dataset_releases": len(release_ids),
+            "dataset_release_artifacts": (
+                count(DatasetReleaseArtifact, DatasetReleaseArtifact.release_id.in_(release_ids))
+                if release_ids
+                else 0
+            ),
+            "retention_policies": count(
+                DataRetentionPolicy, DataRetentionPolicy.organization_id == organization_id
+            ),
+            "legal_holds": count(LegalHold, LegalHold.organization_id == organization_id),
+            "deletion_requests": count(
+                DataDeletionRequest, DataDeletionRequest.organization_id == organization_id
+            ),
+            "deletion_receipts": count(
+                DataDeletionReceipt, DataDeletionReceipt.organization_id == organization_id
+            ),
+            "security_audit_events": count(
+                SecurityAuditEvent, SecurityAuditEvent.organization_id == organization_id
+            ),
+            "privacy_processing_records": count(
+                PrivacyProcessingRecord,
+                PrivacyProcessingRecord.organization_id == organization_id,
+            ),
+            "privacy_requests": count(
+                PrivacyRequest, PrivacyRequest.organization_id == organization_id
+            ),
+            "external_ai_providers": count(
+                ExternalAIProviderApproval,
+                ExternalAIProviderApproval.organization_id == organization_id,
+            ),
+            "external_ai_data_flows": count(
+                ExternalAIDataFlowApproval,
+                ExternalAIDataFlowApproval.organization_id == organization_id,
+            ),
+            "object_references": (
+                sum(1 for scan in scans if scan.source_format != "synthetic")
+                + (
+                    count(SegmentationMask, SegmentationMask.annotation_id.in_(annotation_ids))
+                    if annotation_ids
+                    else 0
+                )
+            ),
+            "organization_scoped_cache_entries": 0,
+            "background_queue_jobs": 0,
+        }
+
     project, scans = _scope_rows(db, organization_id, scope_type, scope_id)
     scan_ids = [scan.id for scan in scans]
     annotation_ids = list(db.scalars(select(Annotation.id).where(Annotation.scan_id.in_(scan_ids)))) if scan_ids else []
@@ -354,6 +472,37 @@ def _earliest_execution(
     return max(candidates)
 
 
+def _organization_earliest_execution(
+    db: Session,
+    organization: Organization,
+    policy: DataRetentionPolicy,
+) -> datetime:
+    data_days = max(
+        policy.original_minimum_days,
+        policy.mask_minimum_days,
+        policy.metadata_minimum_days,
+    )
+    projects = list(
+        db.scalars(select(Project).where(Project.organization_id == organization.id))
+    )
+    project_ids = [project.id for project in projects]
+    scans = (
+        list(db.scalars(select(Scan).where(Scan.project_id.in_(project_ids))))
+        if project_ids
+        else []
+    )
+    candidates = [_aware(organization.created_at) + timedelta(days=data_days)]
+    candidates.extend(_aware(project.created_at) + timedelta(days=data_days) for project in projects)
+    candidates.extend(_aware(scan.created_at) + timedelta(days=data_days) for scan in scans)
+    candidates.extend(
+        _aware(release.created_at) + timedelta(days=policy.dataset_release_minimum_days)
+        for release in db.scalars(
+            select(DatasetRelease).where(DatasetRelease.organization_id == organization.id)
+        )
+    )
+    return max(candidates)
+
+
 def _deletion_events(db: Session, request_ids: Iterable[UUID]) -> dict[UUID, list[DataDeletionEvent]]:
     ids = list(request_ids)
     if not ids:
@@ -396,20 +545,60 @@ def _request_response(request: DataDeletionRequest, events: list[DataDeletionEve
 
 def create_deletion_request(db: Session, payload: Any, current_user: User) -> dict[str, Any]:
     policy = current_retention_policy(db, current_user.organization_id)
-    project, scans = _scope_rows(db, current_user.organization_id, payload.scope_type, payload.scope_id)
+    context = _scope_context(
+        db,
+        current_user.organization_id,
+        payload.scope_type,
+        payload.scope_id,
+    )
     existing = list(
         db.scalars(
             select(DataDeletionRequest).where(
                 DataDeletionRequest.organization_id == current_user.organization_id,
-                DataDeletionRequest.scope_type == payload.scope_type,
-                DataDeletionRequest.scope_id == payload.scope_id,
             )
         )
     )
     existing_events = _deletion_events(db, [request.id for request in existing])
-    if any(deletion_status(existing_events[request.id]) in {"requested", "approved"} for request in existing):
+    active = [
+        request
+        for request in existing
+        if deletion_status(existing_events[request.id]) in {"requested", "approved"}
+    ]
+    if payload.scope_type == "organization":
+        conflicting = active
+    else:
+        conflicting = [
+            request
+            for request in active
+            if (
+                request.scope_type == "organization"
+                or (
+                    request.scope_type == payload.scope_type
+                    and request.scope_id == payload.scope_id
+                )
+            )
+        ]
+    if conflicting:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An active deletion request already covers this scope")
     occurred_at = _now()
+    if payload.scope_type == "organization":
+        organization = db.get(Organization, context["organization_id"])
+        assert organization is not None
+        earliest_execute_at = _organization_earliest_execution(db, organization, policy)
+    else:
+        project, scans = _scope_rows(
+            db,
+            current_user.organization_id,
+            payload.scope_type,
+            payload.scope_id,
+        )
+        earliest_execute_at = _earliest_execution(
+            db,
+            project,
+            scans,
+            payload.scope_type,
+            policy,
+        )
     request = DataDeletionRequest(
         organization_id=current_user.organization_id,
         scope_type=payload.scope_type,
@@ -419,7 +608,7 @@ def create_deletion_request(db: Session, payload: Any, current_user: User) -> di
         retention_policy_id=policy.id,
         retention_policy_version=policy.version,
         inventory=inventory_scope(db, current_user.organization_id, payload.scope_type, payload.scope_id),
-        earliest_execute_at=_earliest_execution(db, project, scans, payload.scope_type, policy),
+        earliest_execute_at=earliest_execute_at,
         requested_by_user_id=current_user.id,
         created_at=occurred_at,
     )
@@ -502,7 +691,20 @@ def cancel_deletion_request(db: Session, request_id: UUID, current_user: User) -
     return _request_response(request, [*events, event])
 
 
-def _release_ids_for_scope(db: Session, request: DataDeletionRequest, project_id: UUID) -> list[UUID]:
+def _release_ids_for_scope(
+    db: Session,
+    request: DataDeletionRequest,
+    project_id: UUID | None,
+) -> list[UUID]:
+    if request.scope_type == "organization":
+        return list(
+            db.scalars(
+                select(DatasetRelease.id).where(
+                    DatasetRelease.organization_id == request.organization_id
+                )
+            )
+        )
+    assert project_id is not None
     releases = list(db.scalars(select(DatasetRelease).where(DatasetRelease.project_id == project_id)))
     if request.scope_type == "project":
         return [release.id for release in releases]
@@ -513,7 +715,12 @@ def _release_ids_for_scope(db: Session, request: DataDeletionRequest, project_id
     ]
 
 
-def _revoke_releases(db: Session, request: DataDeletionRequest, project_id: UUID, operator_user_id: UUID) -> int:
+def _revoke_releases(
+    db: Session,
+    request: DataDeletionRequest,
+    project_id: UUID | None,
+    operator_user_id: UUID,
+) -> int:
     release_ids = _release_ids_for_scope(db, request, project_id)
     if not release_ids:
         return 0
@@ -543,11 +750,18 @@ def _revoke_releases(db: Session, request: DataDeletionRequest, project_id: UUID
     return revoked
 
 
-def _purge_storage(request: DataDeletionRequest, project_id: UUID) -> StoragePurgeResult:
+def _purge_storage(
+    request: DataDeletionRequest,
+    project_id: UUID | None,
+) -> StoragePurgeResult:
     from . import scan_service, segmentation_mask_service
     from ..settings import get_settings
 
-    prefix = f"org/{request.organization_id}/project/{project_id}"
+    if request.scope_type == "organization":
+        prefix = f"org/{request.organization_id}/project"
+    else:
+        assert project_id is not None
+        prefix = f"org/{request.organization_id}/project/{project_id}"
     if request.scope_type == "scan":
         prefix += f"/scan/{request.scope_id}"
     settings = get_settings()
@@ -562,6 +776,190 @@ def _purge_storage(request: DataDeletionRequest, project_id: UUID) -> StoragePur
         object_versions_deleted=scan_result.object_versions_deleted + mask_result.object_versions_deleted,
         delete_markers_deleted=scan_result.delete_markers_deleted + mask_result.delete_markers_deleted,
     )
+
+
+def _begin_organization_shutdown(
+    db: Session,
+    request: DataDeletionRequest,
+) -> int:
+    """Fail closed before external object deletion can create a partial state."""
+
+    organization = db.scalar(
+        select(Organization)
+        .where(Organization.id == request.organization_id)
+        .with_for_update()
+    )
+    if organization is None or organization.lifecycle_status == "deleted":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Organization is unavailable for deletion",
+        )
+    organization.lifecycle_status = "deletion_in_progress"
+    sessions = list(
+        db.scalars(
+            select(UserSession)
+            .join(User, User.id == UserSession.user_id)
+            .where(User.organization_id == request.organization_id)
+        )
+    )
+    revoked_at = _now()
+    for user_session in sessions:
+        if user_session.revoked_at is None:
+            user_session.revoked_at = revoked_at
+    db.commit()
+    return len(sessions)
+
+
+def _revoke_organization_controls(
+    db: Session,
+    request: DataDeletionRequest,
+    operator_user_id: UUID,
+) -> dict[str, int]:
+    """Append revocations for every currently effective outbound/processing approval."""
+
+    occurred_at = _now()
+    providers = list(
+        db.scalars(
+            select(ExternalAIProviderApproval).where(
+                ExternalAIProviderApproval.organization_id == request.organization_id
+            )
+        )
+    )
+    provider_events = _event_groups(
+        db.scalars(
+            select(ExternalAIProviderEvent).where(
+                ExternalAIProviderEvent.organization_id == request.organization_id
+            )
+        ),
+        "provider_approval_id",
+    )
+    providers_revoked = 0
+    for provider in providers:
+        if any(event.action == "revoked" for event in provider_events[provider.id]):
+            continue
+        db.add(
+            ExternalAIProviderEvent(
+                provider_approval_id=provider.id,
+                organization_id=request.organization_id,
+                action="revoked",
+                actor_user_id=operator_user_id,
+                occurred_at=occurred_at,
+            )
+        )
+        providers_revoked += 1
+
+    flows = list(
+        db.scalars(
+            select(ExternalAIDataFlowApproval).where(
+                ExternalAIDataFlowApproval.organization_id == request.organization_id
+            )
+        )
+    )
+    flow_events = _event_groups(
+        db.scalars(
+            select(ExternalAIDataFlowEvent).where(
+                ExternalAIDataFlowEvent.organization_id == request.organization_id
+            )
+        ),
+        "data_flow_id",
+    )
+    flows_revoked = 0
+    for flow in flows:
+        if any(event.action == "revoked" for event in flow_events[flow.id]):
+            continue
+        db.add(
+            ExternalAIDataFlowEvent(
+                data_flow_id=flow.id,
+                organization_id=request.organization_id,
+                action="revoked",
+                actor_user_id=operator_user_id,
+                occurred_at=occurred_at,
+            )
+        )
+        flows_revoked += 1
+
+    processing_records = list(
+        db.scalars(
+            select(PrivacyProcessingRecord).where(
+                PrivacyProcessingRecord.organization_id == request.organization_id
+            )
+        )
+    )
+    processing_events = _event_groups(
+        db.scalars(
+            select(PrivacyProcessingRecordEvent).where(
+                PrivacyProcessingRecordEvent.organization_id == request.organization_id
+            )
+        ),
+        "processing_record_id",
+    )
+    processing_records_revoked = 0
+    for record in processing_records:
+        if any(event.action == "revoked" for event in processing_events[record.id]):
+            continue
+        db.add(
+            PrivacyProcessingRecordEvent(
+                processing_record_id=record.id,
+                organization_id=request.organization_id,
+                action="revoked",
+                actor_user_id=operator_user_id,
+                occurred_at=occurred_at,
+            )
+        )
+        processing_records_revoked += 1
+
+    return {
+        "external_ai_providers_revoked": providers_revoked,
+        "external_ai_data_flows_revoked": flows_revoked,
+        "processing_records_revoked": processing_records_revoked,
+    }
+
+
+def _target_dispositions(
+    *,
+    organization_scope: bool,
+    sessions_revoked: int,
+    retained_artifacts: int,
+    external_controls: dict[str, int],
+) -> dict[str, Any]:
+    """Controlled, value-free enumeration of every repository data target."""
+
+    return {
+        "postgresql": {
+            "status": (
+                "working_data_deleted_evidence_retained"
+                if organization_scope
+                else "scoped_working_data_deleted_evidence_retained"
+            )
+        },
+        "sessions": {
+            "status": "revoked_and_removed" if organization_scope else "not_applicable",
+            "count": sessions_revoked,
+        },
+        "rate_limit_cache": {
+            "status": "hashed_peer_counters_expire_by_ttl",
+            "organization_scoped_entries": 0,
+            "maximum_ttl_seconds": RATE_LIMIT_WINDOW_SECONDS,
+        },
+        "background_queue": {
+            "status": "not_configured",
+            "jobs": 0,
+        },
+        "ordinary_object_storage": {
+            "status": "all_scoped_versions_and_delete_markers_purged",
+        },
+        "retained_release_storage": {
+            "status": "access_revoked_artifacts_retained_pending_approved_policy",
+            "artifacts": retained_artifacts,
+        },
+        "external_ai_targets": {
+            "status": "approvals_revoked_no_provider_network_call_implemented",
+            **external_controls,
+        },
+        "backups": {
+            "status": "expires_per_policy",
+        },
+    }
 
 
 def _operator_audit(
@@ -607,7 +1005,15 @@ def execute_deletion_request(
     if operator is None or not operator.is_active or operator.role != "admin" or operator.organization_id != request.organization_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="A scoped active administrator operator is required")
     events = _deletion_events(db, [request.id])[request.id]
-    if deletion_status(events) != "approved":
+    request_status = deletion_status(events)
+    organization = db.get(Organization, request.organization_id)
+    retrying_locked_organization = (
+        request.scope_type == "organization"
+        and request_status == "failed"
+        and organization is not None
+        and organization.lifecycle_status == "deletion_in_progress"
+    )
+    if request_status != "approved" and not retrying_locked_organization:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Deletion request is not approved")
     approved_event = next(event for event in events if event.action == "approved")
     if operator.id in {request.requested_by_user_id, approved_event.actor_user_id}:
@@ -620,13 +1026,50 @@ def execute_deletion_request(
     policy = db.get(DataRetentionPolicy, request.retention_policy_id)
     if policy is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Deletion policy snapshot is unavailable")
-    project, scans = _scope_rows(db, request.organization_id, request.scope_type, request.scope_id)
     live_inventory = inventory_scope(db, request.organization_id, request.scope_type, request.scope_id)
     try:
-        purge = _purge_storage(request, project.id)
-        revoked_releases = _revoke_releases(db, request, project.id, operator.id)
-        annotations = list(
-            db.scalars(select(Annotation).where(Annotation.scan_id.in_([scan.id for scan in scans])))
+        sessions_revoked = 0
+        external_controls = {
+            "external_ai_providers_revoked": 0,
+            "external_ai_data_flows_revoked": 0,
+            "processing_records_revoked": 0,
+        }
+        if request.scope_type == "organization":
+            sessions_revoked = _begin_organization_shutdown(db, request)
+            projects = list(
+                db.scalars(
+                    select(Project).where(Project.organization_id == request.organization_id)
+                )
+            )
+            project_ids = [project.id for project in projects]
+            scans = (
+                list(db.scalars(select(Scan).where(Scan.project_id.in_(project_ids))))
+                if project_ids
+                else []
+            )
+            project_id = None
+        else:
+            project, scans = _scope_rows(
+                db,
+                request.organization_id,
+                request.scope_type,
+                request.scope_id,
+            )
+            projects = [project]
+            project_id = project.id
+
+        purge = _purge_storage(request, project_id)
+        revoked_releases = _revoke_releases(db, request, project_id, operator.id)
+        annotations = (
+            list(
+                db.scalars(
+                    select(Annotation).where(
+                        Annotation.scan_id.in_([scan.id for scan in scans])
+                    )
+                )
+            )
+            if scans
+            else []
         )
         retained_tombstones = retain_annotation_history_tombstones(
             db,
@@ -636,7 +1079,7 @@ def execute_deletion_request(
         )
         if request.scope_type == "scan":
             db.delete(scans[0])
-        else:
+        elif request.scope_type == "project":
             for scan in scans:
                 db.delete(scan)
             db.flush()
@@ -646,10 +1089,61 @@ def execute_deletion_request(
             project.description = None
             project.lifecycle_status = "deleted"
             project.deleted_at = _now()
+        else:
+            external_controls = _revoke_organization_controls(
+                db,
+                request,
+                operator.id,
+            )
+            for scan in scans:
+                db.delete(scan)
+            db.flush()
+            if project_ids:
+                for label in list(
+                    db.scalars(select(Label).where(Label.project_id.in_(project_ids)))
+                ):
+                    db.delete(label)
+            completed_tombstone_at = _now()
+            for project in projects:
+                project.name = f"Deleted project {str(project.id)[:8]}"
+                project.description = None
+                project.modality = "DELETED"
+                project.lifecycle_status = "deleted"
+                project.deleted_at = completed_tombstone_at
+            users = list(
+                db.scalars(
+                    select(User).where(User.organization_id == request.organization_id)
+                )
+            )
+            user_ids = [user.id for user in users]
+            if user_ids:
+                for user_session in list(
+                    db.scalars(
+                        select(UserSession).where(UserSession.user_id.in_(user_ids))
+                    )
+                ):
+                    db.delete(user_session)
+            for user in users:
+                user.email = f"deleted-{user.id}@invalid.local"
+                user.full_name = f"Deleted user {str(user.id)[:8]}"
+                user.password_hash = "disabled"
+                user.is_active = False
+            organization = db.get(Organization, request.organization_id)
+            assert organization is not None
+            organization.name = f"Deleted organization {str(organization.id)[:8]}"
+            organization.lifecycle_status = "deleted"
+            organization.deleted_at = completed_tombstone_at
         completed_at = _now()
         receipt_id = uuid4()
-        deleted_counts = {
-            "project_tombstones": 1 if request.scope_type == "project" else 0,
+        deleted_counts: dict[str, int] = {
+            "organization_tombstones": 1 if request.scope_type == "organization" else 0,
+            "user_tombstones": live_inventory.get("users", 0) if request.scope_type == "organization" else 0,
+            "sessions_removed": live_inventory.get("sessions", 0) if request.scope_type == "organization" else 0,
+            "project_tombstones": (
+                live_inventory["projects"]
+                if request.scope_type == "organization"
+                else (1 if request.scope_type == "project" else 0)
+            ),
             "scans": live_inventory["scans"],
             "labels": live_inventory["labels"],
             "annotations": live_inventory["annotations"],
@@ -659,7 +1153,14 @@ def execute_deletion_request(
             ),
             "segmentation_masks": live_inventory["segmentation_masks"],
             "dataset_release_artifacts_retained": live_inventory["dataset_release_artifacts"],
+            **external_controls,
         }
+        target_dispositions = _target_dispositions(
+            organization_scope=request.scope_type == "organization",
+            sessions_revoked=sessions_revoked,
+            retained_artifacts=live_inventory["dataset_release_artifacts"],
+            external_controls=external_controls,
+        )
         receipt_material = {
             "id": receipt_id,
             "request_id": request.id,
@@ -670,6 +1171,7 @@ def execute_deletion_request(
             "object_versions_deleted": purge.object_versions_deleted,
             "delete_markers_deleted": purge.delete_markers_deleted,
             "revoked_releases": revoked_releases,
+            "target_dispositions": target_dispositions,
             "backup_disposition": "expires_per_policy",
             "backup_expires_at": completed_at + timedelta(days=policy.backup_retention_days),
             "approved_by_user_id": approved_event.actor_user_id,
@@ -730,10 +1232,16 @@ def verify_deletion_receipt(receipt: DataDeletionReceipt) -> bool:
         "object_versions_deleted": receipt.object_versions_deleted,
         "delete_markers_deleted": receipt.delete_markers_deleted,
         "revoked_releases": receipt.revoked_releases,
+    }
+    # Receipts created before target enumeration remain verifiable with their
+    # original checksum material. New receipts always include dispositions.
+    if receipt.target_dispositions:
+        material["target_dispositions"] = receipt.target_dispositions
+    material.update({
         "backup_disposition": receipt.backup_disposition,
         "backup_expires_at": receipt.backup_expires_at,
         "approved_by_user_id": receipt.approved_by_user_id,
         "operator_user_id": receipt.operator_user_id,
         "completed_at": receipt.completed_at,
-    }
+    })
     return receipt.receipt_sha256 == sha256_json(material)

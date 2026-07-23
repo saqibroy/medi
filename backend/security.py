@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import User, UserSession
+from .models import Organization, User, UserSession
 from .settings import get_settings
 from .csrf import session_cookie_name
 
@@ -65,14 +65,19 @@ def resolve_access_session(db: Session, token: str) -> UserSession | None:
     now = datetime.now(timezone.utc)
     idle_cutoff = now - timedelta(minutes=get_settings().session_idle_timeout_minutes)
     user_session = db.scalar(
-        select(UserSession).where(
+        select(UserSession)
+        .join(User, User.id == UserSession.user_id)
+        .join(Organization, Organization.id == User.organization_id)
+        .where(
             UserSession.token_digest == _token_digest(token),
             UserSession.revoked_at.is_(None),
             UserSession.expires_at > now,
             UserSession.last_seen_at > idle_cutoff,
+            User.is_active.is_(True),
+            Organization.lifecycle_status == "active",
         )
     )
-    if user_session is None or not user_session.user.is_active:
+    if user_session is None:
         return None
     last_seen_at = user_session.last_seen_at
     if last_seen_at.tzinfo is None:

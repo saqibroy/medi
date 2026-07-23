@@ -211,10 +211,17 @@ Receipts count those retained artifacts, and revoked releases deny subsequent
 artifact delivery. The normal runtime policy still excludes
 `s3:DeleteObjectVersion`.
 
-Organization-wide execution remains unsupported. Target deployment must also
-prove maintenance/write isolation, version-purge permissions on only the
-approved bucket, independent backup expiry, queue/cache/export inventory, and
-two-person operator authorization before this command is enabled.
+Organization-wide execution uses the same command with an approved
+organization-scoped request. It locks the workspace and revokes sessions before
+purging `org/<organization-id>/project/`, deliberately excluding the separate
+retained-release namespace. It removes working rows, tombstones identities and
+projects, revokes releases/outbound approvals, and checksum-covers controlled
+target dispositions. A purge failure leaves the organization locked; rerun the
+same exact approved request after correcting the target failure. Target
+deployment must still prove maintenance/write isolation, version-purge
+permissions on only the approved bucket, independent backup expiry, configured
+queue/cache/export enumeration, and operator authorization before this command
+is enabled.
 
 ## Evidence Record
 

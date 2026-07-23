@@ -59,5 +59,6 @@ been verified until target-environment evidence exists.
 - [ ] Provision authenticated, encrypted, highly available managed Redis and
   exercise outage alerts/failover.
 - [ ] Approve trusted-proxy address handling, the target production idle
-  duration, and forced organization-wide revocation policy. The repository
-  implements per-session inventory/revocation but does not invent a bulk policy.
+  duration, and organization-shutdown operator policy. The repository now
+  revokes every tenant session before governed organization purge; approval and
+  target exercise evidence remain in `ORGANIZATION_DELETION_PLAN.md`.

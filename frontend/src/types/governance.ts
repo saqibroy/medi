@@ -34,7 +34,7 @@ export interface LegalHold {
 export interface DeletionRequest {
   id: string;
   organization_id: string;
-  scope_type: "project" | "scan";
+  scope_type: "organization" | "project" | "scan";
   scope_id: string;
   reason_code: "erasure_request" | "source_withdrawal" | "contract_end" | "duplicate_data";
   approval_reference: string;
@@ -53,5 +53,6 @@ export interface DeletionRequest {
     deleted_counts: Record<string, number>;
     object_versions_deleted: number;
     revoked_releases: number;
+    target_dispositions: Record<string, unknown>;
   };
 }

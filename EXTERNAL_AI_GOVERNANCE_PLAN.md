@@ -68,6 +68,12 @@ payloads are sent outside the application.
 This plan is an engineering control record, not legal advice or provider
 approval.
 
+Governed organization deletion now appends revocation events for every provider
+and data-flow approval before the workspace is tombstoned. The deletion receipt
+records that no provider network-call adapter exists, so it does not claim
+provider-side erasure. Any future adapter must add verified target deletion
+evidence; see `ORGANIZATION_DELETION_PLAN.md`.
+
 The live smoke proof stores only clearly marked `SYNTHETIC-QA-*` approval
 references, stable IDs, controlled classes, and a denied decision. It does not
 represent a real provider or legal approval.
