@@ -78,8 +78,12 @@ update this enumeration and the organization deletion tests before deployment.
 - [x] Rebuilt database, Redis, backend, and frontend are healthy at
   `20260723_0017`; live/readiness, frontend HTTP, container-hardening, login,
   project/governance/session reads, and OpenAPI organization-scope probes pass.
-- [ ] Record the pull-request, merge, and post-merge `main` evidence before
-  closing this increment.
+- [x] Pull request
+  [#31](https://github.com/saqibroy/medi/pull/31) passed all seven CI gates and
+  merged as `1ff77e4f8a1bff4f7e4c6443827ab151489de39d`; post-merge
+  [`main` run 30009558996](https://github.com/saqibroy/medi/actions/runs/30009558996)
+  passed backend, frontend, PostgreSQL migration, encrypted recovery,
+  infrastructure, container-hardening, and supply-chain gates.
 
 ## Deployment And Policy Gates
 
