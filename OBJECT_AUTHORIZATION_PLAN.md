@@ -8,7 +8,7 @@ that remains a product and organization policy decision.
 
 ## Implemented Controls
 
-- [x] Inventory all 88 API routes and assign each one an explicit public,
+- [x] Inventory all 90 API routes and assign each one an explicit public,
   authenticated, administrator, annotator, or reviewer policy.
 - [x] Make the route-policy test fail closed when a route is added without a
   matching matrix entry or with the wrong direct authentication dependency.
@@ -41,11 +41,19 @@ Completed locally on 2026-07-22 using synthetic, two-organization fixtures:
   frontend services; backend live/readiness, frontend HTTP `200`, and the
   container-hardening runtime verifier passed.
 
+The 2026-07-23 retained-release increment extends the fail-closed inventory from
+88 to 90 routes. Artifact materialization is administrator-only, artifact
+download is authenticated, and both return opaque `404` across organizations.
+The complete backend suite now passes all 155 tests.
+
 Target identity-provider policy, SSO/MFA, and any same-organization project
 membership requirement remain outside this completed repository increment.
 
 ## Follow-on
 
-The annotation-history tombstone task is now complete and evidenced in
-`ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`. Retained private release/export
-artifacts are the next repository task.
+The annotation-history tombstone and retained-release-artifact tasks are now
+complete and evidenced in `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md` and
+`RETAINED_RELEASE_ARTIFACT_PLAN.md`. The artifact materialization/download
+routes are included in the fail-closed matrix and cross-tenant probes.
+Organization-wide governed deletion and revocation is the next repository
+task.

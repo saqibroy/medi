@@ -109,12 +109,17 @@ The S3 backend applies `medi-data-class` from trusted object keys:
 - `mask`: segmentation-mask objects;
 - `metadata`: ingestion/mask metadata objects;
 - `export`: generated export artifacts;
+- `dataset-release`: retained canonical release manifests;
 - `unclassified`: fail-visible category with no destructive lifecycle rule.
 
 Current quarantine, preview, and export versions use separately approved expiry
 periods. Current originals, masks, and metadata do not expire automatically.
-Noncurrent versions use the separately approved noncurrent period. Any future
-tombstone or dataset-release class requires its own explicit policy and tests.
+Noncurrent versions use the separately approved noncurrent period.
+`dataset-release` current and noncurrent versions have no automatic expiration;
+the control verifier rejects a destructive lifecycle rule for that class.
+Approved retention, legal hold, organization deletion, and Object Lock/WORM
+replication still require target policy and evidence. Any future tombstone class
+requires its own explicit policy and tests.
 
 ## Backup And Restore Drill
 
@@ -200,8 +205,11 @@ retention and all applicable organization/project/scan holds, deletes every S3
 version and delete marker (or the exact local prefix), verifies absence, revokes
 affected dataset releases as `source_withdrawn`, removes scan-owned rows, and
 writes an append-only checksum receipt with backup expiry. Project scope retains
-only a data-minimized tombstone because immutable release/audit history uses its
-stable ID. The normal runtime policy still excludes `s3:DeleteObjectVersion`.
+only a data-minimized project tombstone plus separately namespaced retained
+release artifacts because immutable release/audit history uses stable IDs.
+Receipts count those retained artifacts, and revoked releases deny subsequent
+artifact delivery. The normal runtime policy still excludes
+`s3:DeleteObjectVersion`.
 
 Organization-wide execution remains unsupported. Target deployment must also
 prove maintenance/write isolation, version-purge permissions on only the

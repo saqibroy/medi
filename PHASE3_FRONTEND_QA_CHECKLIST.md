@@ -5,6 +5,11 @@ a user-facing workflow, not just as compiled TypeScript.
 
 Status: complete. Last executed July 16, 2026.
 
+Post-exit regression on July 23, 2026: the dataset-release panel gained retained
+artifact checksum, download, revocation, and legacy-materialization states. Its
+TypeScript/Vite production build and backend authorization/lifecycle contract
+tests pass; the original viewer QA evidence below remains unchanged.
+
 ## Setup
 
 Run the app with seeded demo data:

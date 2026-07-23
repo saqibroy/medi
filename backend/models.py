@@ -374,6 +374,10 @@ class DatasetRelease(Base):
         foreign_keys="DatasetReleaseEvent.release_id",
         passive_deletes=True,
     )
+    artifacts: Mapped[list["DatasetReleaseArtifact"]] = relationship(
+        back_populates="release",
+        passive_deletes=True,
+    )
 
 
 class DatasetReleaseEvent(Base):
@@ -406,10 +410,53 @@ class DatasetReleaseEvent(Base):
     release: Mapped[DatasetRelease] = relationship(back_populates="lifecycle_events", foreign_keys=[release_id])
 
 
+class DatasetReleaseArtifact(Base):
+    """Append-only private object evidence for one portable release manifest."""
+
+    __tablename__ = "dataset_release_artifacts"
+    __table_args__ = (
+        UniqueConstraint("release_id", "artifact_type", name="uq_dataset_release_artifact_type"),
+        CheckConstraint("artifact_type = 'portable_manifest'", name="ck_dataset_release_artifact_type"),
+        CheckConstraint("byte_size > 0", name="ck_dataset_release_artifact_byte_size"),
+        Index("ix_dataset_release_artifacts_org_created", "organization_id", "created_at"),
+        Index("ix_dataset_release_artifacts_project", "project_id"),
+    )
+
+    id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    release_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("dataset_releases.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    organization_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    project_id: Mapped[PythonUUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    artifact_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(700), nullable=False, unique=True)
+    object_version_id: Mapped[str] = mapped_column(String(1024), nullable=False)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_user_id: Mapped[PythonUUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    release: Mapped[DatasetRelease] = relationship(back_populates="artifacts")
+
+
 @event.listens_for(DatasetRelease, "before_update")
 @event.listens_for(DatasetRelease, "before_delete")
 @event.listens_for(DatasetReleaseEvent, "before_update")
 @event.listens_for(DatasetReleaseEvent, "before_delete")
+@event.listens_for(DatasetReleaseArtifact, "before_update")
+@event.listens_for(DatasetReleaseArtifact, "before_delete")
 def _reject_dataset_release_mutation(*_: object) -> None:
     """Keep release manifests and lifecycle facts append-only through the ORM."""
 

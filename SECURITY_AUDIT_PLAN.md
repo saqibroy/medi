@@ -22,13 +22,16 @@ second store of patient data, credentials, or clinical free text.
 - [x] Record administrator active-session listing and forced revocation using
   organization/session IDs only; never copy user email, token digest, activity
   metadata, network context, or credentials into audit details.
+- [x] Record retained release-artifact materialization and download using only
+  the stable release target; never copy artifact bytes, manifests, storage keys,
+  object versions, checksums, or generated filenames into audit details.
 - [x] Record retention-policy, legal-hold, deletion-request approval/cancellation,
   and successful operator execution using only stable IDs and controlled scalar
   details; governance payloads, inventories, and receipts do not enter audit
   rows.
 - [x] Prove tenant isolation, non-admin denial, safe-field behavior, integrity
   verification, and database-level immutability with automated tests.
-- [x] Enforce an explicit authentication/role policy for all 88 API routes and
+- [x] Enforce an explicit authentication/role policy for all 90 API routes and
   prove every parameterized route, collection, query, and request-body object
   reference is cross-tenant opaque. Audit rows remain organization-scoped while
   still recording the signed-in tenant's denied access attempts.
@@ -102,6 +105,12 @@ append-only, value-free tombstone for direct and lifecycle deletion. It retains
 controlled summaries plus keyed lineage/integrity hashes while removing raw
 geometry and notes. Its 153-test and migration evidence is recorded in
 `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`.
+
+The retained-release increment audits administrator artifact materialization
+and authenticated downloads without widening the details allowlist. Release
+bytes remain in private storage, while the audit target is the stable release
+UUID only. Its evidence is recorded in
+`RETAINED_RELEASE_ARTIFACT_PLAN.md`.
 
 ## Remaining Production Gates
 

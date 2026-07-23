@@ -181,9 +181,18 @@ superseding/revocation events. Organization members can list releases at
 `GET /projects/{project_id}/releases` and inspect one at
 `GET /dataset-releases/{release_id}`; administrators revoke through
 `POST /dataset-releases/{release_id}/revoke`. Manifests exclude filenames,
-storage paths, notes, creator names, patient metadata, and pixels. Target S3
-VersionId evidence, retained artifact/WORM packaging, and retention approval
-remain gates in `DATASET_RELEASE_PLAN.md`.
+storage paths, notes, creator names, patient metadata, and pixels.
+
+New releases automatically write the same canonical manifest as a private,
+content-addressed retained artifact. Organization members download it through
+`GET /dataset-releases/{release_id}/artifact`; the backend verifies object
+version, SHA-256, and byte size before streaming. Administrators can
+idempotently materialize legacy releases with `POST
+/dataset-releases/{release_id}/artifact`. Superseded artifacts remain
+available, while revoked releases return `410`. Storage keys are never exposed,
+and mutable COCO/CSV/YOLO/native responses are not silently retained. Target S3
+VersionId, WORM, and retention approval remain gates in
+`DATASET_RELEASE_PLAN.md` and `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
 
 Administrators manage versioned retention/RPO/RTO policy, legal holds, and
 two-person project/scan deletion requests under `/governance`. These records,

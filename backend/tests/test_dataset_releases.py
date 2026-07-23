@@ -12,7 +12,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import DatabaseError
 
-from backend.models import Annotation, DatasetRelease, DatasetReleaseEvent
+from backend.models import Annotation, DatasetRelease, DatasetReleaseArtifact, DatasetReleaseEvent
 from backend.services.dataset_release_service import sha256_json
 from backend.tests.fixtures.imaging import write_synthetic_dicom
 from backend.tests.test_phase1_routes import auth_headers, build_test_app, login, make_png_bytes
@@ -64,6 +64,13 @@ async def test_release_is_admin_only_tenant_scoped_minimized_and_audited(tmp_pat
         assert release["status"] == "active"
         assert release["manifest_sha256"] == sha256_json(manifest)
         assert release["content_sha256"] == sha256_json(manifest["dataset"])
+        assert len(release["artifacts"]) == 1
+        artifact = release["artifacts"][0]
+        assert artifact["artifact_type"] == "portable_manifest"
+        assert artifact["checksum_sha256"] == release["manifest_sha256"]
+        assert artifact["byte_size"] == len(
+            json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        )
         assert manifest["dataset"]["counts"]["approved_annotations"] == 1
         assert manifest["dataset"]["project"] == {"project_id": project["id"], "modality": "MRI"}
         for private_value in (
@@ -81,13 +88,39 @@ async def test_release_is_admin_only_tenant_scoped_minimized_and_audited(tmp_pat
         listed = await client.get(f"/projects/{project['id']}/releases", headers=auth_headers(annotator_token))
         loaded = await client.get(f"/dataset-releases/{release['id']}", headers=auth_headers(admin_token))
         outside = await client.get(f"/dataset-releases/{release['id']}", headers=auth_headers(outside_token))
+        downloaded = await client.get(f"/dataset-releases/{release['id']}/artifact", headers=auth_headers(annotator_token))
+        outside_download = await client.get(f"/dataset-releases/{release['id']}/artifact", headers=auth_headers(outside_token))
+        forbidden_materialize = await client.post(
+            f"/dataset-releases/{release['id']}/artifact",
+            headers=auth_headers(annotator_token),
+        )
+        idempotent_materialize = await client.post(
+            f"/dataset-releases/{release['id']}/artifact",
+            headers=auth_headers(admin_token),
+        )
         assert listed.status_code == 200
         assert listed.json()[0]["id"] == release["id"]
+        assert listed.json()[0]["artifacts"] == [artifact]
         assert "manifest" not in listed.json()[0]
         assert loaded.json()["manifest"] == manifest
         assert outside.status_code == 404
+        assert downloaded.status_code == 200
+        assert downloaded.json() == manifest
+        assert downloaded.headers["x-content-sha256"] == release["manifest_sha256"]
+        assert downloaded.headers["cache-control"] == "private, no-store"
+        assert "attachment; filename=" in downloaded.headers["content-disposition"]
+        assert outside_download.status_code == 404
+        assert forbidden_materialize.status_code == 403
+        assert idempotent_materialize.status_code == 200
+        assert idempotent_materialize.json()["id"] == artifact["id"]
 
-        for action in ("dataset_release.create", "dataset_release.list", "dataset_release.read"):
+        for action in (
+            "dataset_release.create",
+            "dataset_release.list",
+            "dataset_release.read",
+            "dataset_release_artifact.create",
+            "dataset_release_artifact.download",
+        ):
             events = await client.get(f"/audit-events?action={action}", headers=auth_headers(admin_token))
             assert events.status_code == 200
             assert any(event["result"] == "succeeded" for event in events.json())
@@ -130,6 +163,12 @@ async def test_release_versions_remain_frozen_and_lifecycle_is_append_only(tmp_p
         assert second_body["version"] == 2
         assert second_body["supersedes_release_id"] == first_body["id"]
         assert second_body["content_sha256"] != first_body["content_sha256"]
+        superseded_download = await client.get(
+            f"/dataset-releases/{first_body['id']}/artifact",
+            headers=auth_headers(admin_token),
+        )
+        assert superseded_download.status_code == 200
+        assert superseded_download.json() == first_body["manifest"]
 
         revoked = await client.post(
             f"/dataset-releases/{second_body['id']}/revoke",
@@ -145,6 +184,11 @@ async def test_release_versions_remain_frozen_and_lifecycle_is_append_only(tmp_p
         assert revoked.json()["status"] == "revoked"
         assert revoked.json()["manifest"] == second_body["manifest"]
         assert duplicate.status_code == 409
+        revoked_download = await client.get(
+            f"/dataset-releases/{second_body['id']}/artifact",
+            headers=auth_headers(admin_token),
+        )
+        assert revoked_download.status_code == 410
         audit = await client.get("/audit-events?action=dataset_release.revoke", headers=auth_headers(admin_token))
         assert {event["result"] for event in audit.json()} >= {"succeeded", "failed"}
 
@@ -162,6 +206,45 @@ async def test_release_versions_remain_frozen_and_lifecycle_is_append_only(tmp_p
         db.delete(event)
         with pytest.raises(ValueError, match="append-only"):
             db.commit()
+        db.rollback()
+    with session_factory() as db:
+        artifact = db.scalar(
+            select(DatasetReleaseArtifact).where(DatasetReleaseArtifact.release_id == UUID(first_body["id"]))
+        )
+        assert artifact is not None
+        artifact.byte_size += 1
+        with pytest.raises(ValueError, match="append-only"):
+            db.commit()
+
+
+@pytest.mark.anyio
+async def test_release_artifact_download_fails_closed_after_object_tampering(tmp_path: Path) -> None:
+    app = build_test_app(tmp_path)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        admin_token = await login(client, "admin@test.local")
+        project = _project((await client.get("/projects", headers=auth_headers(admin_token))).json())
+        release = await client.post(f"/projects/{project['id']}/releases", headers=auth_headers(admin_token))
+        assert release.status_code == 201
+
+        session_factory = app.state.test_session_factory  # type: ignore[attr-defined]
+        with session_factory() as db:
+            artifact = db.scalar(
+                select(DatasetReleaseArtifact).where(
+                    DatasetReleaseArtifact.release_id == UUID(release.json()["id"])
+                )
+            )
+            assert artifact is not None
+            storage_key = artifact.storage_key
+        artifact_path = tmp_path / storage_key
+        assert artifact_path.is_file()
+        artifact_path.write_bytes(b'{"tampered":true}')
+
+        blocked = await client.get(
+            f"/dataset-releases/{release.json()['id']}/artifact",
+            headers=auth_headers(admin_token),
+        )
+        assert blocked.status_code == 409
+        assert "integrity verification failed" in blocked.json()["detail"]
 
 
 @pytest.mark.anyio
@@ -250,6 +333,7 @@ def test_migration_triggers_reject_release_and_lifecycle_mutation(tmp_path: Path
     release_id = "3" * 32
     event_id = "4" * 32
     actor_id = "5" * 32
+    artifact_id = "6" * 32
     engine = create_engine(database_url)
     with engine.begin() as connection:
         connection.execute(text("INSERT INTO organizations (id, name) VALUES (:id, 'Release Org')"), {"id": organization_id})
@@ -281,6 +365,24 @@ def test_migration_triggers_reject_release_and_lifecycle_mutation(tmp_path: Path
             ),
             {"id": event_id, "release_id": release_id, "organization_id": organization_id, "actor_id": actor_id},
         )
+        connection.execute(
+            text(
+                "INSERT INTO dataset_release_artifacts "
+                "(id, release_id, organization_id, project_id, artifact_type, schema_version, media_type, "
+                "storage_key, object_version_id, checksum_sha256, byte_size, created_by_user_id, created_at) "
+                "VALUES (:id, :release_id, :organization_id, :project_id, 'portable_manifest', 'artifact-v1', "
+                "'application/json', 'org/test/release-artifact/test/manifest.json', 'version-1', :checksum, "
+                "2, :actor_id, CURRENT_TIMESTAMP)"
+            ),
+            {
+                "id": artifact_id,
+                "release_id": release_id,
+                "organization_id": organization_id,
+                "project_id": project_id,
+                "checksum": "c" * 64,
+                "actor_id": actor_id,
+            },
+        )
 
     with pytest.raises(DatabaseError, match="append-only"):
         with engine.begin() as connection:
@@ -288,7 +390,14 @@ def test_migration_triggers_reject_release_and_lifecycle_mutation(tmp_path: Path
     with pytest.raises(DatabaseError, match="append-only"):
         with engine.begin() as connection:
             connection.execute(text("DELETE FROM dataset_release_events"))
+    with pytest.raises(DatabaseError, match="append-only"):
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE dataset_release_artifacts SET byte_size = 3"))
+    with pytest.raises(DatabaseError, match="append-only"):
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM dataset_release_artifacts"))
 
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT version FROM dataset_releases")) == 1
         assert connection.scalar(text("SELECT COUNT(*) FROM dataset_release_events")) == 1
+        assert connection.scalar(text("SELECT byte_size FROM dataset_release_artifacts")) == 2

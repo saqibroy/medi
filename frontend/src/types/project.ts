@@ -49,6 +49,18 @@ export interface DatasetReleaseEvent {
   occurred_at: string;
 }
 
+export interface DatasetReleaseArtifact {
+  id: string;
+  artifact_type: "portable_manifest";
+  schema_version: string;
+  media_type: string;
+  object_version_id: string;
+  checksum_sha256: string;
+  byte_size: number;
+  created_by_user_id: string;
+  created_at: string;
+}
+
 export interface DatasetReleaseSummary {
   id: string;
   organization_id: string;
@@ -61,6 +73,7 @@ export interface DatasetReleaseSummary {
   created_by_user_id: string;
   created_at: string;
   status: DatasetReleaseStatus;
+  artifacts: DatasetReleaseArtifact[];
   lifecycle: DatasetReleaseEvent[];
 }
 

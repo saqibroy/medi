@@ -50,8 +50,8 @@ retention period or override an approved erasure, legal-hold, or backup policy.
 Independent WORM retention and target operator evidence remain deployment
 gates.
 
-## Next Repository Task
+## Follow-on
 
-Design retained, private, immutable dataset-release/export artifacts without
-turning transient exports into an uncontrolled store of medical or free-text
-data.
+Retained private dataset-release artifacts are now implemented and evidenced in
+`RETAINED_RELEASE_ARTIFACT_PLAN.md`. Organization-wide governed deletion and
+revocation is the next repository task.

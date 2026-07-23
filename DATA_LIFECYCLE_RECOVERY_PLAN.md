@@ -26,6 +26,9 @@ approved operators, and customer authorization remain deployment gates.
   as successful receipts/events or failed-attempt events.
 - [x] Revoke affected dataset releases for source withdrawal while retaining
   their immutable, already data-minimized manifests and lifecycle history.
+- [x] Inventory and retain separately namespaced dataset-release artifacts,
+  include their count in deletion receipts, and deny delivery after affected
+  releases are revoked.
 - [x] Purge local objects or every S3 object version/delete marker only through
   an explicit operator path; the application runtime policy must continue to
   exclude `s3:DeleteObjectVersion`.
@@ -80,6 +83,12 @@ changing the approved destructive boundary. Direct and operator deletion now
 preserve stable scope/count/summary/hash evidence while removing raw geometry
 and notes; current verification is in `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`.
 
+The retained-release-artifact increment keeps portable release evidence outside
+ordinary project/scan purge prefixes. Deletion inventory and checksum-protected
+receipts count retained artifacts, source withdrawal revokes their releases,
+and authenticated downloads return `410` while the append-only object evidence
+remains. See `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
+
 ## Remaining Deployment Gates
 
 - [ ] Approve organization-specific retention periods, RPO/RTO, lawful erasure
@@ -90,3 +99,5 @@ and notes; current verification is in `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`.
   evidence, including every S3 version/delete marker and backup expiry.
 - [ ] Obtain privacy/security/legal approval before using these controls for
   identifiable or pseudonymized patient data.
+- [ ] Approve organization-deletion and exceptional-erasure behavior for
+  retained release artifacts and referenced object versions.

@@ -80,6 +80,7 @@ class FakeControlPlaneClient:
                             "Condition": {
                                 "StringNotEquals": {
                                     "s3:RequestObjectTag/medi-data-class": [
+                                        "dataset-release",
                                         "export",
                                         "mask",
                                         "metadata",
@@ -164,6 +165,7 @@ def test_compliant_bucket_controls_pass_without_reading_objects() -> None:
         "kms_write_policy",
         "data_class_write_policy",
         "lifecycle_quarantine",
+        "lifecycle_dataset_release_retained",
         "noncurrent_original",
     }
 
@@ -202,6 +204,10 @@ def test_cloudformation_template_requires_retention_and_excludes_version_purge_f
     assert all(len(rule["TagFilters"]) == 1 for rule in tagged_rules)
     assert all(rule["TagFilters"][0]["Key"] == "medi-data-class" for rule in tagged_rules)
     assert all("Filter" not in rule for rule in lifecycle_rules)
+    assert not any(
+        rule["TagFilters"][0]["Value"] == "dataset-release"
+        for rule in tagged_rules
+    )
 
     statements = template["Resources"]["ApplicationStoragePolicy"]["Properties"]["PolicyDocument"]["Statement"]
     runtime_actions = {action for statement in statements for action in statement["Action"]}

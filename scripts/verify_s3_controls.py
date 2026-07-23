@@ -111,6 +111,19 @@ def verify_bucket(client: object, bucket: str, expected: ExpectedControls) -> li
             )
             _append(results, f"noncurrent_{data_class}", passed, f"{data_class} noncurrent versions expire after approved {expected.noncurrent_expiration_days} days")
 
+        release_rules = [
+            rule
+            for rule in lifecycle_rules.values()
+            if _enabled_tag_rule(rule, "dataset-release")
+            and ("Expiration" in rule or "NoncurrentVersionExpiration" in rule)
+        ]
+        _append(
+            results,
+            "lifecycle_dataset_release_retained",
+            not release_rules,
+            "dataset-release current and noncurrent versions have no automatic expiration",
+        )
+
         abort_rule = lifecycle_rules.get("AbortIncompleteMultipartUploads", {})
         abort_days = abort_rule.get("AbortIncompleteMultipartUpload", {}).get("DaysAfterInitiation")
         _append(results, "incomplete_multipart_uploads", abort_rule.get("Status") == "Enabled" and abort_days == 7, "incomplete multipart uploads aborted after 7 days")
@@ -172,7 +185,7 @@ def _has_data_class_denies(statements: list[dict[str, Any]]) -> bool:
     missing_tag = False
     allowed_values = False
     extra_keys = False
-    expected_values = {"export", "mask", "metadata", "original", "preview", "quarantine", "unclassified"}
+    expected_values = {"dataset-release", "export", "mask", "metadata", "original", "preview", "quarantine", "unclassified"}
     for statement in statements:
         if statement.get("Effect") != "Deny" or statement.get("Action") != "s3:PutObject":
             continue

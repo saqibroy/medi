@@ -25,6 +25,11 @@ must not alter its stored manifest or checksum.
   delete history.
 - [x] Audit release creation, listing, reading, superseding, and revocation with
   stable identifiers and no manifest payloads in the audit ledger.
+- [x] Create a separately classified, content-addressed private artifact from
+  canonical release JSON and verify its object version/checksum/size on every
+  authenticated download.
+- [x] Preserve superseded artifacts, deny revoked artifact delivery, and keep
+  mutable live export responses out of retained storage.
 
 ## Implementation
 
@@ -33,6 +38,8 @@ must not alter its stored manifest or checksum.
 - [x] Add deterministic manifest creation, status derivation, and tenant-safe
   release services.
 - [x] Add create/list/read/revoke APIs and browser controls.
+- [x] Add automatic artifact creation, idempotent legacy materialization,
+  authenticated download, append-only artifact metadata, and browser controls.
 - [x] Add tests for immutability, monotonic versions, lineage, checksums,
   superseding/revocation, authorization, tenant isolation, and data minimization.
 
@@ -46,12 +53,16 @@ must not alter its stored manifest or checksum.
 - [x] Rebuilt Compose services are healthy and pass a live create, supersede,
   retrieve, mutate-live-data, checksum-stability, and revoke smoke test.
 - [x] GitHub pull-request checks pass on PR #11 before merge.
+- [x] The retained artifact follow-on is implemented and locally verified in
+  `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
 
 ## Remaining Deployment Gates
 
 - [ ] Verify real S3 VersionId capture and checksum behavior against the
   approved target bucket and KMS policy.
-- [ ] Define retained release artifact packaging/download and long-term WORM
-  replication if customers require an externally portable release bundle.
+- [x] Define and implement retained canonical-JSON release artifact packaging,
+  authorization, integrity-checked download, and storage lifecycle semantics.
+- [ ] Configure and prove long-term S3 Object Lock or independent WORM
+  replication when the approved customer release policy requires it.
 - [ ] Approve retention, legal-hold, source-withdrawal, and organization-deletion
   behavior for releases and their referenced object versions.

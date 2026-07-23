@@ -204,6 +204,7 @@ def test_s3_operator_purge_deletes_only_exact_prefix_versions_and_markers() -> N
         ("org/a/project/b/scan/c/derived/preview/000000.png", "preview"),
         ("org/a/project/b/scan/c/annotations/d/mask/000000.png", "mask"),
         ("org/a/project/b/scan/c/metadata/ingestion.json", "metadata"),
+        ("org/a/retained-release/project/b/release-artifact/r/manifest.json", "dataset-release"),
         ("org/a/project/b/export/release.zip", "export"),
         ("org/a/project/b/scan/c/other.bin", "unclassified"),
     ],

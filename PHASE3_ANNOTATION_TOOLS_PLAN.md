@@ -177,6 +177,9 @@ Frontend/manual checks:
     existence or reparenting an annotation away from its scan.
 37. [x] Retain an immutable, value-free lineage tombstone when annotation
     deletion removes raw revision history and sensitive edit values.
+38. [x] Add retained dataset-release artifact status, checksum, verified
+    download, revocation state, and legacy-materialization controls to the
+    release panel without changing mutable annotation export behavior.
 
 ## Phase 3 Exit Criteria
 

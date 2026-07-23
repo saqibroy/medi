@@ -9,7 +9,8 @@ protection, Redis-backed shared rate limits, role checks, and a local/S3
 private-storage boundary. Real DICOM/NIfTI parsing, KMS-encrypted S3
 writes, signed derived previews, a versioned quarantine gate, and a dedicated
 append-only security-event ledger are implemented. Immutable dataset releases
-also freeze approved training-data inputs and their deterministic evidence.
+also freeze approved training-data inputs and their deterministic evidence,
+then create a private content-addressed portable-manifest artifact.
 The application images run with numeric non-root identities, read-only root
 filesystems, no Linux capabilities or privilege escalation, and explicit
 temporary/persistent writable paths verified in CI.
@@ -173,6 +174,17 @@ events. The browser surface is `DatasetReleasePanel.tsx`; the service and schema
 contract live in `backend/services/dataset_release_service.py` and
 `backend/schemas.py`.
 
+Each new release also writes canonical manifest bytes to a tenant/project
+`retained-release/.../release-artifact/...` object key. The key is derived from
+the release ID and manifest SHA-256, but is never returned to clients. An
+append-only artifact row records the object version, checksum, byte size,
+schema/media types, actor, and timestamp. `GET
+/dataset-releases/{release_id}/artifact` re-reads and verifies all recorded
+evidence before streaming through the authenticated API. Superseded artifacts
+remain reproducible; revoked artifacts remain retained but return `410` instead
+of bytes. Administrators can idempotently create the artifact for a legacy
+release. Mutable project/scan export endpoints remain response-only.
+
 ## Governing Retention, Holds, And Deletion
 
 Organization administrators create explicit versioned retention policies; the
@@ -193,6 +205,13 @@ append-only receipt records only stable IDs, counts, actors, timestamps, and
 backup expiry. Its signed success audit is committed in the same database
 transaction as the receipt/lifecycle events; failures append a signed error
 audit beside the failed lifecycle event.
+
+Retained release artifacts use a separate organization-level prefix outside the
+ordinary project/scan purge tree. Deletion inventory and the final receipt
+record their retained count, affected releases are revoked, and further
+artifact download is denied. This is a repository mechanism, not approval to
+retain health-related annotation data: organization deletion, retention,
+legal-hold, backup, and exceptional-erasure policy remain explicit gates.
 
 Before direct annotation deletion or operator project/scan deletion removes raw
 revision rows, `annotation_history_tombstone_service.py` creates one immutable

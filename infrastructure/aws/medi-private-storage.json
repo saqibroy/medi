@@ -324,6 +324,7 @@
               "Condition": {
                 "StringNotEquals": {
                   "s3:RequestObjectTag/medi-data-class": [
+                    "dataset-release",
                     "export",
                     "mask",
                     "metadata",

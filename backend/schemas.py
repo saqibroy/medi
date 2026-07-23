@@ -225,6 +225,20 @@ class DatasetReleaseEventRead(BaseModel):
     occurred_at: datetime
 
 
+class DatasetReleaseArtifactRead(BaseModel):
+    """Safe metadata for one retained private release artifact."""
+
+    id: UUID
+    artifact_type: Literal["portable_manifest"]
+    schema_version: str
+    media_type: str
+    object_version_id: str
+    checksum_sha256: str
+    byte_size: int
+    created_by_user_id: UUID
+    created_at: datetime
+
+
 class DatasetReleaseSummaryRead(BaseModel):
     """Release metadata safe for project release lists."""
 
@@ -239,6 +253,7 @@ class DatasetReleaseSummaryRead(BaseModel):
     created_by_user_id: UUID
     created_at: datetime
     status: DatasetReleaseStatus
+    artifacts: list[DatasetReleaseArtifactRead]
     lifecycle: list[DatasetReleaseEventRead]
 
 

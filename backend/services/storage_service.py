@@ -77,6 +77,8 @@ def storage_data_class(key: str) -> str:
         return "mask"
     if "/metadata/" in f"/{safe_key}" or safe_key.endswith(".metadata.json"):
         return "metadata"
+    if "/release-artifact/" in f"/{safe_key}":
+        return "dataset-release"
     if "/export/" in f"/{safe_key}":
         return "export"
     return "unclassified"

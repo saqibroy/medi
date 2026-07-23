@@ -65,9 +65,11 @@ Not production-ready yet:
   geometry or notes. Before any annotation, scan, or project deletion, Medi now
   creates an immutable value-free tombstone with controlled summaries and keyed
   integrity evidence; see `ANNOTATION_HISTORY_TOMBSTONE_PLAN.md`.
-- Dataset releases are immutable and reproducible in the application database;
-  target S3 VersionId evidence, retained portable artifacts, and independent
-  WORM replication remain deployment gates.
+- Dataset releases are immutable and reproducible in the application database
+  and now create separately classified, private, content-addressed portable
+  artifacts with verified downloads and revocation-aware access. Target S3
+  VersionId, independent WORM, and approved retention evidence remain gates;
+  see `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
 - Encrypted disposable restore drills, versioned policy, legal holds, and
   project/scan deletion evidence are implemented, but approved values,
   organization deletion, target backup/vault controls, and signed drills remain
@@ -144,7 +146,7 @@ Acceptance evidence:
 - [x] Configure exact allowed origins from environment variables.
 - [ ] Preserve deny-by-default roles and add project-level membership if users
   must not see every project in their organization.
-- [x] Add a fail-closed policy inventory for all 88 API routes and cross-tenant
+- [x] Add a fail-closed policy inventory for all 90 API routes and cross-tenant
   tests for every parameterized scan, mask, export, signed-URL, audit, session,
   privacy, external-AI, and administrative path. Collection and request-body
   references are also tenant-scoped; see `OBJECT_AUTHORIZATION_PLAN.md`.
@@ -210,12 +212,14 @@ Repository-controlled increment complete: deployable AWS S3/KMS controls,
 data-class lifecycle tagging, a read-only control verifier, CI linting, and
 operational runbooks are implemented without claiming target-account evidence.
 
-- [ ] Put originals, previews, masks, and export artifacts in private,
+- [x] Put originals, previews, masks, and retained release artifacts in private,
   organization-prefixed object storage.
 
-Originals, previews, and masks use the private tenant-prefixed abstraction.
-Export artifacts are still response payloads rather than retained private
-objects, so the combined gate remains open.
+Originals, previews, masks, and retained release artifacts use the private
+tenant-prefixed abstraction. Release artifacts sit outside ordinary
+project/scan purge prefixes, never expose their keys, and are streamed only
+after tenant authorization and checksum verification. Mutable live export
+endpoints remain response-only and do not silently create retained copies.
 - [x] Define a least-privilege runtime policy and bucket policy denying public,
   insecure, missing-KMS, and wrong-KMS writes. Target-account attachment and
   verification remain open.
@@ -224,14 +228,15 @@ objects, so the combined gate remains open.
 - [x] Require KMS encryption for production writes and define KMS default
   encryption plus S3 Bucket Keys for object versions.
 - [x] Log signed-URL issuance and sensitive object access.
-- [ ] Define lifecycle rules separately for originals, derivatives, exports,
+- [x] Define lifecycle rules separately for originals, derivatives, exports,
   quarantined objects, and deleted-data tombstones.
 
 Lifecycle tags/rules now cover originals, masks, metadata, previews, exports,
-and quarantine. Database annotation-history tombstones are implemented and do
-not contain object data; retained private export artifacts and any future
-object-level tombstone class still require explicit lifecycle rules. Target-
-account deployment evidence is still required.
+quarantine, and retained dataset releases. The `dataset-release` class has no
+automatic current/noncurrent expiry; the verifier fails if a destructive rule
+is added. Database annotation-history tombstones contain no object data. Any
+future object-level tombstone class and target-account deployment/WORM evidence
+still require explicit review.
 
 ## Backup, Restore, Retention, And Deletion
 
@@ -364,8 +369,8 @@ Useful primary references:
 8. [x] Add append-only, tenant-scoped security audit events with integrity
    hashes and database mutation guards. WORM export remains a production gate.
 9. [x] Add immutable dataset releases and approved annotation revision
-   manifests. Target S3, retained artifact/WORM, and retention gates remain in
-   `DATASET_RELEASE_PLAN.md`.
+   manifests plus retained private portable artifacts. Target S3 VersionId,
+   WORM, and retention gates remain in `DATASET_RELEASE_PLAN.md`.
 10. [x] Complete the repository boundary for encrypted recovery drills,
     versioned retention, legal hold, source withdrawal, two-person project/scan
     deletion, every-version purge, and verified receipts. Target infrastructure,
@@ -396,7 +401,7 @@ Useful primary references:
     except for explicitly verified writable mounts. Runtime CI proves the
     identity, mount, capability, privilege, health, denied-write, and
     required-write boundaries.
-18. [x] Close the object-route authorization matrix across all 88 API routes,
+18. [x] Close the object-route authorization matrix across all 90 API routes,
     every parameterized object path, collection responses, query references,
     and body references. Annotation project/label/assignee IDs now return opaque
     cross-tenant `404` responses, and updates cannot reparent annotations away
@@ -404,13 +409,20 @@ Useful primary references:
 19. [x] Implement immutable, value-free annotation-history tombstones for
     direct annotation deletion and approved project/scan lifecycle deletion,
     include counts in deletion evidence, and verify release stability.
-20. [ ] Design retained private dataset-release/export artifacts with immutable
-    checksums and explicit storage lifecycle semantics.
+20. [x] Implement retained private dataset-release artifacts with
+    content-addressed keys, append-only object version/checksum evidence,
+    integrity-checked authenticated downloads, legacy materialization,
+    revocation-aware delivery, explicit non-expiring storage classification,
+    deletion inventory/receipt evidence, and browser controls.
+21. [ ] Design organization-wide governed deletion and revocation across
+    sessions, caches/queues, retained releases, backups, and target services.
 
 Current repository increment complete: shared rate enforcement and secure
 browser-session transport are evidenced in `SESSION_AND_RATE_LIMIT_PLAN.md`.
 Current repository increment complete: immutable dataset releases and
 annotation manifests are evidenced in `DATASET_RELEASE_PLAN.md`.
+Current repository increment complete: retained private release artifacts are
+evidenced in `RETAINED_RELEASE_ARTIFACT_PLAN.md`.
 Current repository increment complete: backup/restore automation plus
 retention, legal-hold, source-withdrawal, and verified project/scan deletion are
 evidenced in `DATA_LIFECYCLE_RECOVERY_PLAN.md`.
@@ -441,13 +453,16 @@ evidenced in `CONTAINER_HARDENING_PLAN.md`.
   cookies, memory-only rate limits, non-TLS Redis, local storage, and non-KMS S3.
 - [x] PostgreSQL migrations, encrypted disposable backup/restore, and rollback
   are rehearsed. Target managed-backup evidence remains a gate above.
-- [ ] Private encrypted storage and tenant-safe access are implemented.
+- [~] Private encrypted storage, tenant-safe access, and retained release
+  artifact lifecycle controls are implemented at the repository boundary;
+  target S3/KMS/VersionId/WORM evidence remains required.
 - [ ] Health, logs, alerts, error tracking, and rate limits are operational.
 - [x] Supported DICOM/NIfTI intake is quarantined until the versioned v1
   screening checks complete. Full pixel anonymization validation remains a
   separate production gate above.
-- [x] Application/database audit records are immutable and dataset releases are
-  reproducible. Independent WORM retention remains an explicit gate above.
+- [x] Application/database audit records are immutable; dataset releases and
+  retained portable artifacts are reproducible and integrity-checked.
+  Independent WORM retention remains an explicit gate above.
 - [x] Backend/frontend application containers use non-root identities,
   read-only roots, dropped capabilities, disabled privilege escalation, and
   verified writable paths. Target admission/runtime evidence remains a gate.
